@@ -177,16 +177,38 @@ namespace Jellyfin.Plugin.AnimeThemesSync
             }
 
             // Tagging: Year and Season
-            if (anime.Year.HasValue)
+            if (Plugin.Instance?.Configuration.TagsEnabled ?? false)
             {
-                AddTag(result.Item, anime.Year.Value.ToString(CultureInfo.InvariantCulture));
-
-                if (!string.IsNullOrEmpty(anime.Season))
+                if (anime.Year.HasValue)
                 {
-                    // "Winter 2024"
-                    // Capitalize first letter just in case
-                    var season = char.ToUpper(anime.Season[0], CultureInfo.InvariantCulture) + anime.Season.Substring(1);
-                    AddTag(result.Item, $"{season} {anime.Year.Value.ToString(CultureInfo.InvariantCulture)}");
+                    AddTag(result.Item, anime.Year.Value.ToString(CultureInfo.InvariantCulture));
+
+                    if (!string.IsNullOrEmpty(anime.Season))
+                    {
+                        var localization = Plugin.Instance.Configuration.TagLocalization;
+                        string seasonTag;
+
+                        if (localization == "Japanese")
+                        {
+                            var seasonName = anime.Season.ToLowerInvariant() switch
+                            {
+                                "winter" => "冬",
+                                "spring" => "春",
+                                "summer" => "夏",
+                                "fall" => "秋",
+                                _ => anime.Season
+                            };
+                            seasonTag = $"{anime.Year.Value}年{seasonName}";
+                        }
+                        else
+                        {
+                            // Default / English
+                            var season = char.ToUpper(anime.Season[0], CultureInfo.InvariantCulture) + anime.Season.Substring(1);
+                            seasonTag = $"{season} {anime.Year.Value.ToString(CultureInfo.InvariantCulture)}";
+                        }
+
+                        AddTag(result.Item, seasonTag);
+                    }
                 }
             }
 

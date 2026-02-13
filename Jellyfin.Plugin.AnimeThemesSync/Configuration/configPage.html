@@ -21,6 +21,24 @@
                         <div class="fieldDescription">If enabled, the plugin will automatically download OP and ED
                             themes to the series folder.</div>
                     </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="TagsEnabled" name="TagsEnabled" type="checkbox" is="emby-checkbox" />
+                            <span>Enable Season/Year Tags</span>
+                        </label>
+                        <div class="fieldDescription">If enabled, the plugin will add tags for the season and year
+                            (e.g., "Winter 2024").</div>
+                    </div>
+                    <div class="selectContainer">
+                        <label class="selectLabel" for="TagLocalization">Tag Localization</label>
+                        <select is="emby-select" id="TagLocalization" name="TagLocalization"
+                            class="emby-select-withcolor emby-select">
+                            <option value="None">None (English)</option>
+                            <option value="Japanese">Japanese</option>
+                        </select>
+                        <div class="fieldDescription">Select the localization for season tags (e.g., "winter 2024" vs
+                            "2024年冬").</div>
+                    </div>
                     <div>
                         <button is="emby-button" type="submit" class="raised button-submit block emby-button">
                             <span>Save</span>
@@ -39,6 +57,8 @@
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId).then(function (config) {
                         document.querySelector('#ThemeDownloadingEnabled').checked = config.ThemeDownloadingEnabled;
+                        document.querySelector('#TagsEnabled').checked = config.TagsEnabled;
+                        document.querySelector('#TagLocalization').value = config.TagLocalization;
                         Dashboard.hideLoadingMsg();
                     });
                 });
@@ -48,6 +68,8 @@
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId).then(function (config) {
                         config.ThemeDownloadingEnabled = document.querySelector('#ThemeDownloadingEnabled').checked;
+                        config.TagsEnabled = document.querySelector('#TagsEnabled').checked;
+                        config.TagLocalization = document.querySelector('#TagLocalization').value;
                         ApiClient.updatePluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
                         });

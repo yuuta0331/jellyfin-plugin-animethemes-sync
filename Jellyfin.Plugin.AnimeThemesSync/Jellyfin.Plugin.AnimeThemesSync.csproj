@@ -48,4 +48,14 @@
     </AssemblyAttribute>
   </ItemGroup>
 
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <PropertyGroup>
+      <JellyfinPluginsDir>C:\Users\miyag\PApp\jellyfin_10.11.6-amd64\Testy\data\plugins\AnimeThemesSync</JellyfinPluginsDir>
+    </PropertyGroup>
+
+    <Message Text="Copying plugin to Testy environment..." Importance="high" />
+    <MakeDir Directories="$(JellyfinPluginsDir)" />
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(JellyfinPluginsDir)" />
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).pdb" DestinationFolder="$(JellyfinPluginsDir)" Condition="Exists('$(OutputPath)$(AssemblyName).pdb')" />
+  </Target>
 </Project>
