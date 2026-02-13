@@ -37,25 +37,31 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             // Arrange
             var externalId = 30;
             var jsonResponse = @"{
-                ""anime"": [
+                ""resources"": [
                     {
-                        ""id"": 123,
-                        ""name"": ""Neon Genesis Evangelion"",
-                        ""slug"": ""neon_genesis_evangelion"",
-                        ""images"": [],
-                        ""resources"": [],
-                        ""animethemes"": [
+                        ""site"": ""anilist"",
+                        ""external_id"": 30,
+                        ""anime"": [
                             {
-                                ""type"": ""OP"",
-                                ""slug"": ""OP1"",
-                                ""animethemeentries"": [
+                                ""id"": 123,
+                                ""name"": ""Neon Genesis Evangelion"",
+                                ""slug"": ""neon_genesis_evangelion"",
+                                ""images"": [],
+                                ""resources"": [],
+                                ""animethemes"": [
                                     {
-                                        ""version"": 1,
-                                        ""videos"": [
+                                        ""type"": ""OP"",
+                                        ""slug"": ""OP1"",
+                                        ""animethemeentries"": [
                                             {
-                                                ""basename"": ""OP1.webm"",
-                                                ""link"": ""https://animethemes.moe/video/OP1.webm"",
-                                                ""resolution"": 1080
+                                                ""version"": 1,
+                                                ""videos"": [
+                                                    {
+                                                        ""basename"": ""OP1.webm"",
+                                                        ""link"": ""https://animethemes.moe/video/OP1.webm"",
+                                                        ""resolution"": 1080
+                                                    }
+                                                ]
                                             }
                                         ]
                                     }
@@ -66,8 +72,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
                 ]
             }";
 
-            _mockHttp.When("https://api.animethemes.moe/anime")
-                .WithQueryString("filter[resources][external_id]", externalId.ToString())
+            _mockHttp.When("https://api.animethemes.moe/resource*")
                 .Respond("application/json", jsonResponse);
 
             // Act
@@ -85,9 +90,9 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
         {
             // Arrange
             var externalId = 99999;
-            var jsonResponse = @"{ ""anime"": [] }";
+            var jsonResponse = @"{ ""resources"": [] }";
 
-            _mockHttp.When("https://api.animethemes.moe/anime")
+            _mockHttp.When("https://api.animethemes.moe/resource*")
                 .Respond("application/json", jsonResponse);
 
             // Act
