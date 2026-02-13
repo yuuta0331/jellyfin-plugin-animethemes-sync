@@ -1,0 +1,35 @@
+name: '📦 Release to GitHub'
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on tags like v1.0.0
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build
+        run: dotnet build -c Release
+
+      - name: Create Zip Archive
+        run: |
+          cd Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/
+          zip -r AnimeThemesSync.zip . -i "*.dll"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/AnimeThemesSync.zip
+          generate_release_notes: true

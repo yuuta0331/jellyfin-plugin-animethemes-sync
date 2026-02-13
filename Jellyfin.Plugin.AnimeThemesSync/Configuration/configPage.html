@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>AnimeThemesSync</title>
+</head>
+
+<body>
+    <div id="AnimeThemesSyncConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+        data-require="emby-input,emby-button,emby-select,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="AnimeThemesSyncConfigForm">
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="ThemeDownloadingEnabled" name="ThemeDownloadingEnabled" type="checkbox"
+                                is="emby-checkbox" />
+                            <span>Enable OP/ED Theme Downloading</span>
+                        </label>
+                        <div class="fieldDescription">If enabled, the plugin will automatically download OP and ED
+                            themes to the series folder.</div>
+                    </div>
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <script type="text/javascript">
+            var AnimeThemesSyncConfig = {
+                pluginUniqueId: '66d528df-4632-4d43-9828-56957262572b'
+            };
+
+            document.querySelector('#AnimeThemesSyncConfigPage')
+                .addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId).then(function (config) {
+                        document.querySelector('#ThemeDownloadingEnabled').checked = config.ThemeDownloadingEnabled;
+                        Dashboard.hideLoadingMsg();
+                    });
+                });
+
+            document.querySelector('#AnimeThemesSyncConfigForm')
+                .addEventListener('submit', function (e) {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId).then(function (config) {
+                        config.ThemeDownloadingEnabled = document.querySelector('#ThemeDownloadingEnabled').checked;
+                        ApiClient.updatePluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId, config).then(function (result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        });
+                    });
+
+                    e.preventDefault();
+                    return false;
+                });
+        </script>
+    </div>
+</body>
+
+</html>

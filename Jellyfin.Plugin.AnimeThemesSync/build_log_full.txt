@@ -1,0 +1,11 @@
+  復元対象のプロジェクトを決定しています...
+  復元対象のすべてのプロジェクトは最新です。
+F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\AnimeThemesMetadataProvider.cs(129,54): error CS8604: 'void ProviderIdsExtensions.SetProviderId(IHasProviderIds instance, string name, string value)' 内のパラメーター 'value' に Null 参照引数がある可能性があります。 [F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\Jellyfin.Plugin.AnimeThemesSync.csproj]
+
+ビルドに失敗しました。
+
+F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\AnimeThemesMetadataProvider.cs(129,54): error CS8604: 'void ProviderIdsExtensions.SetProviderId(IHasProviderIds instance, string name, string value)' 内のパラメーター 'value' に Null 参照引数がある可能性があります。 [F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\Jellyfin.Plugin.AnimeThemesSync.csproj]
+    0 個の警告
+    1 エラー
+
+経過時間 00:00:01.11
