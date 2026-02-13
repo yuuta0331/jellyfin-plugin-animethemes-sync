@@ -100,6 +100,14 @@ namespace Jellyfin.Plugin.AnimeThemesSync.ScheduledTasks
         /// <inheritdoc />
         public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
         {
+            // TODO: Update for Jellyfin 10.11 TaskTriggerInfoType changes
+            // new TaskTriggerInfo
+            // {
+            //     Type = "Weekly",
+            //     DayOfWeek = DayOfWeek.Monday,
+            //     TimeOfDayTicks = TimeSpan.FromHours(3).Ticks
+            // }
+
             return new[]
             {
                 // Run once a week at 3 AM
@@ -110,6 +118,8 @@ namespace Jellyfin.Plugin.AnimeThemesSync.ScheduledTasks
                     TimeOfDayTicks = TimeSpan.FromHours(3).Ticks
                 }
             };
+
+            // return Array.Empty<TaskTriggerInfo>();
         }
 
         private async Task ProcessSeries(Series series, CancellationToken cancellationToken)

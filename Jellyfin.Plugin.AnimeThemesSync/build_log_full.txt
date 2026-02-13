@@ -1,11 +1,15 @@
   復元対象のプロジェクトを決定しています...
   復元対象のすべてのプロジェクトは最新です。
-F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\AnimeThemesMetadataProvider.cs(129,54): error CS8604: 'void ProviderIdsExtensions.SetProviderId(IHasProviderIds instance, string name, string value)' 内のパラメーター 'value' に Null 参照引数がある可能性があります。 [F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\Jellyfin.Plugin.AnimeThemesSync.csproj]
+F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\ScheduledTasks\ThemeDownloader.cs(108,44): error CS0117: 'TaskTriggerInfo' に 'TriggerWeekly' の定義がありません [F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\Jellyfin.Plugin.AnimeThemesSync.csproj]
+F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\ExternalIds\AnimeThemesSlugExternalId.cs(22,13): error SA1648: inheritdoc should be used with inheriting class (https://github.com/DotNetAnalyzers/StyleCopAnalyzers/blob/master/documentation/SA1648.md) [F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\Jellyfin.Plugin.AnimeThemesSync.csproj]
+F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\ExternalIds\AnimeThemesIdExternalId.cs(22,13): error SA1648: inheritdoc should be used with inheriting class (https://github.com/DotNetAnalyzers/StyleCopAnalyzers/blob/master/documentation/SA1648.md) [F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\Jellyfin.Plugin.AnimeThemesSync.csproj]
 
 ビルドに失敗しました。
 
-F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\AnimeThemesMetadataProvider.cs(129,54): error CS8604: 'void ProviderIdsExtensions.SetProviderId(IHasProviderIds instance, string name, string value)' 内のパラメーター 'value' に Null 参照引数がある可能性があります。 [F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\Jellyfin.Plugin.AnimeThemesSync.csproj]
+F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\ScheduledTasks\ThemeDownloader.cs(108,44): error CS0117: 'TaskTriggerInfo' に 'TriggerWeekly' の定義がありません [F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\Jellyfin.Plugin.AnimeThemesSync.csproj]
+F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\ExternalIds\AnimeThemesSlugExternalId.cs(22,13): error SA1648: inheritdoc should be used with inheriting class (https://github.com/DotNetAnalyzers/StyleCopAnalyzers/blob/master/documentation/SA1648.md) [F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\Jellyfin.Plugin.AnimeThemesSync.csproj]
+F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\ExternalIds\AnimeThemesIdExternalId.cs(22,13): error SA1648: inheritdoc should be used with inheriting class (https://github.com/DotNetAnalyzers/StyleCopAnalyzers/blob/master/documentation/SA1648.md) [F:\PG\jellyfin-plugin-animethemes-sync\Jellyfin.Plugin.AnimeThemesSync\Jellyfin.Plugin.AnimeThemesSync.csproj]
     0 個の警告
-    1 エラー
+    3 エラー
 
-経過時間 00:00:01.11
+経過時間 00:00:01.10

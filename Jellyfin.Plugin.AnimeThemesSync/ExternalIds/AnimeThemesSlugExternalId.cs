@@ -1,5 +1,3 @@
-using Jellyfin.Data.Entities;
-using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
@@ -10,18 +8,26 @@ namespace Jellyfin.Plugin.AnimeThemesSync.ExternalIds
     /// <summary>
     /// External ID for AnimeThemes.
     /// </summary>
-    public class AnimeThemesExternalId : IExternalId
+    public class AnimeThemesSlugExternalId : IExternalId
     {
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the provider name.
+        /// </summary>
         public string ProviderName => "AnimeThemes";
 
-        /// <inheritdoc />
-        public string Key => "AnimeThemesSlug";
+        /// <summary>
+        /// Gets the provider key.
+        /// </summary>
+        public string Key => "AnimeThemes";
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the external id media type.
+        /// </summary>
         public ExternalIdMediaType? Type => ExternalIdMediaType.Series;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the url format string.
+        /// </summary>
         public string UrlFormatString => "https://animethemes.moe/anime/{0}";
 
         /// <inheritdoc />

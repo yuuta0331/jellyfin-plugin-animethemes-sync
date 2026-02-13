@@ -2,10 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Jellyfin.Plugin.AnimeThemesSync.Configuration;
+using Jellyfin.Plugin.AnimeThemesSync.ExternalIds;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
+using MediaBrowser.Controller;
+using MediaBrowser.Controller.Plugins;
+using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jellyfin.Plugin.AnimeThemesSync;
 

@@ -170,10 +170,12 @@ namespace Jellyfin.Plugin.AnimeThemesSync
             if (!string.IsNullOrEmpty(anime.Slug))
             {
                 // Store the Slug for the Web Link (IExternalId)
-                result.Item.SetProviderId("AnimeThemesSlug", anime.Slug);
+                result.Item.SetProviderId("AnimeThemes", anime.Slug);
 
                 // Store the Integer ID for internal API logic (Immutable)
                 result.Item.SetProviderId("AnimeThemesId", anime.Id.ToString(CultureInfo.InvariantCulture));
+
+                _logger.LogInformation("Set Provider IDs - Slug: {Slug}, ID: {Id}", anime.Slug, anime.Id);
             }
 
             // Tagging: Year and Season

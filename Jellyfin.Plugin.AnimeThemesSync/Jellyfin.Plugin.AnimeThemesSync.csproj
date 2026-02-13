@@ -18,14 +18,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Jellyfin.Controller" Version="10.10.3">
+    <PackageReference Include="Jellyfin.Controller" Version="10.11.6">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <PackageReference Include="Jellyfin.Model" Version="10.10.3">
-      <ExcludeAssets>runtime</ExcludeAssets>
-    </PackageReference>
-    <PackageReference Include="System.Text.Json" Version="9.0.0" />
-    <PackageReference Include="System.Text.Encodings.Web" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>
