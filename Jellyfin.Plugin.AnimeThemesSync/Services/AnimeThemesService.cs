@@ -19,16 +19,19 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Services
         private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<AnimeThemesService> _logger;
+        private readonly RateLimiter _rateLimiter;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="AnimeThemesService"/> class.
         /// </summary>
         /// <param name="httpClientFactory">The HTTP client factory.</param>
         /// <param name="logger">The logger.</param>
-        public AnimeThemesService(IHttpClientFactory httpClientFactory, ILogger<AnimeThemesService> logger)
+        /// <param name="rateLimiter">The rate limiter.</param>
+        public AnimeThemesService(IHttpClientFactory httpClientFactory, ILogger<AnimeThemesService> logger, RateLimiter rateLimiter)
         {
             _httpClientFactory = httpClientFactory;
             _logger = logger;
+            _rateLimiter = rateLimiter;
         }
 
         /// <summary>
@@ -53,8 +56,17 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Services
                 return null;
             }
 
-            // Since 'anime' is a list in the API response, take the first one
-            return resource.Anime[0];
+            // Since 'anime' is a list in the API response, take the first one to get the slug
+            var partialAnime = resource.Anime[0];
+            if (string.IsNullOrEmpty(partialAnime.Slug))
+            {
+                _logger.LogWarning("AnimeThemes resource found for {Site}:{Id}, but slug is missing.", site, externalId);
+                return null;
+            }
+
+            // Step 2: Fetch the full anime details (including themes) using the slug
+            // The /resource endpoint doesn't support including animethemes directly
+            return await GetAnimeBySlug(partialAnime.Slug, cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -73,8 +85,17 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Services
         {
             try
             {
+                await _rateLimiter.WaitIfNeededAsync(cancellationToken).ConfigureAwait(false);
+
                 var client = _httpClientFactory.CreateClient("AnimeThemes");
+                if (!client.DefaultRequestHeaders.Contains("User-Agent"))
+                {
+                    client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                }
+
                 var response = await client.GetAsync(new Uri(url), cancellationToken).ConfigureAwait(false);
+
+                _rateLimiter.UpdateState(response.Headers);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -98,8 +119,17 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Services
         {
             try
             {
+                await _rateLimiter.WaitIfNeededAsync(cancellationToken).ConfigureAwait(false);
+
                 var client = _httpClientFactory.CreateClient("AnimeThemes");
+                if (!client.DefaultRequestHeaders.Contains("User-Agent"))
+                {
+                    client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                }
+
                 var response = await client.GetAsync(new Uri(url), cancellationToken).ConfigureAwait(false);
+
+                _rateLimiter.UpdateState(response.Headers);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -175,7 +205,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Services
             public string? Site { get; set; }
 
             [JsonPropertyName("external_id")]
-            public int ExternalId { get; set; }
+            public int? ExternalId { get; set; }
 
             [JsonPropertyName("anime")]
             public List<AnimeThemesAnime>? Anime { get; set; }

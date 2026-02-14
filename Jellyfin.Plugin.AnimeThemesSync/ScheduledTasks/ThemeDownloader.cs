@@ -45,7 +45,8 @@ namespace Jellyfin.Plugin.AnimeThemesSync.ScheduledTasks
             _fileSystem = fileSystem;
             _logger = loggerFactory.CreateLogger<ThemeDownloader>();
             _httpClientFactory = httpClientFactory;
-            _animeThemesService = new AnimeThemesService(httpClientFactory, loggerFactory.CreateLogger<AnimeThemesService>());
+            var rateLimiter = new RateLimiter(loggerFactory.CreateLogger<RateLimiter>(), "AnimeThemes", 80);
+            _animeThemesService = new AnimeThemesService(httpClientFactory, loggerFactory.CreateLogger<AnimeThemesService>(), rateLimiter);
         }
 
         /// <inheritdoc />
@@ -110,12 +111,11 @@ namespace Jellyfin.Plugin.AnimeThemesSync.ScheduledTasks
 
             return new[]
             {
-                // Run once a week at 3 AM
+                // Run once a week
                 new TaskTriggerInfo
                 {
-                    Type = TaskTriggerInfo.TriggerWeekly,
-                    DayOfWeek = DayOfWeek.Monday,
-                    TimeOfDayTicks = TimeSpan.FromHours(3).Ticks
+                    Type = TaskTriggerInfoType.IntervalTrigger,
+                    IntervalTicks = TimeSpan.FromDays(7).Ticks
                 }
             };
 
@@ -150,14 +150,23 @@ namespace Jellyfin.Plugin.AnimeThemesSync.ScheduledTasks
 
             Services.AnimeThemesService.AnimeThemesAnime? anime = null;
 
-            if (aniListId.HasValue)
+            if (series.ProviderIds.TryGetValue("AnimeThemes", out var animeThemesSlug) && !string.IsNullOrEmpty(animeThemesSlug))
             {
-                anime = await _animeThemesService.GetAnimeByExternalId("anilist", aniListId.Value, cancellationToken).ConfigureAwait(false);
+                _logger.LogInformation("Processing '{SeriesName}' using existing AnimeThemes Slug: {Slug}", seriesName, animeThemesSlug);
+                anime = await _animeThemesService.GetAnimeBySlug(animeThemesSlug, cancellationToken).ConfigureAwait(false);
             }
 
-            if (anime == null && malId.HasValue)
+            if (anime == null)
             {
-                anime = await _animeThemesService.GetAnimeByExternalId("myanimelist", malId.Value, cancellationToken).ConfigureAwait(false);
+                if (aniListId.HasValue)
+                {
+                    anime = await _animeThemesService.GetAnimeByExternalId("anilist", aniListId.Value, cancellationToken).ConfigureAwait(false);
+                }
+
+                if (anime == null && malId.HasValue)
+                {
+                    anime = await _animeThemesService.GetAnimeByExternalId("myanimelist", malId.Value, cancellationToken).ConfigureAwait(false);
+                }
             }
 
             if (anime == null)

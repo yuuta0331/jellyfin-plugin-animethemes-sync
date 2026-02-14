@@ -33,8 +33,15 @@ namespace Jellyfin.Plugin.AnimeThemesSync
             _httpClientFactory = httpClientFactory;
             _logger = loggerFactory.CreateLogger<AnimeThemesMetadataProvider>();
 
-            _aniListService = new AniListService(httpClientFactory, loggerFactory.CreateLogger<AniListService>());
-            _animeThemesService = new AnimeThemesService(httpClientFactory, loggerFactory.CreateLogger<AnimeThemesService>());
+            var aniListLogger = loggerFactory.CreateLogger("Jellyfin.Plugin.AnimeThemesSync.Services.RateLimiter.AniList");
+            var animeThemesLogger = loggerFactory.CreateLogger("Jellyfin.Plugin.AnimeThemesSync.Services.RateLimiter.AnimeThemes");
+
+            // 90 req/min for AniList, 80 req/min for AnimeThemes
+            var aniListRateLimiter = new RateLimiter(aniListLogger, "AniList", 90);
+            var animeThemesRateLimiter = new RateLimiter(animeThemesLogger, "AnimeThemes", 80);
+
+            _aniListService = new AniListService(httpClientFactory, loggerFactory.CreateLogger<AniListService>(), aniListRateLimiter);
+            _animeThemesService = new AnimeThemesService(httpClientFactory, loggerFactory.CreateLogger<AnimeThemesService>(), animeThemesRateLimiter);
         }
 
         /// <inheritdoc />

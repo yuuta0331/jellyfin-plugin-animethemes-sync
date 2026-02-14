@@ -39,6 +39,14 @@
                         <div class="fieldDescription">Select the localization for season tags (e.g., "winter 2024" vs
                             "2024年冬").</div>
                     </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <button is="emby-button" type="button" class="raised button-cancel block emby-button"
+                            id="RunTaskButton">
+                            <span>Run Sync Task Now</span>
+                        </button>
+                        <div class="fieldDescription">Manually trigger the theme download task.</div>
+                    </div>
+
                     <div>
                         <button is="emby-button" type="submit" class="raised button-submit block emby-button">
                             <span>Save</span>
@@ -62,6 +70,25 @@
                         Dashboard.hideLoadingMsg();
                     });
                 });
+
+            document.querySelector('#RunTaskButton').addEventListener('click', function () {
+                Dashboard.showLoadingMsg();
+                ApiClient.getScheduledTasks().then(function (tasks) {
+                    var task = tasks.find(function (t) {
+                        return t.Key === 'AnimeThemesSyncDownloader';
+                    });
+
+                    if (task) {
+                        ApiClient.startScheduledTask(task.Id).then(function () {
+                            Dashboard.hideLoadingMsg();
+                            Dashboard.alert('Task started.');
+                        });
+                    } else {
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert('Task not found.');
+                    }
+                });
+            });
 
             document.querySelector('#AnimeThemesSyncConfigForm')
                 .addEventListener('submit', function (e) {

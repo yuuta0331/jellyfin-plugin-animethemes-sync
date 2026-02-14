@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.AnimeThemesSync.Services;
+using Jellyfin.Plugin.AnimeThemesSync;
 using Microsoft.Extensions.Logging;
 using Moq;
 using RichardSzalay.MockHttp;
@@ -29,7 +30,10 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             client.BaseAddress = new Uri("https://graphql.anilist.co");
             _mockHttpClientFactory.Setup(x => x.CreateClient("AniList")).Returns(client);
 
-            _service = new AniListService(_mockHttpClientFactory.Object, _mockLogger.Object);
+            var rateLimiterLogger = new Mock<ILogger<RateLimiter>>();
+            var rateLimiter = new RateLimiter(rateLimiterLogger.Object, "AniList", 90);
+
+            _service = new AniListService(_mockHttpClientFactory.Object, _mockLogger.Object, rateLimiter);
         }
 
         [Fact]

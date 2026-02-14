@@ -30,7 +30,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             _mockHttp = new MockHttpMessageHandler();
 
             _mockLoggerFactory.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(new Mock<ILogger>().Object);
-            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(AnimeThemesMetadataProvider).FullName)).Returns(_mockLogger.Object);
+            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(AnimeThemesMetadataProvider).FullName!)).Returns(_mockLogger.Object);
             // Also need to handle other loggers created in ctor
             _mockLoggerFactory.Setup(x => x.CreateLogger(It.Is<string>(s => s.Contains("AniListService")))).Returns(new Mock<ILogger>().Object);
             _mockLoggerFactory.Setup(x => x.CreateLogger(It.Is<string>(s => s.Contains("AnimeThemesService")))).Returns(new Mock<ILogger>().Object);

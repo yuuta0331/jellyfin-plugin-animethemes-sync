@@ -20,16 +20,19 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Services
         private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<AniListService> _logger;
+        private readonly RateLimiter _rateLimiter;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="AniListService"/> class.
         /// </summary>
         /// <param name="httpClientFactory">The HTTP client factory.</param>
         /// <param name="logger">The logger.</param>
-        public AniListService(IHttpClientFactory httpClientFactory, ILogger<AniListService> logger)
+        /// <param name="rateLimiter">The rate limiter.</param>
+        public AniListService(IHttpClientFactory httpClientFactory, ILogger<AniListService> logger, RateLimiter rateLimiter)
         {
             _httpClientFactory = httpClientFactory;
             _logger = logger;
+            _rateLimiter = rateLimiter;
         }
 
         /// <summary>
@@ -64,7 +67,12 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Services
                 // AniList API requires simple POST with JSON.
                 var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
 
+                await _rateLimiter.WaitIfNeededAsync(cancellationToken).ConfigureAwait(false);
+
                 var response = await client.PostAsync(new Uri(AniListUrl), content, cancellationToken).ConfigureAwait(false);
+
+                _rateLimiter.UpdateState(response.Headers);
+
                 response.EnsureSuccessStatusCode();
 
                 var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
@@ -92,8 +100,8 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Services
                     var tolerantMatch = matches.FirstOrDefault(m => m.StartDate?.Year.HasValue == true && Math.Abs(m.StartDate.Year.Value - year.Value) <= 1);
                     if (tolerantMatch != null)
                     {
-                         _logger.LogInformation("Found tolerant match for '{Name}' ({Year}): AniListId={AniListId}", name, year, tolerantMatch.Id);
-                         return (tolerantMatch.Id, tolerantMatch.IdMal);
+                        _logger.LogInformation("Found tolerant match for '{Name}' ({Year}): AniListId={AniListId}", name, year, tolerantMatch.Id);
+                        return (tolerantMatch.Id, tolerantMatch.IdMal);
                     }
 
                     _logger.LogWarning("No match found within +/- 1 year for '{Name}' ({Year}). High-precision search failed.", name, year);

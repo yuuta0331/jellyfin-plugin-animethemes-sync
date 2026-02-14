@@ -28,7 +28,10 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             client.BaseAddress = new Uri("https://api.animethemes.moe");
             _mockHttpClientFactory.Setup(x => x.CreateClient("AnimeThemes")).Returns(client);
 
-            _service = new AnimeThemesService(_mockHttpClientFactory.Object, _mockLogger.Object);
+            var rateLimiterLogger = new Mock<ILogger<RateLimiter>>();
+            var rateLimiter = new RateLimiter(rateLimiterLogger.Object, "TestService", 100);
+
+            _service = new AnimeThemesService(_mockHttpClientFactory.Object, _mockLogger.Object, rateLimiter);
         }
 
         [Fact]
@@ -81,6 +84,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             // Assert
             Assert.NotNull(result);
             Assert.Equal("Neon Genesis Evangelion", result.Name);
+            Assert.NotNull(result.AnimeThemes);
             Assert.Single(result.AnimeThemes);
             Assert.Equal("OP", result.AnimeThemes[0].Type);
         }
