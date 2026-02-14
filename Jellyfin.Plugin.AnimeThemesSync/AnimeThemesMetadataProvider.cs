@@ -194,27 +194,19 @@ namespace Jellyfin.Plugin.AnimeThemesSync
 
                     if (!string.IsNullOrEmpty(anime.Season))
                     {
-                        var localization = Plugin.Instance.Configuration.TagLocalization;
-                        string seasonTag;
+                        var config = Plugin.Instance.Configuration;
+                        var seasonName = anime.Season.ToLowerInvariant() switch
+                        {
+                            "winter" => config.TagSeasonWinter,
+                            "spring" => config.TagSeasonSpring,
+                            "summer" => config.TagSeasonSummer,
+                            "fall" => config.TagSeasonFall,
+                            _ => anime.Season
+                        };
 
-                        if (localization == "Japanese")
-                        {
-                            var seasonName = anime.Season.ToLowerInvariant() switch
-                            {
-                                "winter" => "冬",
-                                "spring" => "春",
-                                "summer" => "夏",
-                                "fall" => "秋",
-                                _ => anime.Season
-                            };
-                            seasonTag = $"{anime.Year.Value}年{seasonName}";
-                        }
-                        else
-                        {
-                            // Default / English
-                            var season = char.ToUpper(anime.Season[0], CultureInfo.InvariantCulture) + anime.Season.Substring(1);
-                            seasonTag = $"{season} {anime.Year.Value.ToString(CultureInfo.InvariantCulture)}";
-                        }
+                        var seasonTag = config.TagFormat
+                            .Replace("{Season}", seasonName, StringComparison.OrdinalIgnoreCase)
+                            .Replace("{Year}", anime.Year.Value.ToString(CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase);
 
                         AddTag(result.Item, seasonTag);
                     }

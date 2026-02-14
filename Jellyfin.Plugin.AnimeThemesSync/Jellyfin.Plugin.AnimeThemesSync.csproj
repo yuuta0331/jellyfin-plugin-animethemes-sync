@@ -12,6 +12,7 @@
     <Description>Syncs anime themes from AnimeThemes.moe to Jellyfin.</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
     <Nullable>enable</Nullable>
     <AnalysisMode>AllEnabledByDefault</AnalysisMode>
     <CodeAnalysisRuleSet>../jellyfin.ruleset</CodeAnalysisRuleSet>
@@ -46,7 +47,7 @@
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <PropertyGroup>
-      <JellyfinPluginsDir>C:\Users\miyag\PApp\jellyfin_10.11.6-amd64\Testy\data\plugins\AnimeThemesSync</JellyfinPluginsDir>
+      <JellyfinPluginsDir>C:\Users\miyag\PApp\jellyfin_10.11.6-amd64\Testy\data\plugins\AnimeThemesSync_$(Version)</JellyfinPluginsDir>
     </PropertyGroup>
 
     <Message Text="Copying plugin to Testy environment..." Importance="high" />

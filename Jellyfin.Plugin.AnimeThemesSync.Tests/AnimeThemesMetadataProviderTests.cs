@@ -80,13 +80,28 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
                 .WithQueryString("include", "anime")
                 .Respond("application/json", jsonResponse);
 
+            var animeResponse = $@"{{
+                ""anime"": [
+                    {{
+                        ""id"": {animeThemesId},
+                        ""name"": ""Test Anime"",
+                        ""slug"": ""{animeThemesSlug}"",
+                        ""year"": 2021,
+                        ""season"": ""Fall""
+                    }}
+                ]
+            }}";
+
+            _mockHttp.When($"https://api.animethemes.moe/anime/{animeThemesSlug}*")
+                .Respond("application/json", animeResponse);
+
             // Act
             var result = await _provider.GetMetadata(seriesInfo, CancellationToken.None);
 
             // Assert
             Assert.NotNull(result);
             Assert.True(result.HasMetadata);
-            Assert.Equal(animeThemesSlug, result.Item.GetProviderId("AnimeThemesSlug"));
+            Assert.Equal(animeThemesSlug, result.Item.GetProviderId("AnimeThemes"));
             Assert.Equal(animeThemesId.ToString(), result.Item.GetProviderId("AnimeThemesId"));
         }
     }

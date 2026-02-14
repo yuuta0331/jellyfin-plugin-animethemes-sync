@@ -77,7 +77,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Services
         /// <returns>The found anime or null.</returns>
         public async Task<AnimeThemesAnime?> GetAnimeBySlug(string slug, CancellationToken cancellationToken)
         {
-            var url = $"{BaseUrl}/anime/{slug}?include=images,resources,animethemes.animethemeentries.videos";
+            var url = $"{BaseUrl}/anime/{slug}?include=images,resources,animethemes.animethemeentries.videos.audio";
             return await GetAnimeFromUrl(url, cancellationToken).ConfigureAwait(false);
         }
 
@@ -228,6 +228,12 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Services
             [JsonPropertyName("version")]
             public int? Version { get; set; }
 
+            [JsonPropertyName("spoiler")]
+            public bool? Spoiler { get; set; }
+
+            [JsonPropertyName("nsfw")]
+            public bool? Nsfw { get; set; }
+
             [JsonPropertyName("videos")]
             public List<AnimeThemesVideo>? Videos { get; set; }
         }
@@ -242,6 +248,15 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Services
 
             [JsonPropertyName("resolution")]
             public int? Resolution { get; set; }
+
+            [JsonPropertyName("overlap")]
+            public string? Overlap { get; set; }
+
+            [JsonPropertyName("source")]
+            public string? Source { get; set; }
+
+            [JsonPropertyName("tags")]
+            public string? Tags { get; set; }
 
             [JsonPropertyName("audio")]
             public AnimeThemesAudio? Audio { get; set; }

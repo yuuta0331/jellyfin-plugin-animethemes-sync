@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using Jellyfin.Plugin.AnimeThemesSync.Configuration;
 using Jellyfin.Plugin.AnimeThemesSync.ExternalIds;
 using MediaBrowser.Common.Configuration;
@@ -28,6 +29,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         : base(applicationPaths, xmlSerializer)
     {
         Instance = this;
+        Console.OutputEncoding = Encoding.UTF8;
     }
 
     /// <inheritdoc />

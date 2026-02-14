@@ -2,13 +2,13 @@
 name: "AnimeThemesSync"
 guid: "66d528df-4632-4d43-9828-56957262572b"
 version: "1.0.0.0"
-targetAbi: "10.9.0.0"
-framework: "net8.0"
+targetAbi: "10.11.0.0"
+framework: "net9.0"
 overview: "Short description about your plugin"
 description: >
   This is a longer description that can span more than one
   line and include details about your plugin.
-category: "General"
+category: "Anime"
 owner: "jellyfin"
 artifacts:
 - "Jellyfin.Plugin.AnimeThemesSync.dll"

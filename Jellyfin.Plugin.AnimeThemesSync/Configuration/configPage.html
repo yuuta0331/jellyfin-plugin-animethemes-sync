@@ -12,62 +12,607 @@
         <div data-role="content">
             <div class="content-primary">
                 <form id="AnimeThemesSyncConfigForm">
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label class="emby-checkbox-label">
-                            <input id="ThemeDownloadingEnabled" name="ThemeDownloadingEnabled" type="checkbox"
-                                is="emby-checkbox" />
-                            <span>Enable OP/ED Theme Downloading</span>
-                        </label>
-                        <div class="fieldDescription">If enabled, the plugin will automatically download OP and ED
-                            themes to the series folder.</div>
+                    <div class="sectionTitleContainer flex align-items-center">
+                        <a href="https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync" target="_blank"
+                            is="emby-link" class="button-link emby-button">Help / GitHub</a>
                     </div>
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label class="emby-checkbox-label">
-                            <input id="TagsEnabled" name="TagsEnabled" type="checkbox" is="emby-checkbox" />
-                            <span>Enable Season/Year Tags</span>
-                        </label>
-                        <div class="fieldDescription">If enabled, the plugin will add tags for the season and year
-                            (e.g., "Winter 2024").</div>
-                    </div>
-                    <div class="selectContainer">
-                        <label class="selectLabel" for="TagLocalization">Tag Localization</label>
-                        <select is="emby-select" id="TagLocalization" name="TagLocalization"
-                            class="emby-select-withcolor emby-select">
-                            <option value="None">None (English)</option>
-                            <option value="Japanese">Japanese</option>
-                        </select>
-                        <div class="fieldDescription">Select the localization for season tags (e.g., "winter 2024" vs
-                            "2024年冬").</div>
-                    </div>
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <button is="emby-button" type="button" class="raised button-cancel block emby-button"
-                            id="RunTaskButton">
-                            <span>Run Sync Task Now</span>
-                        </button>
-                        <div class="fieldDescription">Manually trigger the theme download task.</div>
+                    <div class="fieldDescription">
+                        Configure how AnimeThemes (OP/ED) are downloaded and managed.
                     </div>
 
+                    <!-- Global Settings -->
+                    <div class="verticalSection">
+                        <h2 class="sectionTitle">Global Settings</h2>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="ThemeDownloadingEnabled" name="ThemeDownloadingEnabled" type="checkbox"
+                                    is="emby-checkbox" />
+                                <span>Enable OP/ED Theme Downloading</span>
+                            </label>
+                            <div class="fieldDescription">If enabled, the plugin will download themes for libraries
+                                where "AnimeThemesSync" is enabled as a Metadata Fetcher.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MaxConcurrentDownloads">Max Concurrent
+                                Downloads</label>
+                            <input id="MaxConcurrentDownloads" name="MaxConcurrentDownloads" type="number"
+                                is="emby-input" min="1" max="10" />
+                            <div class="fieldDescription">Number of simultaneous downloads allowed. Recommended: 1-3.
+                            </div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="DownloadTimeoutSeconds">Download Timeout
+                                (Seconds)</label>
+                            <input id="DownloadTimeoutSeconds" name="DownloadTimeoutSeconds" type="number"
+                                is="emby-input" />
+                            <div class="fieldDescription">Timeout for file downloads. Increase this if you experience
+                                timeouts with large video files. Default: 600.</div>
+                        </div>
+
+                        <h3 class="checkboxListLabel" style="margin-top: 1.5em;">File Management</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="AllowAdd" name="AllowAdd" type="checkbox" is="emby-checkbox" />
+                                <span>Allow Adding New Themes</span>
+                            </label>
+                            <div class="fieldDescription">Enable to download new themes. Uncheck to stop new downloads.
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="ForceRedownload" name="ForceRedownload" type="checkbox" is="emby-checkbox" />
+                                <span>Force Re-download (Overwrite Existing)</span>
+                            </label>
+                            <div class="fieldDescription warning-text">
+                                <strong>Warning:</strong> This will re-download ALL themes for enabled libraries,
+                                overwriting existing files.
+                                Useful for applying volume changes or switching versions.
+                                <strong>Recommended to disable after use.</strong>
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="AllowDelete" name="AllowDelete" type="checkbox" is="emby-checkbox" />
+                                <span>Allow Deleting Unwanted Themes</span>
+                            </label>
+                            <div class="fieldDescription warning-text">
+                                <strong>Warning:</strong> The plugin will delete files in `theme-music` and `backdrops`
+                                folders if they match AnimeThemes naming convention but are no longer desired.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h2 class="sectionTitle">Tag Settings</h2>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="TagsEnabled" name="TagsEnabled" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Season/Year Tags</span>
+                            </label>
+                            <div class="fieldDescription">Add tags like "Winter 2024" to downloaded metadata.</div>
+                        </div>
+                        <div id="TagOptionsContainer">
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="TagFormat">Tag Format</label>
+                                <input id="TagFormat" name="TagFormat" type="text" is="emby-input" required />
+                                <div class="fieldDescription">Format for the tag. Supported placeholders: {Season},
+                                    {Year}.
+                                    Default: {Season} {Year}</div>
+                            </div>
+
+                            <details class="advanced-section" style="margin-top: 1em;">
+                                <summary class="sectionTitle" style="cursor: pointer; outline: none; font-size: 1.1em;">
+                                    Season Names (Click to Expand)
+                                </summary>
+                                <div class="filesProfileContainer" style="margin-top: 0.5em;">
+                                    <div class="config-card">
+                                        <div class="fieldDescription">Customize the display text for seasons.</div>
+
+                                        <div class="inputContainer">
+                                            <label class="inputLabel inputLabelUnfocused"
+                                                for="TagSeasonSpring">Spring</label>
+                                            <input id="TagSeasonSpring" name="TagSeasonSpring" type="text"
+                                                is="emby-input" />
+                                        </div>
+                                        <div class="inputContainer">
+                                            <label class="inputLabel inputLabelUnfocused"
+                                                for="TagSeasonSummer">Summer</label>
+                                            <input id="TagSeasonSummer" name="TagSeasonSummer" type="text"
+                                                is="emby-input" />
+                                        </div>
+                                        <div class="inputContainer">
+                                            <label class="inputLabel inputLabelUnfocused"
+                                                for="TagSeasonFall">Fall</label>
+                                            <input id="TagSeasonFall" name="TagSeasonFall" type="text"
+                                                is="emby-input" />
+                                        </div>
+                                        <div class="inputContainer">
+                                            <label class="inputLabel inputLabelUnfocused"
+                                                for="TagSeasonWinter">Winter</label>
+                                            <input id="TagSeasonWinter" name="TagSeasonWinter" type="text"
+                                                is="emby-input" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+
+                    <hr />
+
+                    <!-- Advanced Settings (Collapsible) -->
+                    <details class="verticalSection advanced-section">
+                        <summary class="sectionTitle" style="cursor: pointer; outline: none;">
+                            Series Settings (Click to Expand)
+                        </summary>
+                        <div class="filesProfileContainer" style="margin-top: 1em;">
+                            <!-- Series Audio -->
+                            <div class="config-card">
+                                <h3 class="checkboxListLabel">Audio (Theme Music)</h3>
+                                <div class="fieldDescription">Downloads to `theme-music` folder.</div>
+
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="SeriesAudioMaxThemes">Max Audio
+                                        Themes</label>
+                                    <input id="SeriesAudioMaxThemes" type="number" is="emby-input" min="0" />
+                                    <div class="fieldDescription">0 to disable downloading audio themes.</div>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="SeriesAudioVolume">Volume
+                                        (0-100)</label>
+                                    <div style="display: flex; align-items: center;">
+                                        <div style="flex-grow: 1; margin-right: 1em;">
+                                            <input type="range" is="emby-slider" id="SeriesAudioVolumeSlider" step="1"
+                                                min="0" max="100" style="width: 100%;"
+                                                oninput="document.getElementById('SeriesAudioVolume').value = this.value;" />
+                                        </div>
+                                        <input id="SeriesAudioVolume" type="number" is="emby-input" min="0" max="100"
+                                            style="width: 4em; flex-shrink: 0;"
+                                            oninput="document.getElementById('SeriesAudioVolumeSlider').value = this.value;" />
+                                    </div>
+                                    <div class="fieldDescription">
+                                        <strong>100:</strong> Original.<br />
+                                        <strong>1-99:</strong> Re-encode.<br />
+                                        <strong>0:</strong> Mute.
+                                    </div>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="SeriesAudioIgnoreOp" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore OP</span>
+                                    </label>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="SeriesAudioIgnoreEd" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore ED</span>
+                                    </label>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="SeriesAudioIgnoreOverlaps" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore Overlaps</span>
+                                    </label>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="SeriesAudioIgnoreCredits" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore Credits</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Series Video -->
+                            <div class="config-card">
+                                <h3 class="checkboxListLabel">Video (Backdrops)</h3>
+                                <div class="fieldDescription">Downloads to `backdrops` folder.</div>
+
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="SeriesVideoMaxThemes">Max Video
+                                        Themes</label>
+                                    <input id="SeriesVideoMaxThemes" type="number" is="emby-input" min="0" />
+                                    <div class="fieldDescription">0 to disable downloading video themes.</div>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="SeriesVideoVolume">Volume
+                                        (0-100)</label>
+                                    <div style="display: flex; align-items: center;">
+                                        <div style="flex-grow: 1; margin-right: 1em;">
+                                            <input type="range" is="emby-slider" id="SeriesVideoVolumeSlider" step="1"
+                                                min="0" max="100" style="width: 100%;"
+                                                oninput="document.getElementById('SeriesVideoVolume').value = this.value;" />
+                                        </div>
+                                        <input id="SeriesVideoVolume" type="number" is="emby-input" min="0" max="100"
+                                            style="width: 4em; flex-shrink: 0;"
+                                            oninput="document.getElementById('SeriesVideoVolumeSlider').value = this.value;" />
+                                    </div>
+                                    <div class="fieldDescription">
+                                        <strong>100:</strong> Original.<br />
+                                        <strong>0:</strong> Remove Audio.
+                                    </div>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="SeriesVideoIgnoreOp" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore OP</span>
+                                    </label>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="SeriesVideoIgnoreEd" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore ED</span>
+                                    </label>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="SeriesVideoIgnoreOverlaps" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore Overlaps</span>
+                                    </label>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="SeriesVideoIgnoreCredits" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore Credits</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+
+                    <hr />
+
+                    <details class="verticalSection advanced-section">
+                        <summary class="sectionTitle" style="cursor: pointer; outline: none;">
+                            Movie Settings (Click to Expand)
+                        </summary>
+                        <div class="filesProfileContainer" style="margin-top: 1em;">
+                            <!-- Movie Audio -->
+                            <div class="config-card">
+                                <h3 class="checkboxListLabel">Audio (Theme Music)</h3>
+                                <div class="fieldDescription">Downloads to `theme-music` folder.</div>
+
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="MovieAudioMaxThemes">Max Audio
+                                        Themes</label>
+                                    <input id="MovieAudioMaxThemes" type="number" is="emby-input" min="0" />
+                                    <div class="fieldDescription">0 to disable.</div>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="MovieAudioVolume">Volume
+                                        (0-100)</label>
+                                    <div style="display: flex; align-items: center;">
+                                        <div style="flex-grow: 1; margin-right: 1em;">
+                                            <input type="range" is="emby-slider" id="MovieAudioVolumeSlider" step="1"
+                                                min="0" max="100" style="width: 100%;"
+                                                oninput="document.getElementById('MovieAudioVolume').value = this.value;" />
+                                        </div>
+                                        <input id="MovieAudioVolume" type="number" is="emby-input" min="0" max="100"
+                                            style="width: 4em; flex-shrink: 0;"
+                                            oninput="document.getElementById('MovieAudioVolumeSlider').value = this.value;" />
+                                    </div>
+                                    <div class="fieldDescription">
+                                        <strong>100:</strong> Original.<br />
+                                        <strong>0:</strong> Mute.
+                                    </div>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="MovieAudioIgnoreOp" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore OP</span>
+                                    </label>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="MovieAudioIgnoreEd" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore ED</span>
+                                    </label>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="MovieAudioIgnoreOverlaps" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore Overlaps</span>
+                                    </label>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="MovieAudioIgnoreCredits" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore Credits</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Movie Video -->
+                            <div class="config-card">
+                                <h3 class="checkboxListLabel">Video (Backdrops)</h3>
+                                <div class="fieldDescription">Downloads to `backdrops` folder.</div>
+
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="MovieVideoMaxThemes">Max Video
+                                        Themes</label>
+                                    <input id="MovieVideoMaxThemes" type="number" is="emby-input" min="0" />
+                                    <div class="fieldDescription">0 to disable.</div>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="MovieVideoVolume">Volume
+                                        (0-100)</label>
+                                    <div style="display: flex; align-items: center;">
+                                        <div style="flex-grow: 1; margin-right: 1em;">
+                                            <input type="range" is="emby-slider" id="MovieVideoVolumeSlider" step="1"
+                                                min="0" max="100" style="width: 100%;"
+                                                oninput="document.getElementById('MovieVideoVolume').value = this.value;" />
+                                        </div>
+                                        <input id="MovieVideoVolume" type="number" is="emby-input" min="0" max="100"
+                                            style="width: 4em; flex-shrink: 0;"
+                                            oninput="document.getElementById('MovieVideoVolumeSlider').value = this.value;" />
+                                    </div>
+                                    <div class="fieldDescription">
+                                        <strong>100:</strong> Original.<br />
+                                        <strong>0:</strong> Remove Audio.
+                                    </div>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="MovieVideoIgnoreOp" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore OP</span>
+                                    </label>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="MovieVideoIgnoreEd" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore ED</span>
+                                    </label>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="MovieVideoIgnoreOverlaps" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore Overlaps</span>
+                                    </label>
+                                </div>
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input id="MovieVideoIgnoreCredits" type="checkbox" is="emby-checkbox" />
+                                        <span>Ignore Credits</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+
+                    <hr />
+
+                    <!-- Interface Customization -->
+                    <div class="verticalSection">
+                        <h2 class="sectionTitle">Interface Customization</h2>
+                        <div class="fieldDescription">
+                            To replace the "AnimeThemes" text link with a logo in the Jellyfin web interface:<br />
+                            Go to <strong>Dashboard > General > Custom CSS</strong> and add the following CSS:
+                        </div>
+
+                        <div class="inputContainer">
+                            <textarea id="CustomCssText" is="emby-textarea" class="emby-textarea" rows="10" readonly
+                                style="height: 200px !important; min-height: 200px; width: 100%; font-family: monospace; white-space: pre;">
+/* Replace "AnimeThemes" link with a logo image */
+.itemExternalLinks > a[href*="animethemes.moe"] {
+    font-size: 0 !important; /* Hide text */
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    background-image: url('https://github.com/AnimeThemes.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    vertical-align: middle;
+}</textarea>
+                        </div>
+                        <button is="emby-button" type="button" class="raised emby-button button-cancel"
+                            id="CopyCssButton" style="margin-top: 0.5em;">
+                            <span>Copy to Clipboard</span>
+                        </button>
+                        <span id="CopySuccessMessage"
+                            style="display:none; color: var(--theme-primary-color); margin-left: 1em; vertical-align: middle; font-weight: bold;">
+                            Copied!
+                        </span>
+                    </div>
+
+                    <hr />
+                    <br />
                     <div>
                         <button is="emby-button" type="submit" class="raised button-submit block emby-button">
                             <span>Save</span>
                         </button>
                     </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <button is="emby-button" type="button" class="raised emby-button block" id="RunTaskButton"
+                            style="background-color: #FF4C4C; color: white;">
+                            <span>Run Task</span>
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
+
+        <style>
+            .verticalSection {
+                margin-bottom: 2em;
+            }
+
+            .filesProfileContainer {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 2em;
+            }
+
+            .config-card {
+                flex: 1;
+                min-width: 300px;
+                padding: 1.5em;
+                background: rgba(0, 0, 0, 0.2);
+                border-radius: 10px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+
+            .warning-text {
+                color: var(--alert-text-color, #ff4c4c);
+            }
+
+            summary.sectionTitle {
+                color: var(--theme-primary-color);
+                user-select: none;
+            }
+
+            summary.sectionTitle:hover {
+                text-decoration: underline;
+            }
+
+            .custom-css-textarea {
+                height: 200px !important;
+                min-height: 200px;
+            }
+        </style>
         <script type="text/javascript">
             var AnimeThemesSyncConfig = {
                 pluginUniqueId: '66d528df-4632-4d43-9828-56957262572b'
             };
 
+            // Helper to safely get a property value with PascalCase/camelCase fallback
+            function getValue(config, key, defaultValue) {
+                if (!config) return defaultValue;
+
+                // Try PascalCase first (matches C# property name)
+                var val = config[key];
+                if (val !== undefined && val !== null) return val;
+
+                // Try camelCase (Jellyfin JSON serialization default)
+                var camelKey = key.charAt(0).toLowerCase() + key.slice(1);
+                val = config[camelKey];
+                if (val !== undefined && val !== null) return val;
+
+                return defaultValue;
+            }
+
             document.querySelector('#AnimeThemesSyncConfigPage')
                 .addEventListener('pageshow', function () {
+                    // Add Copy Button Listener
+                    var packet = this;
+                    var copyBtn = packet.querySelector('#CopyCssButton');
+                    var copyMsg = packet.querySelector('#CopySuccessMessage');
+                    if (copyBtn) {
+                        copyBtn.addEventListener('click', function () {
+                            var textarea = packet.querySelector('#CustomCssText');
+                            textarea.select();
+                            textarea.setSelectionRange(0, 99999); // For mobile
+
+                            try {
+                                if (navigator.clipboard) {
+                                    navigator.clipboard.writeText(textarea.value).then(function () {
+                                        showCopySuccess();
+                                    });
+                                } else {
+                                    document.execCommand('copy');
+                                    showCopySuccess();
+                                }
+                            } catch (err) {
+                                console.error('Copy failed', err);
+                            }
+
+                            function showCopySuccess() {
+                                copyMsg.style.display = 'inline-block';
+                                setTimeout(function () {
+                                    copyMsg.style.display = 'none';
+                                }, 3000);
+                            }
+                        });
+                    }
+
+                    function toggleTagOptions() {
+                        var enabled = document.querySelector('#TagsEnabled').checked;
+                        var container = document.querySelector('#TagOptionsContainer');
+                        if (container) {
+                            container.style.display = enabled ? 'block' : 'none';
+                        }
+                    }
+
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId).then(function (config) {
-                        document.querySelector('#ThemeDownloadingEnabled').checked = config.ThemeDownloadingEnabled;
-                        document.querySelector('#TagsEnabled').checked = config.TagsEnabled;
-                        document.querySelector('#TagLocalization').value = config.TagLocalization;
+                        try {
+                            config = config || {};
+
+                            // Global
+                            document.querySelector('#ThemeDownloadingEnabled').checked = getValue(config, 'ThemeDownloadingEnabled', true);
+                            document.querySelector('#MaxConcurrentDownloads').value = getValue(config, 'MaxConcurrentDownloads', 1);
+                            document.querySelector('#DownloadTimeoutSeconds').value = getValue(config, 'DownloadTimeoutSeconds', 600);
+                            document.querySelector('#AllowAdd').checked = getValue(config, 'AllowAdd', true);
+                            document.querySelector('#ForceRedownload').checked = getValue(config, 'ForceRedownload', false);
+                            document.querySelector('#AllowDelete').checked = getValue(config, 'AllowDelete', false);
+                            document.querySelector('#TagsEnabled').checked = getValue(config, 'TagsEnabled', true);
+
+                            // Initialize Toggle
+                            document.querySelector('#TagsEnabled').addEventListener('change', toggleTagOptions);
+                            toggleTagOptions();
+
+                            document.querySelector('#TagFormat').value = getValue(config, 'TagFormat', '{Season} {Year}');
+                            document.querySelector('#TagSeasonSpring').value = getValue(config, 'TagSeasonSpring', 'Spring');
+                            document.querySelector('#TagSeasonSummer').value = getValue(config, 'TagSeasonSummer', 'Summer');
+                            document.querySelector('#TagSeasonFall').value = getValue(config, 'TagSeasonFall', 'Fall');
+                            document.querySelector('#TagSeasonWinter').value = getValue(config, 'TagSeasonWinter', 'Winter');
+
+                            // Series Audio
+                            document.querySelector('#SeriesAudioMaxThemes').value = getValue(config, 'SeriesAudioMaxThemes', 1);
+                            document.querySelector('#SeriesAudioVolume').value = getValue(config, 'SeriesAudioVolume', 100);
+                            document.querySelector('#SeriesAudioVolumeSlider').value = getValue(config, 'SeriesAudioVolume', 100);
+                            document.querySelector('#SeriesAudioIgnoreOp').checked = getValue(config, 'SeriesAudioIgnoreOp', false);
+                            document.querySelector('#SeriesAudioIgnoreEd').checked = getValue(config, 'SeriesAudioIgnoreEd', true);
+                            document.querySelector('#SeriesAudioIgnoreOverlaps').checked = getValue(config, 'SeriesAudioIgnoreOverlaps', false);
+                            document.querySelector('#SeriesAudioIgnoreCredits').checked = getValue(config, 'SeriesAudioIgnoreCredits', false);
+
+                            // Series Video
+                            document.querySelector('#SeriesVideoMaxThemes').value = getValue(config, 'SeriesVideoMaxThemes', 1);
+                            document.querySelector('#SeriesVideoVolume').value = getValue(config, 'SeriesVideoVolume', 100);
+                            document.querySelector('#SeriesVideoVolumeSlider').value = getValue(config, 'SeriesVideoVolume', 100);
+                            document.querySelector('#SeriesVideoIgnoreOp').checked = getValue(config, 'SeriesVideoIgnoreOp', false);
+                            document.querySelector('#SeriesVideoIgnoreEd').checked = getValue(config, 'SeriesVideoIgnoreEd', true);
+                            document.querySelector('#SeriesVideoIgnoreOverlaps').checked = getValue(config, 'SeriesVideoIgnoreOverlaps', false);
+                            document.querySelector('#SeriesVideoIgnoreCredits').checked = getValue(config, 'SeriesVideoIgnoreCredits', false);
+
+                            // Movie Audio
+                            document.querySelector('#MovieAudioMaxThemes').value = getValue(config, 'MovieAudioMaxThemes', 1);
+                            document.querySelector('#MovieAudioVolume').value = getValue(config, 'MovieAudioVolume', 100);
+                            document.querySelector('#MovieAudioVolumeSlider').value = getValue(config, 'MovieAudioVolume', 100);
+                            document.querySelector('#MovieAudioIgnoreOp').checked = getValue(config, 'MovieAudioIgnoreOp', false);
+                            document.querySelector('#MovieAudioIgnoreEd').checked = getValue(config, 'MovieAudioIgnoreEd', true);
+                            document.querySelector('#MovieAudioIgnoreOverlaps').checked = getValue(config, 'MovieAudioIgnoreOverlaps', false);
+                            document.querySelector('#MovieAudioIgnoreCredits').checked = getValue(config, 'MovieAudioIgnoreCredits', false);
+
+                            // Movie Video
+                            document.querySelector('#MovieVideoMaxThemes').value = getValue(config, 'MovieVideoMaxThemes', 1);
+                            document.querySelector('#MovieVideoVolume').value = getValue(config, 'MovieVideoVolume', 100);
+                            document.querySelector('#MovieVideoVolumeSlider').value = getValue(config, 'MovieVideoVolume', 100);
+                            document.querySelector('#MovieVideoIgnoreOp').checked = getValue(config, 'MovieVideoIgnoreOp', false);
+                            document.querySelector('#MovieVideoIgnoreEd').checked = getValue(config, 'MovieVideoIgnoreEd', true);
+                            document.querySelector('#MovieVideoIgnoreOverlaps').checked = getValue(config, 'MovieVideoIgnoreOverlaps', false);
+                            document.querySelector('#MovieVideoIgnoreCredits').checked = getValue(config, 'MovieVideoIgnoreCredits', false);
+
+                        } catch (e) {
+                            console.error('Error populating config:', e);
+                            Dashboard.alert({
+                                message: 'Error loading configuration values: ' + e,
+                                title: 'Error'
+                            });
+                        } finally {
+                            Dashboard.hideLoadingMsg();
+                        }
+                    }).catch(function (err) {
                         Dashboard.hideLoadingMsg();
+                        console.error('Failed to load AnimeThemesSync configuration: ', err);
+                        Dashboard.alert({
+                            message: 'Failed to load configuration: ' + err,
+                            title: 'Configuration Load Error'
+                        });
                     });
                 });
 
@@ -82,27 +627,83 @@
                         ApiClient.startScheduledTask(task.Id).then(function () {
                             Dashboard.hideLoadingMsg();
                             Dashboard.alert('Task started.');
+                        }).catch(function (err) {
+                            Dashboard.hideLoadingMsg();
+                            Dashboard.alert({ message: 'Failed to start task: ' + err, title: 'Task Error' });
                         });
                     } else {
                         Dashboard.hideLoadingMsg();
                         Dashboard.alert('Task not found.');
                     }
+                }).catch(function (err) {
+                    Dashboard.hideLoadingMsg();
+                    console.error('Failed to list scheduled tasks: ', err);
+                    Dashboard.alert({ message: 'Failed to retrieve scheduled tasks. ' + err, title: 'Task Error' });
                 });
             });
 
             document.querySelector('#AnimeThemesSyncConfigForm')
                 .addEventListener('submit', function (e) {
+                    e.preventDefault();
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId).then(function (config) {
+                        // Global
                         config.ThemeDownloadingEnabled = document.querySelector('#ThemeDownloadingEnabled').checked;
+                        config.MaxConcurrentDownloads = parseInt(document.querySelector('#MaxConcurrentDownloads').value) || 1;
+                        config.DownloadTimeoutSeconds = parseInt(document.querySelector('#DownloadTimeoutSeconds').value) || 600;
+                        config.AllowAdd = document.querySelector('#AllowAdd').checked;
+                        config.ForceRedownload = document.querySelector('#ForceRedownload').checked;
+                        config.AllowDelete = document.querySelector('#AllowDelete').checked;
                         config.TagsEnabled = document.querySelector('#TagsEnabled').checked;
-                        config.TagLocalization = document.querySelector('#TagLocalization').value;
+                        config.TagFormat = document.querySelector('#TagFormat').value;
+                        config.TagSeasonSpring = document.querySelector('#TagSeasonSpring').value;
+                        config.TagSeasonSummer = document.querySelector('#TagSeasonSummer').value;
+                        config.TagSeasonFall = document.querySelector('#TagSeasonFall').value;
+                        config.TagSeasonWinter = document.querySelector('#TagSeasonWinter').value;
+
+                        // Series Audio
+                        config.SeriesAudioMaxThemes = parseInt(document.querySelector('#SeriesAudioMaxThemes').value) || 0;
+                        config.SeriesAudioVolume = parseInt(document.querySelector('#SeriesAudioVolume').value) || 0;
+                        config.SeriesAudioIgnoreOp = document.querySelector('#SeriesAudioIgnoreOp').checked;
+                        config.SeriesAudioIgnoreEd = document.querySelector('#SeriesAudioIgnoreEd').checked;
+                        config.SeriesAudioIgnoreOverlaps = document.querySelector('#SeriesAudioIgnoreOverlaps').checked;
+                        config.SeriesAudioIgnoreCredits = document.querySelector('#SeriesAudioIgnoreCredits').checked;
+
+                        // Series Video
+                        config.SeriesVideoMaxThemes = parseInt(document.querySelector('#SeriesVideoMaxThemes').value) || 0;
+                        config.SeriesVideoVolume = parseInt(document.querySelector('#SeriesVideoVolume').value) || 0;
+                        config.SeriesVideoIgnoreOp = document.querySelector('#SeriesVideoIgnoreOp').checked;
+                        config.SeriesVideoIgnoreEd = document.querySelector('#SeriesVideoIgnoreEd').checked;
+                        config.SeriesVideoIgnoreOverlaps = document.querySelector('#SeriesVideoIgnoreOverlaps').checked;
+                        config.SeriesVideoIgnoreCredits = document.querySelector('#SeriesVideoIgnoreCredits').checked;
+
+                        // Movie Audio
+                        config.MovieAudioMaxThemes = parseInt(document.querySelector('#MovieAudioMaxThemes').value) || 0;
+                        config.MovieAudioVolume = parseInt(document.querySelector('#MovieAudioVolume').value) || 0;
+                        config.MovieAudioIgnoreOp = document.querySelector('#MovieAudioIgnoreOp').checked;
+                        config.MovieAudioIgnoreEd = document.querySelector('#MovieAudioIgnoreEd').checked;
+                        config.MovieAudioIgnoreOverlaps = document.querySelector('#MovieAudioIgnoreOverlaps').checked;
+                        config.MovieAudioIgnoreCredits = document.querySelector('#MovieAudioIgnoreCredits').checked;
+
+                        // Movie Video
+                        config.MovieVideoMaxThemes = parseInt(document.querySelector('#MovieVideoMaxThemes').value) || 0;
+                        config.MovieVideoVolume = parseInt(document.querySelector('#MovieVideoVolume').value) || 0;
+                        config.MovieVideoIgnoreOp = document.querySelector('#MovieVideoIgnoreOp').checked;
+                        config.MovieVideoIgnoreEd = document.querySelector('#MovieVideoIgnoreEd').checked;
+                        config.MovieVideoIgnoreOverlaps = document.querySelector('#MovieVideoIgnoreOverlaps').checked;
+                        config.MovieVideoIgnoreCredits = document.querySelector('#MovieVideoIgnoreCredits').checked;
+
                         ApiClient.updatePluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
+                        }).catch(function (err) {
+                            Dashboard.hideLoadingMsg();
+                            Dashboard.alert({ message: 'Failed to save configuration: ' + err, title: 'Save Error' });
                         });
+                    }).catch(function (err) {
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert({ message: 'Failed to retrieve configuration for saving: ' + err, title: 'Save Error' });
                     });
 
-                    e.preventDefault();
                     return false;
                 });
         </script>

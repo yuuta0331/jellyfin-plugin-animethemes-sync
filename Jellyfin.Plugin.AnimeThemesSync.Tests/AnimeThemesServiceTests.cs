@@ -78,6 +78,37 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             _mockHttp.When("https://api.animethemes.moe/resource*")
                 .Respond("application/json", jsonResponse);
 
+            var animeResponse = @"{
+                ""anime"": [
+                    {
+                        ""id"": 123,
+                        ""name"": ""Neon Genesis Evangelion"",
+                        ""slug"": ""neon_genesis_evangelion"",
+                        ""animethemes"": [
+                            {
+                                ""type"": ""OP"",
+                                ""slug"": ""OP1"",
+                                ""animethemeentries"": [
+                                    {
+                                        ""version"": 1,
+                                        ""videos"": [
+                                            {
+                                                ""basename"": ""OP1.webm"",
+                                                ""link"": ""https://animethemes.moe/video/OP1.webm"",
+                                                ""resolution"": 1080
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }";
+
+            _mockHttp.When("https://api.animethemes.moe/anime/neon_genesis_evangelion*")
+                .Respond("application/json", animeResponse);
+
             // Act
             var result = await _service.GetAnimeByExternalId("anilist", externalId, CancellationToken.None);
 
