@@ -20,6 +20,6 @@ jobs:
       - name: Generate manifest.json
         uses: Kevinjil/jellyfin-plugin-repo-action@v0.4.3
         with:
-          branch: 'gh-pages'
-          output: 'manifest.json'
-          url: 'https://github.com/${{ github.repository }}'
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          pagesBranch: 'gh-pages'
+          pagesFile: 'manifest.json'
