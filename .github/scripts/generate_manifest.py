@@ -129,8 +129,11 @@ def main():
     # Sort versions? GitHub API returns releases in some order, but best to be ensuring latest first?
     # Usually Manifest expects list. Jellyfin likely processes them.
 
+    # Wrap in list as Jellyfin expects a list of plugins
+    output = [manifest]
+
     with open(MANIFEST_FILE, 'w', encoding='utf-8') as f:
-        json.dump(manifest, f, indent=4)
+        json.dump(output, f, indent=4)
     print(f"Successfully generated {MANIFEST_FILE} with {len(manifest['versions'])} versions.")
 
 if __name__ == "__main__":
