@@ -17,10 +17,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate manifest.json
-        uses: Kevinjil/jellyfin-plugin-repo-action@v0.4.3
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          pagesBranch: 'gh-pages'
-          pagesFile: 'manifest.json'
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install requests pyyaml
+
+      - name: Generate manifest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python .github/scripts/generate_manifest.py
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          publish_branch: gh-pages
+          keep_files: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'Update manifest.json'
+          include: 'manifest.json'
