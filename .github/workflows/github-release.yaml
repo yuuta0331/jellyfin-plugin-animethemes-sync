@@ -20,8 +20,20 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
+      - name: Extract Version
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Extracted version: $VERSION"
+
+      - name: Update build.yaml Version
+        run: |
+          sed -i "s/version: .*/version: \"${{ env.VERSION }}\"/" build.yaml
+          cat build.yaml
+
       - name: Build
-        run: dotnet build -c Release
+        run: dotnet build -c Release -p:Version=${{ env.VERSION }}
 
       - name: Create Zip Archive
         run: |
