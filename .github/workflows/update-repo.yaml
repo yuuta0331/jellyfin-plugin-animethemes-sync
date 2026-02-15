@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 0
 
       - name: Generate manifest.json
-        uses: jellyfin/jellyfin-plugin-repo-action@v1
+        uses: Kevinjil/jellyfin-plugin-repo-action@v0.4.3
         with:
           branch: 'gh-pages'
           output: 'manifest.json'
