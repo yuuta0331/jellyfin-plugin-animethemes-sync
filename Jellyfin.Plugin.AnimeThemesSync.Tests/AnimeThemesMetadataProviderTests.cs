@@ -12,6 +12,8 @@ using Moq;
 using RichardSzalay.MockHttp;
 using Xunit;
 
+using Jellyfin.Plugin.AnimeThemesSync.Services;
+
 namespace Jellyfin.Plugin.AnimeThemesSync.Tests
 {
     public class AnimeThemesMetadataProviderTests
@@ -39,7 +41,11 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             client.BaseAddress = new Uri("https://api.animethemes.moe");
             _mockHttpClientFactory.Setup(x => x.CreateClient(It.IsAny<string>())).Returns(client);
 
-            _provider = new AnimeThemesMetadataProvider(_mockHttpClientFactory.Object, _mockLoggerFactory.Object);
+            var rateLimiter = new RateLimiter(new Mock<ILogger<RateLimiter>>().Object, "Test", 100);
+            var aniListService = new AniListService(_mockHttpClientFactory.Object, new Mock<ILogger<AniListService>>().Object, rateLimiter);
+            var animeThemesService = new AnimeThemesService(_mockHttpClientFactory.Object, new Mock<ILogger<AnimeThemesService>>().Object, rateLimiter);
+
+            _provider = new AnimeThemesMetadataProvider(_mockHttpClientFactory.Object, _mockLoggerFactory.Object, aniListService, animeThemesService);
         }
 
         [Fact]

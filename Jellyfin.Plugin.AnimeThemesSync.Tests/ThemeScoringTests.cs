@@ -10,7 +10,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
         // Wrapper to access private Rate method or replicate logic for testing
         // Since Rate is private, we will duplicate the logic here to verify it against the requirements
         // Ideally we would make Rate internal/public or use InternalsVisibleTo, but for now strict verification of the Logic is sufficient.
-        private double Rate(AnimeThemesService.AnimeThemesEntry entry, AnimeThemesService.AnimeThemesVideo video)
+        private double Rate(AnimeThemesEntry entry, AnimeThemesVideo video)
         {
             double score = 0;
 
@@ -75,8 +75,8 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
         [Fact]
         public void Rate_Spoiler_GetsBonus()
         {
-            var entry = new AnimeThemesService.AnimeThemesEntry { Spoiler = true };
-            var video = new AnimeThemesService.AnimeThemesVideo { Tags = "NC" }; // NC to avoid credit bonus affecting test
+            var entry = new AnimeThemesEntry { Spoiler = true };
+            var video = new AnimeThemesVideo { Tags = "NC" }; // NC to avoid credit bonus affecting test
             var score = Rate(entry, video);
             Assert.Equal(50, score);
         }
@@ -84,8 +84,8 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
         [Fact]
         public void Rate_Overlap_Over_GetsHighBonus()
         {
-            var entry = new AnimeThemesService.AnimeThemesEntry { Spoiler = false };
-            var video = new AnimeThemesService.AnimeThemesVideo { Overlap = "Over", Tags = "NC" };
+            var entry = new AnimeThemesEntry { Spoiler = false };
+            var video = new AnimeThemesVideo { Overlap = "Over", Tags = "NC" };
             var score = Rate(entry, video);
             Assert.Equal(20, score);
         }
@@ -93,8 +93,8 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
         [Fact]
         public void Rate_Overlap_Transition_GetsMediumBonus()
         {
-            var entry = new AnimeThemesService.AnimeThemesEntry { Spoiler = false };
-            var video = new AnimeThemesService.AnimeThemesVideo { Overlap = "Transition", Tags = "NC" };
+            var entry = new AnimeThemesEntry { Spoiler = false };
+            var video = new AnimeThemesVideo { Overlap = "Transition", Tags = "NC" };
             var score = Rate(entry, video);
             Assert.Equal(15, score);
         }
@@ -102,8 +102,8 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
         [Fact]
         public void Rate_Source_LD_GetsHighBonus()
         {
-            var entry = new AnimeThemesService.AnimeThemesEntry { Spoiler = false };
-            var video = new AnimeThemesService.AnimeThemesVideo { Source = "LD", Tags = "NC" };
+            var entry = new AnimeThemesEntry { Spoiler = false };
+            var video = new AnimeThemesVideo { Source = "LD", Tags = "NC" };
             var score = Rate(entry, video);
             Assert.Equal(10, score);
         }
@@ -111,8 +111,8 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
         [Fact]
         public void Rate_Source_WEB_GetsLowBonus()
         {
-            var entry = new AnimeThemesService.AnimeThemesEntry { Spoiler = false }; // 0
-            var video = new AnimeThemesService.AnimeThemesVideo { Source = "WEB", Tags = "NC" }; // 5
+            var entry = new AnimeThemesEntry { Spoiler = false }; // 0
+            var video = new AnimeThemesVideo { Source = "WEB", Tags = "NC" }; // 5
             var score = Rate(entry, video);
             Assert.Equal(5, score);
         }
@@ -121,8 +121,8 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
         public void Rate_Credits_BroadcastVersion_GetsBonus()
         {
             // Current logic: Non-Creditless gets +10.
-            var entry = new AnimeThemesService.AnimeThemesEntry { Spoiler = false };
-            var video = new AnimeThemesService.AnimeThemesVideo { Tags = "" }; // Not NC
+            var entry = new AnimeThemesEntry { Spoiler = false };
+            var video = new AnimeThemesVideo { Tags = "" }; // Not NC
             var score = Rate(entry, video);
             Assert.Equal(10, score);
         }
@@ -130,8 +130,8 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
         [Fact]
         public void Rate_Credits_NC_GetsNoBonus()
         {
-            var entry = new AnimeThemesService.AnimeThemesEntry { Spoiler = false };
-            var video = new AnimeThemesService.AnimeThemesVideo { Tags = "NC" };
+            var entry = new AnimeThemesEntry { Spoiler = false };
+            var video = new AnimeThemesVideo { Tags = "NC" };
             var score = Rate(entry, video);
             Assert.Equal(0, score);
         }

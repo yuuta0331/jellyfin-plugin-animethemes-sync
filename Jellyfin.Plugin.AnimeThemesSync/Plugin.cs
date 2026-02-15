@@ -3,15 +3,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using Jellyfin.Plugin.AnimeThemesSync.Configuration;
-using Jellyfin.Plugin.AnimeThemesSync.ExternalIds;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Plugins;
-using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Jellyfin.Plugin.AnimeThemesSync;
 
@@ -33,10 +28,10 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     }
 
     /// <inheritdoc />
-    public override string Name => "AnimeThemesSync";
+    public override string Name => Constants.PluginName;
 
     /// <inheritdoc />
-    public override Guid Id => Guid.Parse("66d528df-4632-4d43-9828-56957262572b");
+    public override Guid Id => Guid.Parse(Constants.PluginGuid);
 
     /// <summary>
     /// Gets the current plugin instance.

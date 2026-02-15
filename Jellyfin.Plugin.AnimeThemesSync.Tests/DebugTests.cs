@@ -206,6 +206,29 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             _output.WriteLine($"Status: {response3.StatusCode}");
         }
 
+        [Fact]
+        public async Task Test_AniListSearch_WithYear_Live()
+        {
+            var httpClientFactory = new SimpleHttpClientFactory();
+            var logger = new TestLogger<AniListService>(_output);
+            var rateLimiterLogger = new TestLogger<RateLimiter>(_output);
+            var rateLimiter = new RateLimiter(rateLimiterLogger, "AniList", 90);
+            var service = new AniListService(httpClientFactory, logger, rateLimiter);
+
+            // Search Black Rock Shooter with year=2012 — should match TV (id=11285)
+            _output.WriteLine("Searching 'ブラック★ロックシューター' with year=2012...");
+            var result = await service.SearchAnime("ブラック★ロックシューター", 2012, CancellationToken.None);
+            _output.WriteLine($"AniListId={result.AniListId}, MalId={result.MalId}");
+            Assert.NotNull(result.AniListId);
+            Assert.Equal(11285, result.AniListId);
+
+            // Search without year — should pick exact title match
+            _output.WriteLine("\nSearching 'ブラック★ロックシューター' without year...");
+            var result2 = await service.SearchAnime("ブラック★ロックシューター", null, CancellationToken.None);
+            _output.WriteLine($"AniListId={result2.AniListId}, MalId={result2.MalId}");
+            Assert.NotNull(result2.AniListId);
+        }
+
         private class SimpleHttpClientFactory : IHttpClientFactory
         {
             public HttpClient CreateClient(string name)
