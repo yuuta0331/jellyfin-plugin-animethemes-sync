@@ -7,10 +7,11 @@ targetAbi: "10.11.0.0"
 framework: "net9.0"
 overview: "Automatically downloads anime OP/ED themes from AnimeThemes.moe for your Jellyfin library."
 description: >
-  Automatically download OP/ED videos from AnimeThemes.moe to upgrade your collection!\n
-  \nKey Features:\n
-  - Precise Matching: Uses AniList/MyAnimeList IDs to ensure the correct anime.\n
-  - Smart Tagging: Automatically adds season tags like 'Winter 2024'.\n
+  Automatically download OP/ED videos from AnimeThemes.moe to upgrade your collection!
+
+  Key Features:
+  - Precise Matching: Uses AniList/MyAnimeList IDs to ensure the correct anime.
+  - Smart Tagging: Automatically adds season tags like 'Winter 2024'.
   - Direct Links: Quick access to the source pages on AnimeThemes.moe.
 category: "Anime"
 owner: "CassisCloud"
