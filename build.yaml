@@ -5,10 +5,10 @@ imageUrl: https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync/raw/re
 version: "1.0.0.0"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
-overview: "Syncs anime themes (OPs and EDs) from animethemes.moe to Jellyfin"
+overview: "Automatically downloads anime OP/ED themes from AnimeThemes.moe for your Jellyfin library."
 description: >
-  Plugin for Jellyfin that syncs anime theme songs (OPs and EDs) from animethemes.moe.
-  Requires the AniDB plugin to be installed for AniDB ID matching.
+  Enhance your anime collection by automatically downloading Opening (OP) and Ending (ED) videos from AnimeThemes.moe.
+  Features include precise matching via AniList/MyAnimeList IDs, adding season tags (e.g., "Winter 2024"), and direct links to AnimeThemes.moe pages.
 category: "Metadata"
 owner: "CassisCloud"
 artifacts:
