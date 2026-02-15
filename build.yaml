@@ -1,15 +1,18 @@
 ---
 name: "AnimeThemesSync"
 guid: "66d528df-4632-4d43-9828-56957262572b"
-imageUrl: https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync/raw/refs/heads/main/resource/images/jellyfin-plugin-animethemes-sync.jpeg
+imageUrl: https://raw.githubusercontent.com/CassisCloud/jellyfin-plugin-animethemes-sync/refs/heads/main/resource/images/jellyfin-plugin-animethemes-sync.jpeg
 version: "1.0.0.0"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 overview: "Automatically downloads anime OP/ED themes from AnimeThemes.moe for your Jellyfin library."
 description: >
-  Enhance your anime collection by automatically downloading Opening (OP) and Ending (ED) videos from AnimeThemes.moe.
-  Features include precise matching via AniList/MyAnimeList IDs, adding season tags (e.g., "Winter 2024"), and direct links to AnimeThemes.moe pages.
-category: "Metadata"
+  Automatically download OP/ED videos from AnimeThemes.moe to upgrade your collection!\n
+  \nKey Features:\n
+  - Precise Matching: Uses AniList/MyAnimeList IDs to ensure the correct anime.\n
+  - Smart Tagging: Automatically adds season tags like 'Winter 2024'.\n
+  - Direct Links: Quick access to the source pages on AnimeThemes.moe.
+category: "Anime"
 owner: "CassisCloud"
 artifacts:
 - "Jellyfin.Plugin.AnimeThemesSync.dll"
