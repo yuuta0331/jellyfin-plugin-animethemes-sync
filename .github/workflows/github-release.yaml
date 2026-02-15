@@ -40,8 +40,13 @@ jobs:
           cd Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/
           zip -r AnimeThemesSync.zip . -i "*.dll"
 
+      - name: Generate MD5
+        run: md5sum Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/AnimeThemesSync.zip > Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/AnimeThemesSync.zip.md5
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/AnimeThemesSync.zip
+          files: |
+             Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/AnimeThemesSync.zip
+             Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/AnimeThemesSync.zip.md5
           generate_release_notes: true
