@@ -1,0 +1,23 @@
+name: Update Plugin Repository
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-repo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate manifest.json
+        uses: jellyfin/jellyfin-plugin-repo-action@v1
+        with:
+          branch: 'gh-pages'
+          output: 'manifest.json'
+          url: 'https://github.com/${{ github.repository }}'
