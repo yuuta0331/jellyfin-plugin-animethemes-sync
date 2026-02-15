@@ -19,9 +19,21 @@ It also adds direct links to AnimeThemes on each series page, making it easy to 
 
 ## Installation
 
-Since this plugin is not yet in the official repository, you need to build it from source or download a release (if available).
+### Repository Installation (Recommended)
 
-### Manual Installation (from source)
+#### English
+1.  Open your Jellyfin Dashboard.
+2.  Navigate to **Plugins** > **Repositories**.
+3.  Click the **+** (Add) button.
+4.  Enter the following information:
+    -   **Repository Name**: `AnimeThemes Sync`
+    -   **Repository URL**: `https://cassiscloud.github.io/jellyfin-plugin-animethemes-sync/manifest.json`
+5.  Click **Save**.
+6.  Go to the **Catalog** tab and find **AnimeThemes Sync** (Metdata category).
+7.  Click **Install**.
+8.  Restart Jellyfin.
+
+### Manual Installation (Advanced)
 
 1.  **Build the plugin**:
     ```bash
