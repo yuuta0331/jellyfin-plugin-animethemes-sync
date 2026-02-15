@@ -29,16 +29,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python .github/scripts/generate_manifest.py
+        run: |
+          python .github/scripts/generate_manifest.py
+          mkdir -p public
+          mv manifest.json public/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: .
+          publish_dir: ./public
           publish_branch: gh-pages
           keep_files: true
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
           commit_message: 'Update manifest.json'
-          include: 'manifest.json'
