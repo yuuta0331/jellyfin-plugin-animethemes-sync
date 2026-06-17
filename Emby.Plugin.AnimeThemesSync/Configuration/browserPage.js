@@ -145,8 +145,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
                     var button = document.createElement('button');
                     button.setAttribute('is', 'emby-button');
                     button.type = 'button';
-                    button.className = 'emby-button';
-                    button.textContent = label;
+                    button.className = 'button-flat emby-button';
+                    var labelSpan = document.createElement('span');
+                    labelSpan.textContent = label;
+                    button.appendChild(labelSpan);
                     button.addEventListener('click', function () {
                         window.open(url, '_blank', 'noopener');
                     });
