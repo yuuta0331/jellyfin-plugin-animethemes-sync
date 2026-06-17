@@ -31,6 +31,44 @@ public sealed class AnimeThemesSyncController : ControllerBase
     }
 
     /// <summary>
+    /// Gets AnimeThemes-enabled library items.
+    /// </summary>
+    /// <returns>The library items.</returns>
+    [HttpGet("Items")]
+    [ProducesResponseType(typeof(IReadOnlyList<ThemeBrowserLibraryItem>), StatusCodes.Status200OK)]
+    public ActionResult<IReadOnlyList<ThemeBrowserLibraryItem>> GetItems()
+    {
+        return Ok(_themeDownloader.GetBrowserItems());
+    }
+
+    /// <summary>
+    /// Gets AnimeThemes Browser rows for one item.
+    /// </summary>
+    /// <param name="itemId">The Jellyfin item identifier.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The browser item result.</returns>
+    [HttpGet("Items/{itemId:guid}/Themes")]
+    [ProducesResponseType(typeof(ThemeBrowserItemResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ThemeBrowserItemResult>> GetThemes(Guid itemId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _themeDownloader.GetThemeBrowserItemAsync(itemId, cancellationToken).ConfigureAwait(false);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Downloads AnimeThemes media for one item.
     /// </summary>
     /// <param name="itemId">The Jellyfin item identifier.</param>

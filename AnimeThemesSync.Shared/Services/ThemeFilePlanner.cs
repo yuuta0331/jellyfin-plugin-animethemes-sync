@@ -292,7 +292,7 @@ public static class ThemeFilePlanner
         return string.Join(" - ", tokens.Where(t => !string.IsNullOrWhiteSpace(t)));
     }
 
-    private static string BuildArtistDisplay(AnimeThemesSong? song)
+    public static string BuildArtistDisplay(AnimeThemesSong? song)
     {
         if (song == null)
         {
@@ -320,7 +320,7 @@ public static class ThemeFilePlanner
         return artists?.Count > 0 ? string.Join(", ", artists) : string.Empty;
     }
 
-    private static IEnumerable<string> BuildLabels(ScoredCandidate candidate)
+    public static IEnumerable<string> BuildLabels(ScoredCandidate candidate)
     {
         if (candidate.Video.Nc == true || ContainsTag(candidate.Video.Tags, "NC") || ContainsTag(candidate.Video.Tags, "Creditless"))
         {
@@ -359,7 +359,7 @@ public static class ThemeFilePlanner
         }
     }
 
-    private static string BuildQualityLabel(AnimeThemesVideo video)
+    public static string BuildQualityLabel(AnimeThemesVideo video)
     {
         var source = SanitizeFileNamePart(video.Source, fallback: string.Empty).ToUpperInvariant();
         var resolution = video.Resolution.HasValue

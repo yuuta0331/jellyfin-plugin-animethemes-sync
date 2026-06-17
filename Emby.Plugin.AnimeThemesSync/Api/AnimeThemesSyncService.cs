@@ -29,6 +29,26 @@ public class DownloadAnimeThemesForItem : IReturn<ThemeDownloadExecutionResult>
 }
 
 /// <summary>
+/// Request to list AnimeThemes-enabled library items.
+/// </summary>
+[Route("/AnimeThemesSync/Items", "GET", Summary = "Gets AnimeThemes-enabled library items.")]
+public class GetAnimeThemesItems : IReturn<IReadOnlyList<ThemeBrowserLibraryItem>>
+{
+}
+
+/// <summary>
+/// Request to get AnimeThemes Browser rows for one item.
+/// </summary>
+[Route("/AnimeThemesSync/Items/{ItemId}/Themes", "GET", Summary = "Gets AnimeThemes Browser rows for one item.")]
+public class GetAnimeThemesForItem : IReturn<ThemeBrowserItemResult>
+{
+    /// <summary>
+    /// Gets or sets the Emby item identifier.
+    /// </summary>
+    public Guid ItemId { get; set; }
+}
+
+/// <summary>
 /// AnimeThemes Sync management API.
 /// </summary>
 public class AnimeThemesSyncService : IService
@@ -49,6 +69,33 @@ public class AnimeThemesSyncService : IService
         IMediaEncoder mediaEncoder)
     {
         _themeDownloader = new ThemeDownloader(libraryManager, fileSystem, logManager, mediaEncoder);
+    }
+
+    /// <summary>
+    /// Gets AnimeThemes-enabled library items.
+    /// </summary>
+    /// <param name="request">The request.</param>
+    /// <returns>The library items.</returns>
+    public object Get(GetAnimeThemesItems request)
+    {
+        return _themeDownloader.GetBrowserItems();
+    }
+
+    /// <summary>
+    /// Gets AnimeThemes Browser rows for one item.
+    /// </summary>
+    /// <param name="request">The request.</param>
+    /// <returns>The browser item result.</returns>
+    public object Get(GetAnimeThemesForItem request)
+    {
+        try
+        {
+            return _themeDownloader.GetThemeBrowserItemAsync(request.ItemId, CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
     }
 
     /// <summary>

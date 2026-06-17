@@ -117,6 +117,57 @@ public class ThemeDownloader : IScheduledTask
         return await ProcessItems(new[] { item }, config, forceRedownload || config.ForceRedownload, null, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Gets browser candidates from AnimeThemes-enabled libraries.
+    /// </summary>
+    /// <returns>The candidate items.</returns>
+    public IReadOnlyList<ThemeBrowserLibraryItem> GetBrowserItems()
+    {
+        return GetEnabledLibraryItems()
+            .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(i => new ThemeBrowserLibraryItem(
+                i.Id,
+                i.Name ?? "Unknown",
+                i is Series ? "Series" : "Movie",
+                i.ProviderIds.TryGetValue(Constants.AnimeThemesProviderId, out var slug) ? slug : null,
+                i.ProviderIds.TryGetValue(Constants.AniListProviderId, out var aniListId) ? aniListId : null,
+                i.ProviderIds.TryGetValue(Constants.MyAnimeListProviderId, out var malId) ? malId : null))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Gets AnimeThemes Browser rows for one library item.
+    /// </summary>
+    /// <param name="itemId">The item identifier.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The browser item result.</returns>
+    public async Task<ThemeBrowserItemResult> GetThemeBrowserItemAsync(Guid itemId, CancellationToken cancellationToken)
+    {
+        var config = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
+        var item = _libraryManager.GetItemById(itemId) ?? throw new KeyNotFoundException("The requested item was not found.");
+        if (item is not Series && item is not Movie)
+        {
+            throw new InvalidOperationException("Only Series and Movie items are supported.");
+        }
+
+        var anime = await ResolveAnime(item, cancellationToken).ConfigureAwait(false);
+        var animeThemesUrl = !string.IsNullOrWhiteSpace(anime?.Slug)
+            ? Constants.AnimeThemesWebUrl + "/anime/" + anime.Slug
+            : null;
+
+        var rows = anime?.AnimeThemes == null
+            ? new List<ThemeBrowserThemeRow>()
+            : BuildBrowserRows(item, anime, config);
+
+        return new ThemeBrowserItemResult(
+            item.Id,
+            item.Name ?? "Unknown",
+            item is Series ? "Series" : "Movie",
+            anime?.Slug,
+            animeThemesUrl,
+            rows);
+    }
+
     private async Task<ThemeDownloadExecutionResult> ProcessItems(
         IReadOnlyList<BaseItem> items,
         PluginConfiguration config,
@@ -450,7 +501,19 @@ public class ThemeDownloader : IScheduledTask
             return null;
         }
 
-        // Resolve IDs
+        var anime = await ResolveAnime(item, cancellationToken).ConfigureAwait(false);
+        if (anime?.AnimeThemes == null)
+        {
+            _logger.LogWarning("  No themes found for {ItemName}.", item.Name);
+            return null;
+        }
+
+        var config = Plugin.Instance?.Configuration;
+        return ThemeFilePlanner.BuildPlan(anime, item.Path, audioConfig, videoConfig, config?.ExtrasEnabled ?? false);
+    }
+
+    private async Task<AnimeThemesAnime?> ResolveAnime(BaseItem item, CancellationToken cancellationToken)
+    {
         int? aniListId = null;
         int? malId = null;
 
@@ -490,14 +553,98 @@ public class ThemeDownloader : IScheduledTask
             }
         }
 
-        if (anime?.AnimeThemes == null)
+        return anime;
+    }
+
+    private List<ThemeBrowserThemeRow> BuildBrowserRows(BaseItem item, AnimeThemesAnime anime, PluginConfiguration config)
+    {
+        var audioConfig = CreateThemeConfig(item, config, isVideo: false);
+        var videoConfig = CreateThemeConfig(item, config, isVideo: true);
+        var plan = ThemeFilePlanner.BuildPlan(anime, item.Path, audioConfig, videoConfig, config.ExtrasEnabled);
+
+        var videoPlans = plan.MediaFiles
+            .Where(f => f.IsVideo)
+            .GroupBy(f => f.Url, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var audioPlans = plan.MediaFiles
+            .Where(f => !f.IsVideo)
+            .GroupBy(f => f.Url, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var extraPlans = plan.ExtraFiles
+            .GroupBy(f => f.SourcePath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        return ThemeScoringService.GetScoredCandidates(anime.AnimeThemes!, ignoreOp: false, ignoreEd: false, ignoreOverlaps: false, ignoreCredits: false)
+            .OrderBy(GetThemeTypeOrder)
+            .ThenBy(c => c.Theme.Sequence ?? int.MaxValue)
+            .ThenBy(c => c.Entry.Version ?? 1)
+            .ThenBy(c => c.Theme.Slug ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(c => c.Score)
+            .Select(c => BuildBrowserRow(c, anime, videoPlans, audioPlans, extraPlans))
+            .ToList();
+    }
+
+    private ThemeBrowserThemeRow BuildBrowserRow(
+        ScoredCandidate candidate,
+        AnimeThemesAnime anime,
+        Dictionary<string, ThemeFilePlan> videoPlans,
+        Dictionary<string, ThemeFilePlan> audioPlans,
+        Dictionary<string, ThemeExtraPlan> extraPlans)
+    {
+        var videoPlan = !string.IsNullOrWhiteSpace(candidate.Video.Link) &&
+                        videoPlans.TryGetValue(candidate.Video.Link, out var vp)
+            ? vp
+            : null;
+        var audioUrl = candidate.Video.Audio?.Link ?? candidate.Video.Link;
+        var audioPlan = !string.IsNullOrWhiteSpace(audioUrl) &&
+                        audioPlans.TryGetValue(audioUrl, out var ap)
+            ? ap
+            : null;
+        var extraPlan = videoPlan != null && extraPlans.TryGetValue(videoPlan.Path, out var ep) ? ep : null;
+        var labels = string.Join(", ", ThemeFilePlanner.BuildLabels(candidate));
+        var animeThemesUrl = !string.IsNullOrWhiteSpace(anime.Slug)
+            ? Constants.AnimeThemesWebUrl + "/anime/" + anime.Slug
+            : null;
+
+        return new ThemeBrowserThemeRow(
+            ThemeFilePlanner.BuildThemeKey(candidate),
+            candidate.Theme.Type ?? "Theme",
+            candidate.Theme.Sequence,
+            candidate.Entry.Version,
+            candidate.Theme.Slug,
+            candidate.Theme.Group?.Name,
+            candidate.Entry.Episodes,
+            candidate.Entry.Spoiler == true,
+            candidate.Entry.Nsfw == true,
+            candidate.Entry.Notes,
+            candidate.Theme.Song?.Title,
+            ThemeFilePlanner.BuildArtistDisplay(candidate.Theme.Song),
+            ThemeFilePlanner.BuildQualityLabel(candidate.Video),
+            string.IsNullOrWhiteSpace(labels) ? null : labels,
+            candidate.Video.Link,
+            audioUrl,
+            videoPlan?.Path,
+            videoPlan != null && _fileSystem.FileExists(videoPlan.Path),
+            audioPlan?.Path,
+            audioPlan != null && _fileSystem.FileExists(audioPlan.Path),
+            extraPlan?.TargetPath,
+            extraPlan != null && _fileSystem.FileExists(extraPlan.TargetPath),
+            animeThemesUrl);
+    }
+
+    private static int GetThemeTypeOrder(ScoredCandidate candidate)
+    {
+        if (string.Equals(candidate.Theme.Type, "OP", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogWarning("  No themes found for {ItemName}.", item.Name);
-            return null;
+            return 0;
         }
 
-        var config = Plugin.Instance?.Configuration;
-        return ThemeFilePlanner.BuildPlan(anime, item.Path, audioConfig, videoConfig, config?.ExtrasEnabled ?? false);
+        if (string.Equals(candidate.Theme.Type, "ED", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1;
+        }
+
+        return 2;
     }
 
     /// <summary>
