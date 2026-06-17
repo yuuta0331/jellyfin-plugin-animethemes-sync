@@ -16,6 +16,8 @@
     "jellyfinLinuxDataDir": "$HOME/.local/share/jellyfin",
     "jellyfinTestyDataDir": "C:/Users/miyag/PApp/jellyfin_10.11.6-amd64/Testy/data",
     "jellyfinTestyCacheDir": "C:/Users/miyag/PApp/jellyfin_10.11.6-amd64/Testy/cache",
+    "jellyfinTestyHttpPort": 8097,
+    "jellyfinTestyHttpsPort": 8921,
     "jellyfinServerExe": "C:/Users/miyag/PApp/jellyfin_10.11.6-amd64/jellyfin/jellyfin.exe",
     "jellyfinServerCwd": "C:/Users/miyag/PApp/jellyfin_10.11.6-amd64/jellyfin",
     "jellyfinFfmpegExe": "C:/Users/miyag/PApp/jellyfin_10.11.6-amd64/jellyfin/ffmpeg.exe",

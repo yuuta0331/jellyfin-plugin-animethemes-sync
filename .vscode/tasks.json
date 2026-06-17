@@ -92,7 +92,7 @@
         "args": [
           "-NoProfile",
           "-Command",
-          "Start-Process -FilePath \"${config:embyServerExe}\""
+          "Start-Process -FilePath \"${config:embyServerExe}\" -WindowStyle Hidden"
         ]
       },
       "linux": {
@@ -102,6 +102,104 @@
           "\"${config:embyServerExe}\" &"
         ]
       }
+    },
+    {
+      "label": "configure:jellyfin:testy-port",
+      "type": "process",
+      "command": "pwsh",
+      "windows": {
+        "command": "pwsh",
+        "args": [
+          "-NoProfile",
+          "-Command",
+          "$ErrorActionPreference = \"Stop\"; $networkPath = Join-Path \"${config:jellyfinTestyDataDir}\" \"config/network.xml\"; $configDir = Split-Path $networkPath -Parent; New-Item -ItemType Directory -Path $configDir -Force | Out-Null; if (Test-Path $networkPath) { [xml]$xml = Get-Content $networkPath } else { [xml]$xml = '<NetworkConfiguration xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"><BaseUrl /><EnableHttps>false</EnableHttps><RequireHttps>false</RequireHttps><InternalHttpPort>8096</InternalHttpPort><InternalHttpsPort>8920</InternalHttpsPort><PublicHttpPort>8096</PublicHttpPort><PublicHttpsPort>8920</PublicHttpsPort></NetworkConfiguration>' }; $root = $xml.NetworkConfiguration; foreach ($name in @('InternalHttpPort','PublicHttpPort','InternalHttpsPort','PublicHttpsPort')) { if (-not $root.SelectSingleNode($name)) { $node = $xml.CreateElement($name); [void]$root.AppendChild($node) } }; $root.InternalHttpPort = \"${config:jellyfinTestyHttpPort}\"; $root.PublicHttpPort = \"${config:jellyfinTestyHttpPort}\"; $root.InternalHttpsPort = \"${config:jellyfinTestyHttpsPort}\"; $root.PublicHttpsPort = \"${config:jellyfinTestyHttpsPort}\"; $xml.Save($networkPath); Write-Host \"Jellyfin Testy HTTP port set to ${config:jellyfinTestyHttpPort}.\""
+        ]
+      },
+      "linux": {
+        "command": "bash",
+        "args": [
+          "-lc",
+          "python3 - <<'PY'\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\nnetwork = Path('${config:jellyfinLinuxDataDir}') / 'config' / 'network.xml'\nnetwork.parent.mkdir(parents=True, exist_ok=True)\nif network.exists():\n    tree = ET.parse(network)\n    root = tree.getroot()\nelse:\n    root = ET.Element('NetworkConfiguration')\n    tree = ET.ElementTree(root)\nfor name, value in {'InternalHttpPort':'${config:jellyfinTestyHttpPort}','PublicHttpPort':'${config:jellyfinTestyHttpPort}','InternalHttpsPort':'${config:jellyfinTestyHttpsPort}','PublicHttpsPort':'${config:jellyfinTestyHttpsPort}'}.items():\n    node = root.find(name)\n    if node is None:\n        node = ET.SubElement(root, name)\n    node.text = str(value)\ntree.write(network, encoding='utf-8', xml_declaration=True)\nprint('Jellyfin Testy HTTP port set to ${config:jellyfinTestyHttpPort}.')\nPY"
+        ]
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "start:jellyfin:testy",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "configure:jellyfin:testy-port",
+        "deploy:jellyfin:testy",
+        "start:jellyfin:testy:process"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "start:jellyfin:testy:process",
+      "type": "process",
+      "command": "pwsh",
+      "windows": {
+        "command": "pwsh",
+        "args": [
+          "-NoProfile",
+          "-Command",
+          "$argsList = @('--datadir','${config:jellyfinTestyDataDir}','--cachedir','${config:jellyfinTestyCacheDir}','--ffmpeg','${config:jellyfinFfmpegExe}'); Start-Process -FilePath \"${config:jellyfinServerExe}\" -WorkingDirectory \"${config:jellyfinServerCwd}\" -ArgumentList $argsList -WindowStyle Hidden; Write-Host \"Jellyfin Testy started at http://localhost:${config:jellyfinTestyHttpPort}\""
+        ]
+      },
+      "linux": {
+        "command": "bash",
+        "args": [
+          "-lc",
+          "\"${config:jellyfinServerExe}\" --datadir \"${config:jellyfinLinuxDataDir}\" --cachedir \"${config:jellyfinLinuxDataDir}/cache\" --ffmpeg \"${config:jellyfinFfmpegExe}\" &"
+        ]
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "run:jellyfin:testy",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "start:jellyfin:testy"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "stop:jellyfin:testy",
+      "type": "process",
+      "command": "pwsh",
+      "windows": {
+        "command": "pwsh",
+        "args": [
+          "-NoProfile",
+          "-Command",
+          "$targets = Get-Process -Name jellyfin -ErrorAction SilentlyContinue; foreach ($p in $targets) { try { Stop-Process -Id $p.Id -Force -ErrorAction Stop } catch { Write-Warning (\"Could not stop process {0} (PID {1}). Continuing.\" -f $p.ProcessName, $p.Id) } }; exit 0"
+        ]
+      },
+      "linux": {
+        "command": "bash",
+        "args": [
+          "-lc",
+          "pkill -f jellyfin || true"
+        ]
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "restart:jellyfin:testy",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "stop:jellyfin:testy",
+        "run:jellyfin:testy"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "run:servers",
+      "dependsOn": [
+        "run:jellyfin:testy",
+        "restart:emby"
+      ],
+      "problemMatcher": []
     },
     {
       "label": "restart:emby",
@@ -222,10 +320,19 @@
       "label": "prepare:jellyfin:f5",
       "dependsOrder": "sequence",
       "dependsOn": [
+        "configure:jellyfin:testy-port",
         "build:shared",
         "build:jellyfin",
         "deploy:jellyfin:testy",
         "show:build-outputs"
+      ]
+    },
+    {
+      "label": "prepare:jellyfin:no-deploy:f5",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "configure:jellyfin:testy-port",
+        "build:all"
       ]
     },
     {

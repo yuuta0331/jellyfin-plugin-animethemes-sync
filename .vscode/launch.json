@@ -35,7 +35,7 @@
       "cwd": "${config:jellyfinServerCwd}",
       "stopAtEntry": false,
       "console": "internalConsole",
-      "preLaunchTask": "build:all"
+      "preLaunchTask": "prepare:jellyfin:no-deploy:f5"
     },
     {
       "name": "Emby Server (Build Plugin Only)",
