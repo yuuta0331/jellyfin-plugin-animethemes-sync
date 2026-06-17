@@ -1,5 +1,6 @@
-using System;
 using System.Net.Http;
+using AnimeThemesSync.Shared;
+using AnimeThemesSync.Shared.Services;
 using Jellyfin.Plugin.AnimeThemesSync.ExternalIds;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
@@ -25,15 +26,13 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<IExternalId, AnimeThemesIdExternalId>();
         serviceCollection.AddSingleton<IExternalUrlProvider, AnimeThemesExternalUrlProvider>();
 
-        var userAgent = $"{Constants.PluginName}/{Plugin.Instance?.Version ?? new Version(1, 0, 0)}";
-
         // Register AniListService as Singleton
         serviceCollection.AddSingleton(provider =>
         {
             var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
             var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
-            var rateLimiter = new RateLimiter(loggerFactory.CreateLogger<RateLimiter>(), "AniList", 90);
-            return new Services.AniListService(httpClientFactory, loggerFactory.CreateLogger<Services.AniListService>(), rateLimiter);
+            var rateLimiter = new RateLimiter(loggerFactory.CreateLogger<RateLimiter>(), Constants.AniListHttpClientName, 90);
+            return new AniListService(httpClientFactory, loggerFactory.CreateLogger<AniListService>(), rateLimiter);
         });
 
         // Register AnimeThemesService as Singleton
@@ -41,8 +40,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         {
             var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
             var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
-            var rateLimiter = new RateLimiter(loggerFactory.CreateLogger<RateLimiter>(), "AnimeThemes", 80);
-            return new Services.AnimeThemesService(httpClientFactory, loggerFactory.CreateLogger<Services.AnimeThemesService>(), rateLimiter);
+            var rateLimiter = new RateLimiter(loggerFactory.CreateLogger<RateLimiter>(), Constants.AnimeThemesHttpClientName, 80);
+            return new AnimeThemesService(httpClientFactory, loggerFactory.CreateLogger<AnimeThemesService>(), rateLimiter);
         });
     }
 }

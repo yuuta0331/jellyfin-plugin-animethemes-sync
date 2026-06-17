@@ -4,6 +4,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jellyfin.Plugin.AnimeThemes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jellyfin.Plugin.AnimeThemesSync.Tests", "Jellyfin.Plugin.AnimeThemesSync.Tests\Jellyfin.Plugin.AnimeThemesSync.Tests.csproj", "{12949AEC-28BC-40F3-BF65-7A36EB985FE7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AnimeThemesSync.Shared", "AnimeThemesSync.Shared\AnimeThemesSync.Shared.csproj", "{EE49DE44-C86D-4EA0-940B-871EF04D602E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Emby.Plugin.AnimeThemesSync", "Emby.Plugin.AnimeThemesSync\Emby.Plugin.AnimeThemesSync.csproj", "{D6B1DD61-DE91-47C1-B3A1-349657DDFFDC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -38,5 +42,29 @@ Global
 		{12949AEC-28BC-40F3-BF65-7A36EB985FE7}.Release|x64.Build.0 = Release|Any CPU
 		{12949AEC-28BC-40F3-BF65-7A36EB985FE7}.Release|x86.ActiveCfg = Release|Any CPU
 		{12949AEC-28BC-40F3-BF65-7A36EB985FE7}.Release|x86.Build.0 = Release|Any CPU
+		{EE49DE44-C86D-4EA0-940B-871EF04D602E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EE49DE44-C86D-4EA0-940B-871EF04D602E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EE49DE44-C86D-4EA0-940B-871EF04D602E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{EE49DE44-C86D-4EA0-940B-871EF04D602E}.Debug|x64.Build.0 = Debug|Any CPU
+		{EE49DE44-C86D-4EA0-940B-871EF04D602E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{EE49DE44-C86D-4EA0-940B-871EF04D602E}.Debug|x86.Build.0 = Debug|Any CPU
+		{EE49DE44-C86D-4EA0-940B-871EF04D602E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EE49DE44-C86D-4EA0-940B-871EF04D602E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EE49DE44-C86D-4EA0-940B-871EF04D602E}.Release|x64.ActiveCfg = Release|Any CPU
+		{EE49DE44-C86D-4EA0-940B-871EF04D602E}.Release|x64.Build.0 = Release|Any CPU
+		{EE49DE44-C86D-4EA0-940B-871EF04D602E}.Release|x86.ActiveCfg = Release|Any CPU
+		{EE49DE44-C86D-4EA0-940B-871EF04D602E}.Release|x86.Build.0 = Release|Any CPU
+		{D6B1DD61-DE91-47C1-B3A1-349657DDFFDC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6B1DD61-DE91-47C1-B3A1-349657DDFFDC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6B1DD61-DE91-47C1-B3A1-349657DDFFDC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D6B1DD61-DE91-47C1-B3A1-349657DDFFDC}.Debug|x64.Build.0 = Debug|Any CPU
+		{D6B1DD61-DE91-47C1-B3A1-349657DDFFDC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D6B1DD61-DE91-47C1-B3A1-349657DDFFDC}.Debug|x86.Build.0 = Debug|Any CPU
+		{D6B1DD61-DE91-47C1-B3A1-349657DDFFDC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6B1DD61-DE91-47C1-B3A1-349657DDFFDC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6B1DD61-DE91-47C1-B3A1-349657DDFFDC}.Release|x64.ActiveCfg = Release|Any CPU
+		{D6B1DD61-DE91-47C1-B3A1-349657DDFFDC}.Release|x64.Build.0 = Release|Any CPU
+		{D6B1DD61-DE91-47C1-B3A1-349657DDFFDC}.Release|x86.ActiveCfg = Release|Any CPU
+		{D6B1DD61-DE91-47C1-B3A1-349657DDFFDC}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

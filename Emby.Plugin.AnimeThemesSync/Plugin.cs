@@ -1,16 +1,13 @@
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Text;
 using AnimeThemesSync.Shared;
-using AnimeThemesSync.Shared.Configuration;
-using Jellyfin.Plugin.AnimeThemesSync.Configuration;
+using Emby.Plugin.AnimeThemesSync.Configuration;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
+using System;
+using System.Collections.Generic;
 
-namespace Jellyfin.Plugin.AnimeThemesSync;
+namespace Emby.Plugin.AnimeThemesSync;
 
 /// <summary>
 /// The main plugin.
@@ -26,8 +23,12 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         : base(applicationPaths, xmlSerializer)
     {
         Instance = this;
-        Console.OutputEncoding = Encoding.UTF8;
     }
+
+    /// <summary>
+    /// Gets the current plugin instance.
+    /// </summary>
+    public static Plugin? Instance { get; private set; }
 
     /// <inheritdoc />
     public override string Name => Constants.PluginName;
@@ -35,10 +36,8 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <inheritdoc />
     public override Guid Id => Guid.Parse(Constants.PluginGuid);
 
-    /// <summary>
-    /// Gets the current plugin instance.
-    /// </summary>
-    public static Plugin? Instance { get; private set; }
+    /// <inheritdoc />
+    public override string Description => "Syncs anime themes from AnimeThemes.moe to Emby.";
 
     /// <inheritdoc />
     public IEnumerable<PluginPageInfo> GetPages()
@@ -47,8 +46,8 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         [
             new PluginPageInfo
             {
-                Name = Name,
-                EmbeddedResourcePath = string.Format(CultureInfo.InvariantCulture, "{0}.Configuration.configPage.html", GetType().Namespace)
+                Name = "configPage",
+                EmbeddedResourcePath = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0}.Configuration.configPage.html", GetType().Namespace)
             }
         ];
     }

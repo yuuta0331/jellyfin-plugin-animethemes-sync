@@ -2,47 +2,51 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Net.Http;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using AnimeThemesSync.Shared;
 using AnimeThemesSync.Shared.Models;
 using AnimeThemesSync.Shared.Services;
+using Emby.Plugin.AnimeThemesSync.Extensions;
+using Emby.Plugin.AnimeThemesSync.Helpers;
+using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
-using Microsoft.Extensions.Logging;
+using MediaBrowser.Model.Logging;
 
-namespace Jellyfin.Plugin.AnimeThemesSync;
+namespace Emby.Plugin.AnimeThemesSync.Providers;
 
 /// <summary>
 /// Metadata provider for AnimeThemes.
 /// </summary>
 public class AnimeThemesMetadataProvider : IRemoteMetadataProvider<Series, SeriesInfo>, IHasOrder
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ILogger<AnimeThemesMetadataProvider> _logger;
+    private readonly ILogger _logger;
+    private readonly IHttpClient _httpClient;
     private readonly AniListService _aniListService;
     private readonly AnimeThemesService _animeThemesService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AnimeThemesMetadataProvider"/> class.
     /// </summary>
-    /// <param name="httpClientFactory">The HTTP client factory.</param>
-    /// <param name="loggerFactory">The logger factory.</param>
-    /// <param name="aniListService">The AniList service.</param>
-    /// <param name="animeThemesService">The AnimeThemes service.</param>
-    public AnimeThemesMetadataProvider(
-        IHttpClientFactory httpClientFactory,
-        ILoggerFactory loggerFactory,
-        AniListService aniListService,
-        AnimeThemesService animeThemesService)
+    /// <param name="logManager">Log manager.</param>
+    /// <param name="httpClient">Emby HTTP client.</param>
+    public AnimeThemesMetadataProvider(ILogManager logManager, IHttpClient httpClient)
     {
-        _httpClientFactory = httpClientFactory;
-        _logger = loggerFactory.CreateLogger<AnimeThemesMetadataProvider>();
-        _aniListService = aniListService;
-        _animeThemesService = animeThemesService;
+        _logger = logManager.GetLogger(nameof(AnimeThemesMetadataProvider));
+        _httpClient = httpClient;
+
+        var httpClientFactory = new StaticHttpClientFactory();
+        var aniListLogger = new EmbyLoggerAdapter<AniListService>(new EmbyLoggerAdapter(logManager.GetLogger(nameof(AniListService))));
+        var animeThemesLogger = new EmbyLoggerAdapter<AnimeThemesService>(new EmbyLoggerAdapter(logManager.GetLogger(nameof(AnimeThemesService))));
+
+        var aniListRateLimiter = new RateLimiter(new EmbyLoggerAdapter(logManager.GetLogger("AniListRateLimiter")), Constants.AniListHttpClientName, 90);
+        var animeThemesRateLimiter = new RateLimiter(new EmbyLoggerAdapter(logManager.GetLogger("AnimeThemesRateLimiter")), Constants.AnimeThemesHttpClientName, 80);
+
+        _aniListService = new AniListService(httpClientFactory, aniListLogger, aniListRateLimiter);
+        _animeThemesService = new AnimeThemesService(httpClientFactory, animeThemesLogger, animeThemesRateLimiter);
     }
 
     /// <inheritdoc />
@@ -59,16 +63,13 @@ public class AnimeThemesMetadataProvider : IRemoteMetadataProvider<Series, Serie
         var seriesName = info.Name;
         var year = info.Year;
 
-        // Clean series name (remove year if present, e.g. "Name (2021)" -> "Name")
-        seriesName = System.Text.RegularExpressions.Regex.Replace(seriesName, @"\s\(\d{4}\)$", string.Empty).Trim();
+        seriesName = Regex.Replace(seriesName, @"\s\(\d{4}\)$", string.Empty).Trim();
 
         _logger.LogDebug("Resolving metadata for '{SeriesName}' ({Year})", seriesName, year);
 
-        // 1. Direct ID Lookup
         int? aniListId = TryParseProviderId(info, Constants.AniListProviderId);
         int? malId = TryParseProviderId(info, Constants.MyAnimeListProviderId);
 
-        // 2. High-Precision Metadata Search (if IDs missing)
         if (aniListId == null && malId == null)
         {
             _logger.LogDebug("No external IDs found. Searching AniList for '{SeriesName}'...", seriesName);
@@ -81,10 +82,8 @@ public class AnimeThemesMetadataProvider : IRemoteMetadataProvider<Series, Serie
             return result;
         }
 
-        // 3. AnimeThemes Lookup
         AnimeThemesAnime? anime = await LookupAnimeThemes(aniListId, malId, cancellationToken).ConfigureAwait(false);
 
-        // 4. Fallback: re-search AniList by name
         if (anime == null)
         {
             _logger.LogDebug("ID lookup failed. Falling back to name search for '{SeriesName}'.", seriesName);
@@ -102,14 +101,8 @@ public class AnimeThemesMetadataProvider : IRemoteMetadataProvider<Series, Serie
             }
         }
 
-        // Set provider IDs
         SetProviderIds(result.Item, aniListId, malId, anime);
-
-        // Tagging
-        if (anime != null)
-        {
-            ApplyTags(result.Item, anime);
-        }
+        ApplyTags(result.Item, anime);
 
         result.HasMetadata = true;
         return result;
@@ -119,13 +112,9 @@ public class AnimeThemesMetadataProvider : IRemoteMetadataProvider<Series, Serie
     public async Task<IEnumerable<RemoteSearchResult>> GetSearchResults(SeriesInfo searchInfo, CancellationToken cancellationToken)
     {
         var results = new List<RemoteSearchResult>();
-
-        var seriesName = searchInfo.Name;
-        // Clean series name (remove year if present)
-        seriesName = System.Text.RegularExpressions.Regex.Replace(seriesName, @"\s\(\d{4}\)$", string.Empty).Trim();
+        var seriesName = Regex.Replace(searchInfo.Name, @"\s\(\d{4}\)$", string.Empty).Trim();
 
         var (aniListId, malId) = await _aniListService.SearchAnime(seriesName, searchInfo.Year, cancellationToken).ConfigureAwait(false);
-
         if (aniListId.HasValue || malId.HasValue)
         {
             var res = new RemoteSearchResult
@@ -137,12 +126,12 @@ public class AnimeThemesMetadataProvider : IRemoteMetadataProvider<Series, Serie
 
             if (aniListId.HasValue)
             {
-                res.SetProviderId(Constants.AniListProviderId, aniListId.Value.ToString(CultureInfo.InvariantCulture));
+                SetProviderId(res, Constants.AniListProviderId, aniListId.Value.ToString(CultureInfo.InvariantCulture));
             }
 
             if (malId.HasValue)
             {
-                res.SetProviderId(Constants.MyAnimeListProviderId, malId.Value.ToString(CultureInfo.InvariantCulture));
+                SetProviderId(res, Constants.MyAnimeListProviderId, malId.Value.ToString(CultureInfo.InvariantCulture));
             }
 
             results.Add(res);
@@ -152,9 +141,15 @@ public class AnimeThemesMetadataProvider : IRemoteMetadataProvider<Series, Serie
     }
 
     /// <inheritdoc />
-    public Task<HttpResponseMessage> GetImageResponse(string url, CancellationToken cancellationToken)
+    public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken)
     {
-        return _httpClientFactory.CreateClient().GetAsync(new Uri(url), cancellationToken);
+        return _httpClient.GetResponse(new HttpRequestOptions
+        {
+            Url = url,
+            CancellationToken = cancellationToken,
+            EnableKeepAlive = false,
+            EnableDefaultUserAgent = true
+        });
     }
 
     private static int? TryParseProviderId(SeriesInfo info, string key)
@@ -189,29 +184,44 @@ public class AnimeThemesMetadataProvider : IRemoteMetadataProvider<Series, Serie
     {
         if (aniListId.HasValue)
         {
-            item.SetProviderId(Constants.AniListProviderId, aniListId.Value.ToString(CultureInfo.InvariantCulture));
+            SetProviderId(item, Constants.AniListProviderId, aniListId.Value.ToString(CultureInfo.InvariantCulture));
         }
 
         if (malId.HasValue)
         {
-            item.SetProviderId(Constants.MyAnimeListProviderId, malId.Value.ToString(CultureInfo.InvariantCulture));
+            SetProviderId(item, Constants.MyAnimeListProviderId, malId.Value.ToString(CultureInfo.InvariantCulture));
         }
 
         if (anime != null && !string.IsNullOrEmpty(anime.Slug))
         {
-            item.SetProviderId(Constants.AnimeThemesProviderId, anime.Slug);
-            item.SetProviderId(Constants.AnimeThemesNumericProviderId, anime.Id.ToString(CultureInfo.InvariantCulture));
+            SetProviderId(item, Constants.AnimeThemesProviderId, anime.Slug);
+            SetProviderId(item, Constants.AnimeThemesNumericProviderId, anime.Id.ToString(CultureInfo.InvariantCulture));
         }
     }
 
-    private static void ApplyTags(Series item, AnimeThemesAnime anime)
+    private static void SetProviderId(Series item, string key, string value)
     {
-        if (!(Plugin.Instance?.Configuration.TagsEnabled ?? false))
+        if (item.ProviderIds == null)
         {
-            return;
+            item.ProviderIds = new MediaBrowser.Model.Entities.ProviderIdDictionary();
         }
 
-        if (!anime.Year.HasValue)
+        item.ProviderIds[key] = value;
+    }
+
+    private static void SetProviderId(RemoteSearchResult item, string key, string value)
+    {
+        if (item.ProviderIds == null)
+        {
+            item.ProviderIds = new MediaBrowser.Model.Entities.ProviderIdDictionary();
+        }
+
+        item.ProviderIds[key] = value;
+    }
+
+    private static void ApplyTags(Series item, AnimeThemesAnime? anime)
+    {
+        if (!(Plugin.Instance?.Configuration.TagsEnabled ?? false) || anime?.Year == null)
         {
             return;
         }

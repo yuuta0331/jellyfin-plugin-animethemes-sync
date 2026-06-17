@@ -1,139 +1,86 @@
-using System.Collections.Generic;
-using Jellyfin.Plugin.AnimeThemesSync.Configuration;
-using Jellyfin.Plugin.AnimeThemesSync.Services;
+using AnimeThemesSync.Shared.Models;
+using AnimeThemesSync.Shared.Services;
 using Xunit;
 
-namespace Jellyfin.Plugin.AnimeThemesSync.Tests
+namespace Jellyfin.Plugin.AnimeThemesSync.Tests;
+
+public class ThemeScoringTests
 {
-    public class ThemeScoringTests
+    [Fact]
+    public void Rate_Spoiler_AddsPenalty()
     {
-        // Wrapper to access private Rate method or replicate logic for testing
-        // Since Rate is private, we will duplicate the logic here to verify it against the requirements
-        // Ideally we would make Rate internal/public or use InternalsVisibleTo, but for now strict verification of the Logic is sufficient.
-        private double Rate(AnimeThemesEntry entry, AnimeThemesVideo video)
-        {
-            double score = 0;
+        var entry = new AnimeThemesEntry { Spoiler = true };
+        var video = new AnimeThemesVideo { Tags = "NC" };
 
-            // Spoiler: +50
-            if (entry.Spoiler == true)
-            {
-                score += 50;
-            }
+        var breakdown = ThemeScoringService.GetScoreBreakdown(entry, video);
 
-            // Overlap: +15-20
-            if (!string.IsNullOrEmpty(video.Overlap))
-            {
-                if (video.Overlap.Equals("Over", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    score += 20;
-                }
-                else if (video.Overlap.Equals("Transition", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    score += 15;
-                }
-            }
+        Assert.Contains("Spoiler:+50", breakdown);
+    }
 
-            // Source quality: +5-10
-            if (!string.IsNullOrEmpty(video.Source))
-            {
-                if (video.Source.Equals("LD", System.StringComparison.OrdinalIgnoreCase) || video.Source.Equals("VHS", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    score += 10;
-                }
-                else if (video.Source.Equals("WEB", System.StringComparison.OrdinalIgnoreCase) || video.Source.Equals("RAW", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    score += 5;
-                }
-            }
+    [Fact]
+    public void Rate_OverlapOver_AddsPenalty()
+    {
+        var entry = new AnimeThemesEntry();
+        var video = new AnimeThemesVideo { Overlap = "Over", Tags = "NC" };
 
-            // Credits: +10 (if not creditless)
-            // Logic in Downloader: bool isCreditless = video.Tags?.Contains("NC") == true || video.Tags?.Contains("Creditless") == true;
-            // if (!isCreditless) score += 10;
-            // Wait, the user usually PREFERS NC.
-            // Let's check the code:
-            // if (!isCreditless) score += 10; -> This means Credit (Broadcast) version gets HIGHER score.
-            // THIS MIGHT BE WRONG if the user wants NC.
-            // Usually NC (Creditless) is preferred.
-            // Let's re-read the Rate method I implemented.
-            // "if (!isCreditless) { score += 10; }"
-            // If I have NC, score is 0. If I have Broadcast, score is 10.
-            // So Broadcast wins.
-            // Most users want NC.
-            // I should probably CHANGE this to favor NC if that is the standard.
-            // However, looking at previous context, maybe I just copied it.
-            // Let's assume for now I need to Verify what it DOES.
+        var breakdown = ThemeScoringService.GetScoreBreakdown(entry, video);
 
-            bool isCreditless = video.Tags?.Contains("NC") == true || video.Tags?.Contains("Creditless") == true;
-            if (!isCreditless)
-            {
-                score += 10;
-            }
+        Assert.Contains("Overlap(Over):+20", breakdown);
+    }
 
-            return score;
-        }
+    [Fact]
+    public void Rate_OverlapTransition_AddsPenalty()
+    {
+        var entry = new AnimeThemesEntry();
+        var video = new AnimeThemesVideo { Overlap = "Transition", Tags = "NC" };
 
-        [Fact]
-        public void Rate_Spoiler_GetsBonus()
-        {
-            var entry = new AnimeThemesEntry { Spoiler = true };
-            var video = new AnimeThemesVideo { Tags = "NC" }; // NC to avoid credit bonus affecting test
-            var score = Rate(entry, video);
-            Assert.Equal(50, score);
-        }
+        var breakdown = ThemeScoringService.GetScoreBreakdown(entry, video);
 
-        [Fact]
-        public void Rate_Overlap_Over_GetsHighBonus()
-        {
-            var entry = new AnimeThemesEntry { Spoiler = false };
-            var video = new AnimeThemesVideo { Overlap = "Over", Tags = "NC" };
-            var score = Rate(entry, video);
-            Assert.Equal(20, score);
-        }
+        Assert.Contains("Overlap(Trans):+15", breakdown);
+    }
 
-        [Fact]
-        public void Rate_Overlap_Transition_GetsMediumBonus()
-        {
-            var entry = new AnimeThemesEntry { Spoiler = false };
-            var video = new AnimeThemesVideo { Overlap = "Transition", Tags = "NC" };
-            var score = Rate(entry, video);
-            Assert.Equal(15, score);
-        }
+    [Fact]
+    public void Rate_SourceLd_AddsPenalty()
+    {
+        var entry = new AnimeThemesEntry();
+        var video = new AnimeThemesVideo { Source = "LD", Tags = "NC" };
 
-        [Fact]
-        public void Rate_Source_LD_GetsHighBonus()
-        {
-            var entry = new AnimeThemesEntry { Spoiler = false };
-            var video = new AnimeThemesVideo { Source = "LD", Tags = "NC" };
-            var score = Rate(entry, video);
-            Assert.Equal(10, score);
-        }
+        var breakdown = ThemeScoringService.GetScoreBreakdown(entry, video);
 
-        [Fact]
-        public void Rate_Source_WEB_GetsLowBonus()
-        {
-            var entry = new AnimeThemesEntry { Spoiler = false }; // 0
-            var video = new AnimeThemesVideo { Source = "WEB", Tags = "NC" }; // 5
-            var score = Rate(entry, video);
-            Assert.Equal(5, score);
-        }
+        Assert.Contains("Source(LD):+10", breakdown);
+    }
 
-        [Fact]
-        public void Rate_Credits_BroadcastVersion_GetsBonus()
-        {
-            // Current logic: Non-Creditless gets +10.
-            var entry = new AnimeThemesEntry { Spoiler = false };
-            var video = new AnimeThemesVideo { Tags = "" }; // Not NC
-            var score = Rate(entry, video);
-            Assert.Equal(10, score);
-        }
+    [Fact]
+    public void Rate_SourceWeb_AddsPenalty()
+    {
+        var entry = new AnimeThemesEntry();
+        var video = new AnimeThemesVideo { Source = "WEB", Tags = "NC" };
 
-        [Fact]
-        public void Rate_Credits_NC_GetsNoBonus()
-        {
-            var entry = new AnimeThemesEntry { Spoiler = false };
-            var video = new AnimeThemesVideo { Tags = "NC" };
-            var score = Rate(entry, video);
-            Assert.Equal(0, score);
-        }
+        var breakdown = ThemeScoringService.GetScoreBreakdown(entry, video);
+
+        Assert.Contains("Source(WEB):+5", breakdown);
+    }
+
+    [Fact]
+    public void Rate_BroadcastWithCredits_AddsPenalty()
+    {
+        var entry = new AnimeThemesEntry();
+        var video = new AnimeThemesVideo { Tags = string.Empty };
+
+        var breakdown = ThemeScoringService.GetScoreBreakdown(entry, video);
+
+        Assert.Contains("Credits:+10", breakdown);
+    }
+
+    [Fact]
+    public void Rate_Creditless_HasNoCreditPenalty()
+    {
+        var entry = new AnimeThemesEntry();
+        var video = new AnimeThemesVideo { Tags = "NC" };
+
+        var breakdown = ThemeScoringService.GetScoreBreakdown(entry, video);
+
+        Assert.DoesNotContain("Credits:+10", breakdown);
     }
 }
+

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Authors>CassisCloud</Authors>
+    <Company>CassisCloud</Company>
+    <Product>AnimeThemes Sync for Emby</Product>
+    <Description>Syncs anime themes from AnimeThemes.moe to Emby.</Description>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediaBrowser.Common" Version="4.8.0.80" />
+    <PackageReference Include="MediaBrowser.Server.Core" Version="4.8.0.80" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\AnimeThemesSync.Shared\**\*.cs" LinkBase="AnimeThemesSync.Shared" />
+    <Compile Remove="..\AnimeThemesSync.Shared\Class1.cs" />
+    <Compile Remove="..\AnimeThemesSync.Shared\bin\**\*.cs" />
+    <Compile Remove="..\AnimeThemesSync.Shared\obj\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Configuration\\configPage.html" />
+    <EmbeddedResource Include="Configuration\\configPage.html" />
+  </ItemGroup>
+</Project>

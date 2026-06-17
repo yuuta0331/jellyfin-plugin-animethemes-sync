@@ -2,13 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using AnimeThemesSync.Shared.Configuration;
+using AnimeThemesSync.Shared.Models;
 
-namespace Jellyfin.Plugin.AnimeThemesSync.Services;
+namespace AnimeThemesSync.Shared.Services;
 
 /// <summary>
 /// Provides scoring, filtering, and best-video selection logic for anime themes.
 /// </summary>
-internal static class ThemeScoringService
+public static class ThemeScoringService
 {
     private const int ScoreSpoiler = 50;
     private const int ScoreOverlapOver = 20;

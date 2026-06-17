@@ -11,17 +11,18 @@ using AnimeThemesSync.Shared;
 using AnimeThemesSync.Shared.Configuration;
 using AnimeThemesSync.Shared.Models;
 using AnimeThemesSync.Shared.Services;
-using Jellyfin.Data.Enums;
-using Jellyfin.Plugin.AnimeThemesSync.Configuration;
+using Emby.Plugin.AnimeThemesSync.Extensions;
+using Emby.Plugin.AnimeThemesSync.Helpers;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Model.IO;
+using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Tasks;
-using Microsoft.Extensions.Logging;
+using Emby.Plugin.AnimeThemesSync.Configuration;
 
-namespace Jellyfin.Plugin.AnimeThemesSync.ScheduledTasks;
+namespace Emby.Plugin.AnimeThemesSync.ScheduledTasks;
 
 /// <summary>
 /// Scheduled task to download OP/ED themes.
@@ -30,7 +31,7 @@ public class ThemeDownloader : IScheduledTask
 {
     private readonly ILibraryManager _libraryManager;
     private readonly IFileSystem _fileSystem;
-    private readonly ILogger<ThemeDownloader> _logger;
+    private readonly ILogger _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMediaEncoder _mediaEncoder;
     private readonly AnimeThemesService _animeThemesService;
@@ -40,24 +41,23 @@ public class ThemeDownloader : IScheduledTask
     /// </summary>
     /// <param name="libraryManager">The library manager.</param>
     /// <param name="fileSystem">The file system.</param>
-    /// <param name="loggerFactory">The logger factory.</param>
-    /// <param name="httpClientFactory">The HTTP client factory.</param>
+    /// <param name="logManager">The log manager.</param>
     /// <param name="mediaEncoder">The media encoder.</param>
-    /// <param name="animeThemesService">The AnimeThemes service.</param>
     public ThemeDownloader(
         ILibraryManager libraryManager,
         IFileSystem fileSystem,
-        ILoggerFactory loggerFactory,
-        IHttpClientFactory httpClientFactory,
-        IMediaEncoder mediaEncoder,
-        AnimeThemesService animeThemesService)
+        ILogManager logManager,
+        IMediaEncoder mediaEncoder)
     {
         _libraryManager = libraryManager;
         _fileSystem = fileSystem;
-        _logger = loggerFactory.CreateLogger<ThemeDownloader>();
-        _httpClientFactory = httpClientFactory;
+        _logger = logManager.GetLogger(nameof(ThemeDownloader));
+        _httpClientFactory = new StaticHttpClientFactory();
         _mediaEncoder = mediaEncoder;
-        _animeThemesService = animeThemesService;
+        var rateLimiterLogger = new EmbyLoggerAdapter(logManager.GetLogger(nameof(RateLimiter)));
+        var animeThemesLogger = new EmbyLoggerAdapter<AnimeThemesService>(new EmbyLoggerAdapter(logManager.GetLogger(nameof(AnimeThemesService))));
+        var rateLimiter = new RateLimiter(rateLimiterLogger, Constants.AnimeThemesHttpClientName, 80);
+        _animeThemesService = new AnimeThemesService(_httpClientFactory, animeThemesLogger, rateLimiter);
     }
 
     /// <inheritdoc />
@@ -73,7 +73,7 @@ public class ThemeDownloader : IScheduledTask
     public string Category => "Anime";
 
     /// <inheritdoc />
-    public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
+    public async Task Execute(CancellationToken cancellationToken, IProgress<double> progress)
     {
         _logger.LogInformation("Starting Anime Themes Download Task...");
 
@@ -219,7 +219,7 @@ public class ThemeDownloader : IScheduledTask
         {
             new TaskTriggerInfo
             {
-                Type = TaskTriggerInfoType.IntervalTrigger,
+                Type = TaskTriggerInfo.TriggerInterval,
                 IntervalTicks = TimeSpan.FromDays(7).Ticks
             }
         };
@@ -233,7 +233,7 @@ public class ThemeDownloader : IScheduledTask
         var root = _libraryManager.RootFolder;
         var enabledFolderIds = new HashSet<Guid>();
 
-        foreach (var child in root.Children)
+        foreach (var child in root.GetChildren(new InternalItemsQuery()))
         {
             if (child is Folder folder)
             {
@@ -281,7 +281,7 @@ public class ThemeDownloader : IScheduledTask
             {
                 var folderItems = _libraryManager.GetItemList(new InternalItemsQuery
                 {
-                    IncludeItemTypes = new[] { BaseItemKind.Series, BaseItemKind.Movie },
+                    IncludeItemTypes = new[] { "Series", "Movie" },
                     Recursive = true,
                     Parent = folder
                 });
@@ -456,7 +456,7 @@ public class ThemeDownloader : IScheduledTask
             _logger.LogInformation(
                 "  [{MediaType}] {Slug} {Version} | {Basename} | Score={Score} ({Breakdown})",
                 mediaType,
-                c.Theme.Slug ?? c.Theme.Type,
+                c.Theme.Slug ?? c.Theme.Type ?? "?",
                 versionLabel,
                 c.Video.Basename ?? "?",
                 c.Score,
@@ -521,7 +521,7 @@ public class ThemeDownloader : IScheduledTask
             return;
         }
 
-        foreach (var file in _fileSystem.GetFilePaths(directory))
+        foreach (var file in _fileSystem.GetFilePaths(directory, false))
         {
             if (desiredFiles.ContainsKey(file))
             {
@@ -630,7 +630,7 @@ public class ThemeDownloader : IScheduledTask
     /// </summary>
     private async Task FfmpegProcess(string inputPath, string outputPath, int volume, bool isVideo, CancellationToken cancellationToken)
     {
-        var encoderPath = _mediaEncoder.EncoderPath;
+        var encoderPath = _mediaEncoder.FfmpegConfig?.EncoderPath;
         if (string.IsNullOrEmpty(encoderPath))
         {
             _logger.LogWarning("FFmpeg not found. Copying raw file without conversion.");

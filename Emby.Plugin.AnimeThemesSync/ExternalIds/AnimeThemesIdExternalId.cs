@@ -3,33 +3,21 @@ using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Providers;
 
-namespace Jellyfin.Plugin.AnimeThemesSync.ExternalIds;
+namespace Emby.Plugin.AnimeThemesSync.ExternalIds;
 
 /// <summary>
 /// External ID for AnimeThemes (Numeric ID).
 /// </summary>
 public class AnimeThemesIdExternalId : IExternalId
 {
-    /// <summary>
-    /// Gets the provider name.
-    /// </summary>
-    public string ProviderName => "AnimeThemes ID";
+    /// <inheritdoc />
+    public string Name => "AnimeThemes ID";
 
-    /// <summary>
-    /// Gets the provider key.
-    /// </summary>
+    /// <inheritdoc />
     public string Key => Constants.AnimeThemesNumericProviderId;
 
-    /// <summary>
-    /// Gets the external id media type.
-    /// </summary>
-    public ExternalIdMediaType? Type => null;
-
-    /// <summary>
-    /// Gets the url format string.
-    /// </summary>
+    /// <inheritdoc />
     public string UrlFormatString => string.Empty;
 
     /// <inheritdoc />

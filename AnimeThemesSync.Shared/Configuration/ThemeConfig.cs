@@ -1,6 +1,5 @@
-using System;
 
-namespace Jellyfin.Plugin.AnimeThemesSync.Configuration
+namespace AnimeThemesSync.Shared.Configuration
 {
     /// <summary>
     /// Configuration for a specific theme type (Audio/Video).

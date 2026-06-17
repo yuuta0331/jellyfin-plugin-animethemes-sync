@@ -1,9 +1,8 @@
-#pragma warning disable SA1649 // File name should match first type name
-#pragma warning disable SA1402 // File may only contain a single type
+
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace Jellyfin.Plugin.AnimeThemesSync.Services;
+namespace AnimeThemesSync.Shared.Models;
 
 /// <summary>
 /// Response wrapper for AnimeThemes resource endpoint.
@@ -14,8 +13,6 @@ public sealed class AnimeThemesResourceResponse
     /// Gets or sets the list of resources.
     /// </summary>
     [JsonPropertyName("resources")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2227:Collection properties should be read only", Justification = "DTO")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1002:Do not expose generic lists", Justification = "DTO")]
     public List<AnimeThemesResource>? Resources { get; set; }
 }
 
@@ -28,8 +25,6 @@ public sealed class AnimeThemesResponse
     /// Gets or sets the list of anime.
     /// </summary>
     [JsonPropertyName("anime")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2227:Collection properties should be read only", Justification = "DTO")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1002:Do not expose generic lists", Justification = "DTO")]
     public List<AnimeThemesAnime>? Anime { get; set; }
 }
 
@@ -51,13 +46,9 @@ public sealed class AnimeThemesAnime
     public string? Season { get; set; }
 
     [JsonPropertyName("resources")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2227:Collection properties should be read only", Justification = "DTO")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1002:Do not expose generic lists", Justification = "DTO")]
     public List<AnimeThemesResource>? Resources { get; set; }
 
     [JsonPropertyName("animethemes")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2227:Collection properties should be read only", Justification = "DTO")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1002:Do not expose generic lists", Justification = "DTO")]
     public List<AnimeThemesTheme>? AnimeThemes { get; set; }
 }
 
@@ -70,8 +61,6 @@ public sealed class AnimeThemesResource
     public int? ExternalId { get; set; }
 
     [JsonPropertyName("anime")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2227:Collection properties should be read only", Justification = "DTO")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1002:Do not expose generic lists", Justification = "DTO")]
     public List<AnimeThemesAnime>? Anime { get; set; }
 }
 
@@ -84,8 +73,6 @@ public sealed class AnimeThemesTheme
     public string? Slug { get; set; }
 
     [JsonPropertyName("animethemeentries")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2227:Collection properties should be read only", Justification = "DTO")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1002:Do not expose generic lists", Justification = "DTO")]
     public List<AnimeThemesEntry>? Entries { get; set; }
 }
 
@@ -101,8 +88,6 @@ public sealed class AnimeThemesEntry
     public bool? Nsfw { get; set; }
 
     [JsonPropertyName("videos")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2227:Collection properties should be read only", Justification = "DTO")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1002:Do not expose generic lists", Justification = "DTO")]
     public List<AnimeThemesVideo>? Videos { get; set; }
 }
 

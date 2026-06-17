@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using AnimeThemesSync.Shared.Models;
 
-namespace Jellyfin.Plugin.AnimeThemesSync.Services;
+namespace AnimeThemesSync.Shared.Services;
 
 /// <summary>
 /// Service for searching anime on AnimeThemes.
@@ -93,7 +93,7 @@ public sealed class AnimeThemesService
                 return null;
             }
 
-            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
             return await JsonSerializer.DeserializeAsync<T>(stream, _jsonOptions, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -105,10 +105,10 @@ public sealed class AnimeThemesService
 
     private HttpClient CreateClient()
     {
-        var client = _httpClientFactory.CreateClient("AnimeThemes");
+        var client = _httpClientFactory.CreateClient(Constants.AnimeThemesHttpClientName);
         if (!client.DefaultRequestHeaders.Contains("User-Agent"))
         {
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            client.DefaultRequestHeaders.Add("User-Agent", Constants.UserAgent);
         }
 
         return client;
@@ -137,7 +137,7 @@ public sealed class AnimeThemesService
             }
 
             // Use JsonElement to inspect structure (anime can be object or array)
-            using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false), default, cancellationToken).ConfigureAwait(false);
+            using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync().ConfigureAwait(false), default, cancellationToken).ConfigureAwait(false);
             var root = doc.RootElement;
 
             if (root.TryGetProperty("anime", out var animeProp))

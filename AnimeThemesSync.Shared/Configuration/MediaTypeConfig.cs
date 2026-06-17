@@ -1,4 +1,4 @@
-namespace Jellyfin.Plugin.AnimeThemesSync.Configuration
+namespace AnimeThemesSync.Shared.Configuration
 {
     /// <summary>
     /// Configuration for a specific media type (Series/Movie).

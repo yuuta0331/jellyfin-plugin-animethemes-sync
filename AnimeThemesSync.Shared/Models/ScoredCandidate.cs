@@ -1,4 +1,4 @@
-namespace Jellyfin.Plugin.AnimeThemesSync.Services;
+namespace AnimeThemesSync.Shared.Models;
 
 /// <summary>
 /// Represents a scored candidate: a specific entry+video combination ready for selection.
@@ -7,7 +7,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Services;
 /// <param name="Entry">The specific entry/version within the theme.</param>
 /// <param name="Video">The best video selected for this entry.</param>
 /// <param name="Score">The penalty score (lower = better).</param>
-internal record ScoredCandidate(
+public record ScoredCandidate(
     AnimeThemesTheme Theme,
     AnimeThemesEntry Entry,
     AnimeThemesVideo Video,

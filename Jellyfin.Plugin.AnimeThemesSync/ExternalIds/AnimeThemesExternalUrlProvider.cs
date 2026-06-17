@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using AnimeThemesSync.Shared;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
@@ -14,7 +16,7 @@ public class AnimeThemesExternalUrlProvider : IExternalUrlProvider
     /// <summary>
     /// Gets the provider name.
     /// </summary>
-    public string Name => "AnimeThemes";
+    public string Name => Constants.AnimeThemesProviderId;
 
     /// <summary>
     /// Gets external URLs for the given item.
@@ -23,7 +25,7 @@ public class AnimeThemesExternalUrlProvider : IExternalUrlProvider
     /// <returns>External URLs.</returns>
     public IEnumerable<string> GetExternalUrls(BaseItem item)
     {
-        if (item is Series && item.TryGetProviderId("AnimeThemes", out var slug) && !string.IsNullOrEmpty(slug))
+        if ((item is Series || item is Movie) && item.TryGetProviderId(Constants.AnimeThemesProviderId, out var slug) && !string.IsNullOrEmpty(slug))
         {
             yield return $"{Constants.AnimeThemesWebUrl}/anime/{slug}";
         }

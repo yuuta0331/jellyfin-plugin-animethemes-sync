@@ -1,4 +1,4 @@
-namespace Jellyfin.Plugin.AnimeThemesSync;
+namespace AnimeThemesSync.Shared;
 
 /// <summary>
 /// Constants for the AnimeThemes plugin.
@@ -14,6 +14,36 @@ public static class Constants
     /// The display name used by the metadata provider (matches AnimeThemesMetadataProvider.Name).
     /// </summary>
     public const string MetadataProviderName = "AnimeThemes Sync";
+
+    /// <summary>
+    /// The AniList provider id key.
+    /// </summary>
+    public const string AniListProviderId = "AniList";
+
+    /// <summary>
+    /// The MyAnimeList provider id key.
+    /// </summary>
+    public const string MyAnimeListProviderId = "MyAnimeList";
+
+    /// <summary>
+    /// The AnimeThemes provider id key.
+    /// </summary>
+    public const string AnimeThemesProviderId = "AnimeThemes";
+
+    /// <summary>
+    /// The AnimeThemes numeric id provider key.
+    /// </summary>
+    public const string AnimeThemesNumericProviderId = "AnimeThemesId";
+
+    /// <summary>
+    /// Site key for AniList in AnimeThemes resource API.
+    /// </summary>
+    public const string AniListSiteKey = "anilist";
+
+    /// <summary>
+    /// Site key for MyAnimeList in AnimeThemes resource API.
+    /// </summary>
+    public const string MyAnimeListSiteKey = "myanimelist";
 
     /// <summary>
     /// The GUID of the plugin.
@@ -34,6 +64,16 @@ public static class Constants
     /// The base URL for AnimeThemes web pages.
     /// </summary>
     public const string AnimeThemesWebUrl = "https://animethemes.moe";
+
+    /// <summary>
+    /// Named HttpClient for AniList.
+    /// </summary>
+    public const string AniListHttpClientName = "AniList";
+
+    /// <summary>
+    /// Named HttpClient for AnimeThemes.
+    /// </summary>
+    public const string AnimeThemesHttpClientName = "AnimeThemes";
 
     // Headers
 

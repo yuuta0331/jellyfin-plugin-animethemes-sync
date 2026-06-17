@@ -4,7 +4,8 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Plugin.AnimeThemesSync.Services;
+using AnimeThemesSync.Shared;
+using AnimeThemesSync.Shared.Services;
 using Microsoft.Extensions.Logging;
 using Moq;
 using RichardSzalay.MockHttp;
@@ -381,3 +382,4 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
         }
     }
 }
+

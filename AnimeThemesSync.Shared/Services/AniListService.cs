@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-
 using System.Linq;
 using System.Net.Http;
 using System.Text;
@@ -11,7 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
-namespace Jellyfin.Plugin.AnimeThemesSync.Services;
+namespace AnimeThemesSync.Shared.Services;
 
 /// <summary>
 /// Service for searching anime on AniList.
@@ -132,7 +131,7 @@ public sealed class AniListService
             { "variables", variables },
         };
 
-        var client = _httpClientFactory.CreateClient("AniList");
+        var client = _httpClientFactory.CreateClient(Constants.AniListHttpClientName);
         var json = JsonSerializer.Serialize(requestBody);
         _logger.LogDebug("AniList request body: {Json}", json);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -145,7 +144,7 @@ public sealed class AniListService
 
         response.EnsureSuccessStatusCode();
 
-        var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        var responseStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
         var result = await JsonSerializer.DeserializeAsync<AniListResponse>(responseStream, _jsonOptions, cancellationToken).ConfigureAwait(false);
 
         return result?.Data?.Page?.Media;

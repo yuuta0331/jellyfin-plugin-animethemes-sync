@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
-namespace Jellyfin.Plugin.AnimeThemesSync;
+namespace AnimeThemesSync.Shared;
 
 /// <summary>
 /// A reactive rate limiter that tracks response headers.

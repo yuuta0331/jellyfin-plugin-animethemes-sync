@@ -12,7 +12,8 @@ using Moq;
 using RichardSzalay.MockHttp;
 using Xunit;
 
-using Jellyfin.Plugin.AnimeThemesSync.Services;
+using AnimeThemesSync.Shared;
+using AnimeThemesSync.Shared.Services;
 
 namespace Jellyfin.Plugin.AnimeThemesSync.Tests
 {
@@ -112,3 +113,4 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
         }
     }
 }
+
