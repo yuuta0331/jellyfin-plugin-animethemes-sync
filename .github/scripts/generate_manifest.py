@@ -9,7 +9,9 @@ from typing import Any, Optional
 # Configuration
 REPO = os.environ.get('GITHUB_REPOSITORY')
 TOKEN = os.environ.get('GITHUB_TOKEN')
-HEADERS = {'Authorization': f'token {TOKEN}', 'Accept': 'application/vnd.github.v3+json'}
+HEADERS = {'Accept': 'application/vnd.github.v3+json'}
+if TOKEN:
+    HEADERS['Authorization'] = f'token {TOKEN}'
 MANIFEST_FILE = 'manifest.json'
 REQUEST_TIMEOUT = 20
 JELLYFIN_ZIP_CANDIDATES = (
@@ -45,8 +47,8 @@ def get_file_content(path, ref):
 def main():
     print(f"Generating manifest for {REPO}...")
 
-    if not REPO or not TOKEN:
-        print("Error: GITHUB_REPOSITORY and GITHUB_TOKEN must be set.")
+    if not REPO:
+        print("Error: GITHUB_REPOSITORY must be set.")
         sys.exit(1)
 
     # 1. Get all releases
