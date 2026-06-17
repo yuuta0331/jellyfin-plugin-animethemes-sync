@@ -42,17 +42,41 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <inheritdoc />
     public IEnumerable<PluginPageInfo> GetPages()
     {
+        var type = GetType();
+        var configPageName = "animethemessync" + Constants.UiAssetVersion;
+        var browserPageName = "animethemessyncbrowser" + Constants.UiAssetVersion;
+        var configScriptName = "animethemessyncconfigjs" + Constants.UiAssetVersion;
+        var browserScriptName = "animethemessyncbrowserjs" + Constants.UiAssetVersion;
+
         return
         [
             new PluginPageInfo
             {
-                Name = "configPage",
-                EmbeddedResourcePath = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0}.Configuration.configPage.html", GetType().Namespace)
+                Name = configPageName,
+                DisplayName = Name,
+                EmbeddedResourcePath = type.Namespace + ".Configuration.configPage.html",
+                EnableInMainMenu = true,
+                MenuSection = "server",
+                MenuIcon = "music_note"
             },
             new PluginPageInfo
             {
-                Name = "browserPage",
-                EmbeddedResourcePath = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0}.Configuration.browserPage.html", GetType().Namespace)
+                Name = browserPageName,
+                DisplayName = "AnimeThemes Browser",
+                EmbeddedResourcePath = type.Namespace + ".Configuration.browserPage.html",
+                EnableInMainMenu = true,
+                MenuSection = "server",
+                MenuIcon = "video_library"
+            },
+            new PluginPageInfo
+            {
+                Name = configScriptName,
+                EmbeddedResourcePath = type.Namespace + ".Configuration.configPage.js"
+            },
+            new PluginPageInfo
+            {
+                Name = browserScriptName,
+                EmbeddedResourcePath = type.Namespace + ".Configuration.browserPage.js"
             }
         ];
     }

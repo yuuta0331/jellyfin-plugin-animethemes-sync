@@ -11,6 +11,16 @@ public static class Constants
     public const string PluginName = "AnimeThemesSync";
 
     /// <summary>
+    /// UI asset version used to force web clients to pick up changed embedded pages.
+    /// </summary>
+    public const string UiAssetVersion = "20260617a";
+
+    /// <summary>
+    /// Human-readable UI version displayed on plugin pages.
+    /// </summary>
+    public const string UiDisplayVersion = "2026.06.17-a";
+
+    /// <summary>
     /// The display name used by the metadata provider (matches AnimeThemesMetadataProvider.Name).
     /// </summary>
     public const string MetadataProviderName = "AnimeThemes Sync";

@@ -1,100 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
+define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 'emby-textarea', 'emby-scroller'], function (BaseView) {
+    'use strict';
 
-<head>
-    <meta charset="utf-8">
-    <title>AnimeThemes Browser</title>
-</head>
+    function setup(view) {
+        if (view.getAttribute('data-ats-script-bound') === 'true') {
+            return;
+        }
 
-<body>
-    <div id="AnimeThemesBrowserPage" data-role="page" class="page type-interior pluginConfigurationPage"
-        data-require="emby-input,emby-button,emby-select,emby-checkbox">
-        <div data-role="content">
-            <div class="content-primary">
-                <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.06.17-a.</div>
+        view.setAttribute('data-ats-script-bound', 'true');
 
-                <div class="verticalSection">
-                    <div class="selectContainer">
-                        <label class="selectLabel" for="AnimeThemesBrowserItemSelect">Library Item</label>
-                        <select is="emby-select" id="AnimeThemesBrowserItemSelect" class="emby-select-withcolor emby-select"></select>
-                    </div>
-                    <div style="display: flex; gap: 1em; flex-wrap: wrap; align-items: center;">
-                        <button is="emby-button" type="button" class="raised emby-button" id="AnimeThemesBrowserRefreshItems">
-                            <span>Refresh Items</span>
-                        </button>
-                        <button is="emby-button" type="button" class="raised emby-button" id="AnimeThemesBrowserLoadThemes">
-                            <span>Load Themes</span>
-                        </button>
-                        <button is="emby-button" type="button" class="raised emby-button" id="AnimeThemesBrowserDownload">
-                            <span>Download This Item</span>
-                        </button>
-                        <label class="emby-checkbox-label">
-                            <input id="AnimeThemesBrowserForce" type="checkbox" is="emby-checkbox" />
-                            <span>Force</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="verticalSection">
-                    <h2 class="sectionTitle" id="AnimeThemesBrowserTitle">Themes</h2>
-                    <div id="AnimeThemesBrowserMeta" class="fieldDescription"></div>
-                    <div style="overflow-x: auto; margin-top: 1em;">
-                        <table class="detailTable" style="width: 100%; border-collapse: collapse;">
-                            <thead>
-                                <tr>
-                                    <th>Theme</th>
-                                    <th>Song</th>
-                                    <th>Artist</th>
-                                    <th>Episodes</th>
-                                    <th>Flags</th>
-                                    <th>Quality</th>
-                                    <th>Local</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="AnimeThemesBrowserRows"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <style>
-            #AnimeThemesBrowserPage th,
-            #AnimeThemesBrowserPage td {
-                border-bottom: 1px solid rgba(255, 255, 255, .12);
-                padding: .75em .6em;
-                text-align: left;
-                vertical-align: top;
-            }
-
-            #AnimeThemesBrowserPage .theme-status {
-                display: inline-block;
-                margin: 0 .35em .35em 0;
-                padding: .15em .45em;
-                border-radius: 4px;
-                background: rgba(255, 255, 255, .1);
-                white-space: nowrap;
-            }
-
-            #AnimeThemesBrowserPage .theme-status.ok {
-                background: rgba(76, 175, 80, .35);
-            }
-
-            #AnimeThemesBrowserPage .theme-status.missing {
-                background: rgba(244, 67, 54, .28);
-            }
-
-            #AnimeThemesBrowserPage .theme-actions {
-                display: flex;
-                gap: .5em;
-                flex-wrap: wrap;
-            }
-        </style>
-
-        <script>
-            (function () {
+(function () {
                 var page = document.querySelector('#AnimeThemesBrowserPage');
                 var itemSelect = page.querySelector('#AnimeThemesBrowserItemSelect');
                 var rowsBody = page.querySelector('#AnimeThemesBrowserRows');
@@ -261,8 +175,25 @@
                 page.querySelector('#AnimeThemesBrowserDownload').addEventListener('click', downloadItem);
                 page.addEventListener('pageshow', loadItems);
             })();
-        </script>
-    </div>
-</body>
 
-</html>
+    }
+
+    function View(view) {
+        BaseView.apply(this, arguments);
+        this.view = view;
+        setup(view);
+    }
+
+    Object.assign(View.prototype, BaseView.prototype);
+
+    View.prototype.onResume = function () {
+        BaseView.prototype.onResume.apply(this, arguments);
+        setup(this.view);
+        var event = document.createEvent('Event');
+        event.initEvent('pageshow', true, true);
+        this.view.dispatchEvent(event);
+    };
+
+    return View;
+});
+

@@ -43,16 +43,23 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <inheritdoc />
     public IEnumerable<PluginPageInfo> GetPages()
     {
+        var configPageName = "animethemessync" + Constants.UiAssetVersion;
+        var browserPageName = "animethemessyncbrowser" + Constants.UiAssetVersion;
+
         return
         [
             new PluginPageInfo
             {
-                Name = Name,
+                Name = configPageName,
+                DisplayName = Name,
+                EnableInMainMenu = true,
                 EmbeddedResourcePath = string.Format(CultureInfo.InvariantCulture, "{0}.Configuration.configPage.html", GetType().Namespace)
             },
             new PluginPageInfo
             {
-                Name = "AnimeThemes Browser",
+                Name = browserPageName,
+                DisplayName = "AnimeThemes Browser",
+                EnableInMainMenu = true,
                 EmbeddedResourcePath = string.Format(CultureInfo.InvariantCulture, "{0}.Configuration.browserPage.html", GetType().Namespace)
             }
         ];
