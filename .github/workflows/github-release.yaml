@@ -3,7 +3,11 @@ name: '📦 Release to GitHub'
 on:
   push:
     tags:
-      - 'v*' # Trigger on tags like v1.0.0
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -18,35 +22,79 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Restore
+        run: dotnet restore Jellyfin.Plugin.AnimeThemesSync.sln -nologo /p:NuGetAudit=false
 
       - name: Extract Version
         id: get_version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION="${GITHUB_REF_NAME#v}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Extracted version: $VERSION"
+
+      - name: Generate Release Notes
+        run: |
+          set -euo pipefail
+          TAG_MESSAGE="$(git for-each-ref "refs/tags/${GITHUB_REF_NAME}" --format='%(contents)' | sed '/^[[:space:]]*$/d' || true)"
+
+          if [ -n "${TAG_MESSAGE}" ]; then
+            printf "%s\n" "${TAG_MESSAGE}" > release-notes.md
+            echo "Using annotated tag message as release notes."
+          else
+            PREV_TAG="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+            {
+              echo "## Changes"
+              if [ -n "${PREV_TAG}" ]; then
+                git log --pretty=format:'- %s (%h)' "${PREV_TAG}..${GITHUB_REF_NAME}"
+              else
+                git log --pretty=format:'- %s (%h)'
+              fi
+            } > release-notes.md
+            echo "Using git log as release notes."
+          fi
+
+          cat release-notes.md
 
       - name: Update build.yaml Version
         run: |
           sed -i "s/version: .*/version: \"${{ env.VERSION }}\"/" build.yaml
           cat build.yaml
 
-      - name: Build
-        run: dotnet build -c Release -p:Version=${{ env.VERSION }}
+      - name: Build Jellyfin
+        run: dotnet build Jellyfin.Plugin.AnimeThemesSync/Jellyfin.Plugin.AnimeThemesSync.csproj -c Release --no-restore -p:Version=${{ env.VERSION }} -p:ContinuousIntegrationBuild=true -nologo /p:NuGetAudit=false
 
-      - name: Create Zip Archive
+      - name: Build Emby
+        run: dotnet build Emby.Plugin.AnimeThemesSync/Emby.Plugin.AnimeThemesSync.csproj -c Release --no-restore -p:Version=${{ env.VERSION }} -p:ContinuousIntegrationBuild=true -nologo /p:NuGetAudit=false
+
+      - name: Create Jellyfin Zip Archive
         run: |
-          cd Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/
-          zip -r AnimeThemesSync.zip . -i "*.dll"
+          mkdir -p dist/jellyfin
+          cp Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/Jellyfin.Plugin.AnimeThemesSync.dll dist/jellyfin/
+          cp Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/AnimeThemesSync.Shared.dll dist/jellyfin/ || true
+          (cd dist/jellyfin && zip -r ../../Jellyfin.Plugin.AnimeThemesSync.zip .)
+
+      - name: Create Emby Zip Archive
+        run: |
+          mkdir -p dist/emby
+          cp Emby.Plugin.AnimeThemesSync/bin/Release/net8.0/Emby.Plugin.AnimeThemesSync.dll dist/emby/
+          cp Emby.Plugin.AnimeThemesSync/bin/Release/net8.0/AnimeThemesSync.Shared.dll dist/emby/ || true
+          (cd dist/emby && zip -r ../../Emby.Plugin.AnimeThemesSync.zip .)
 
       - name: Generate MD5
-        run: md5sum Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/AnimeThemesSync.zip > Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/AnimeThemesSync.zip.md5
+        run: |
+          md5sum Jellyfin.Plugin.AnimeThemesSync.zip > Jellyfin.Plugin.AnimeThemesSync.zip.md5
+          md5sum Emby.Plugin.AnimeThemesSync.zip > Emby.Plugin.AnimeThemesSync.zip.md5
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-             Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/AnimeThemesSync.zip
-             Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/AnimeThemesSync.zip.md5
-          generate_release_notes: true
+             Jellyfin.Plugin.AnimeThemesSync.zip
+             Jellyfin.Plugin.AnimeThemesSync.zip.md5
+             Emby.Plugin.AnimeThemesSync.zip
+             Emby.Plugin.AnimeThemesSync.zip.md5
+          body_path: release-notes.md

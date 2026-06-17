@@ -4,18 +4,34 @@ import requests
 import yaml
 import sys
 import base64
+from typing import Any, Optional
 
 # Configuration
 REPO = os.environ.get('GITHUB_REPOSITORY')
 TOKEN = os.environ.get('GITHUB_TOKEN')
 HEADERS = {'Authorization': f'token {TOKEN}', 'Accept': 'application/vnd.github.v3+json'}
 MANIFEST_FILE = 'manifest.json'
+REQUEST_TIMEOUT = 20
+JELLYFIN_ZIP_CANDIDATES = (
+    "Jellyfin.Plugin.AnimeThemesSync.zip",
+    "AnimeThemesSync.zip",
+)
+
+def fetch_json(url: str, headers: Optional[dict[str, str]] = None) -> Any:
+    response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+    return response.json()
+
+def fetch_text(url: str, headers: Optional[dict[str, str]] = None) -> str:
+    response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+    return response.text
 
 def get_file_content(path, ref):
     """Fetch file content from GitHub API for a specific ref (tag/branch)"""
     url = f"https://api.github.com/repos/{REPO}/contents/{path}?ref={ref}"
     try:
-        resp = requests.get(url, headers=HEADERS)
+        resp = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
         if resp.status_code == 404:
             print(f"File not found: {path} at {ref}")
             return None
@@ -36,9 +52,7 @@ def main():
     # 1. Get all releases
     releases_url = f"https://api.github.com/repos/{REPO}/releases"
     try:
-        resp = requests.get(releases_url, headers=HEADERS)
-        resp.raise_for_status()
-        releases = resp.json()
+        releases = fetch_json(releases_url, HEADERS)
     except Exception as e:
         print(f"Error fetching releases: {e}")
         sys.exit(1)
@@ -90,26 +104,46 @@ def main():
 
         build_config = yaml.safe_load(build_yaml_content)
 
-        # Find assets
+        # Find assets (prefer Jellyfin package explicitly)
         assets = release.get('assets', [])
-        zip_asset = next((a for a in assets if a['name'].endswith('.zip')), None)
+        zip_asset = next(
+            (a for a in assets if a['name'] in JELLYFIN_ZIP_CANDIDATES),
+            None
+        )
 
         if not zip_asset:
-            print(f"  Skipping {tag}: No .zip asset found.")
+            zip_asset = next(
+                (
+                    a for a in assets
+                    if a['name'].endswith('.zip') and not a['name'].startswith('Emby.')
+                ),
+                None
+            )
+
+        if not zip_asset:
+            print(f"  Skipping {tag}: No Jellyfin .zip asset found.")
             continue
 
         # Checksum logic
         checksum = "00000000000000000000000000000000" # Default 32 Zeros
-        md5_asset = next((a for a in assets if a['name'].endswith('.md5')), None)
+        preferred_md5_name = f"{zip_asset['name']}.md5"
+        md5_asset = next((a for a in assets if a['name'] == preferred_md5_name), None)
+
+        if not md5_asset:
+            md5_asset = next(
+                (
+                    a for a in assets
+                    if a['name'].endswith('.md5') and not a['name'].startswith('Emby.')
+                ),
+                None
+            )
 
         if md5_asset:
              print(f"  Found MD5 asset: {md5_asset['name']}")
              try:
                  # Download and read MD5
-                 md5_resp = requests.get(md5_asset['browser_download_url'])
-                 if md5_resp.status_code == 200:
-                     # MD5 file content usually: "hash  filename" or just "hash"
-                     content = md5_resp.text.strip()
+                 content = fetch_text(md5_asset['browser_download_url']).strip()
+                 if content:
                      checksum = content.split()[0]
              except Exception as e:
                  print(f"  Failed to read MD5 asset: {e}")
@@ -126,8 +160,10 @@ def main():
         }
         manifest["versions"].append(version_entry)
 
-    # Sort versions? GitHub API returns releases in some order, but best to be ensuring latest first?
-    # Usually Manifest expects list. Jellyfin likely processes them.
+    manifest["versions"].sort(
+        key=lambda v: v.get("timestamp") or "",
+        reverse=True,
+    )
 
     # Wrap in list as Jellyfin expects a list of plugins
     output = [manifest]

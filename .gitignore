@@ -3,3 +3,11 @@ obj/
 .vs/
 .idea/
 artifacts
+*.log
+*.dll
+*.pdb
+*.deps.json
+*.xml
+*.md5
+manifest.json
+__pycache__/

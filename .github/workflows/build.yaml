@@ -3,16 +3,42 @@ name: '🏗️ Build Plugin'
 on:
   push:
     branches:
-      - master
+      - main
     paths-ignore:
       - '**/*.md'
   pull_request:
     branches:
-      - master
+      - main
     paths-ignore:
       - '**/*.md'
   workflow_dispatch:
 
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  verify:
+    name: Verify Shared/Jellyfin/Emby Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+      - name: Restore
+        run: dotnet restore Jellyfin.Plugin.AnimeThemesSync.sln -nologo /p:NuGetAudit=false
+      - name: Build Shared
+        run: dotnet build AnimeThemesSync.Shared/AnimeThemesSync.Shared.csproj --configuration Release --no-restore -nologo /p:NuGetAudit=false
+      - name: Build Jellyfin
+        run: dotnet build Jellyfin.Plugin.AnimeThemesSync/Jellyfin.Plugin.AnimeThemesSync.csproj --configuration Release --no-restore -nologo /p:NuGetAudit=false
+      - name: Build Emby
+        run: dotnet build Emby.Plugin.AnimeThemesSync/Emby.Plugin.AnimeThemesSync.csproj --configuration Release --no-restore -nologo /p:NuGetAudit=false
+
   call:
+    needs: verify
     uses: jellyfin/jellyfin-meta-plugins/.github/workflows/build.yaml@master

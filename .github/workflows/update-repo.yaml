@@ -2,16 +2,21 @@ name: Update Plugin Repository
 
 on:
   workflow_run:
-    workflows: ['github-release.yaml']
+    workflows: ['📦 Release to GitHub']
     types:
       - completed
   workflow_dispatch:
+
+concurrency:
+  group: update-repo-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
   update-repo:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -20,9 +25,10 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+          cache: 'pip'
 
       - name: Install dependencies
         run: pip install requests pyyaml
