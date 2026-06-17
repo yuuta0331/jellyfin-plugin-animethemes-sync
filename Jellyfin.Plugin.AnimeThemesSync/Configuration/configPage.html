@@ -471,6 +471,20 @@
                             <span>Run Task</span>
                         </button>
                     </div>
+
+                    <div class="verticalSection">
+                        <h2 class="sectionTitle">On-Demand Download</h2>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="OnDemandItemId">Item ID</label>
+                            <input id="OnDemandItemId" type="text" is="emby-input" />
+                            <div class="fieldDescription">
+                                Paste a Series or Movie item ID to download OP/ED media for only that item.
+                            </div>
+                        </div>
+                        <button is="emby-button" type="button" class="raised emby-button block" id="RunOnDemandButton">
+                            <span>Download Selected Item</span>
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
@@ -689,6 +703,36 @@
                     Dashboard.hideLoadingMsg();
                     console.error('Failed to save configuration or start task: ', err);
                     Dashboard.alert({ message: 'Failed to save configuration or start task: ' + err, title: 'Task Error' });
+                });
+            });
+
+            document.querySelector('#RunOnDemandButton').addEventListener('click', function () {
+                var itemId = (document.querySelector('#OnDemandItemId').value || '').trim();
+                if (!itemId) {
+                    Dashboard.alert({ message: 'Enter a Series or Movie Item ID.', title: 'Item ID Required' });
+                    return;
+                }
+
+                var force = document.querySelector('#ForceRedownload').checked;
+                Dashboard.showLoadingMsg();
+                saveCurrentConfiguration(false).then(function () {
+                    return ApiClient.ajax({
+                        type: 'POST',
+                        url: ApiClient.getUrl('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/DownloadThemes?force=' + force),
+                        dataType: 'json'
+                    });
+                }).then(function (result) {
+                    Dashboard.hideLoadingMsg();
+                    result = result || {};
+                    Dashboard.alert({
+                        title: 'On-Demand Download Completed',
+                        message: 'Downloads: ' + (result.DownloadsCompleted || 0) + '/' + (result.DownloadsPlanned || 0) +
+                            ', Extras: ' + (result.ExtrasCompleted || 0) + '/' + (result.ExtrasPlanned || 0)
+                    });
+                }).catch(function (err) {
+                    Dashboard.hideLoadingMsg();
+                    console.error('Failed to run on-demand AnimeThemes download: ', err);
+                    Dashboard.alert({ message: 'Failed to run on-demand download: ' + err, title: 'On-Demand Error' });
                 });
             });
 

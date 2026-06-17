@@ -2,6 +2,7 @@ using System.Net.Http;
 using AnimeThemesSync.Shared;
 using AnimeThemesSync.Shared.Services;
 using Jellyfin.Plugin.AnimeThemesSync.ExternalIds;
+using Jellyfin.Plugin.AnimeThemesSync.ScheduledTasks;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Providers;
@@ -25,6 +26,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<IExternalId, AnimeThemesSlugExternalId>();
         serviceCollection.AddSingleton<IExternalId, AnimeThemesIdExternalId>();
         serviceCollection.AddSingleton<IExternalUrlProvider, AnimeThemesExternalUrlProvider>();
+        serviceCollection.AddSingleton<ThemeDownloader>();
 
         // Register AniListService as Singleton
         serviceCollection.AddSingleton(provider =>

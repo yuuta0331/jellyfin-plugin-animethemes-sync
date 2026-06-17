@@ -14,6 +14,7 @@ using AnimeThemesSync.Shared.Services;
 using Emby.Plugin.AnimeThemesSync.Extensions;
 using Emby.Plugin.AnimeThemesSync.Helpers;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
@@ -87,6 +88,42 @@ public class ThemeDownloader : IScheduledTask
         var items = GetEnabledLibraryItems();
         _logger.LogInformation("Found {Count} items to process.", items.Count);
 
+        var result = await ProcessItems(items, config, config.ForceRedownload, progress, cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("Anime Themes Download Task Completed. Downloaded {Count} files.", result.DownloadsCompleted);
+    }
+
+    /// <summary>
+    /// Downloads themes for a single library item.
+    /// </summary>
+    /// <param name="itemId">The Emby item identifier.</param>
+    /// <param name="forceRedownload">Whether existing files should be replaced.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The execution result.</returns>
+    public async Task<ThemeDownloadExecutionResult> DownloadItemByIdAsync(Guid itemId, bool forceRedownload, CancellationToken cancellationToken)
+    {
+        var config = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
+        if (!config.ThemeDownloadingEnabled)
+        {
+            throw new InvalidOperationException("Theme downloading is disabled in plugin configuration.");
+        }
+
+        var item = _libraryManager.GetItemById(itemId) ?? throw new KeyNotFoundException("The requested item was not found.");
+        if (item is not Series && item is not Movie)
+        {
+            throw new InvalidOperationException("Only Series and Movie items are supported.");
+        }
+
+        _logger.LogInformation("Starting Anime Themes on-demand download for {ItemName} ({ItemId})...", item.Name, itemId);
+        return await ProcessItems(new[] { item }, config, forceRedownload || config.ForceRedownload, null, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ThemeDownloadExecutionResult> ProcessItems(
+        IReadOnlyList<BaseItem> items,
+        PluginConfiguration config,
+        bool forceRedownload,
+        IProgress<double>? progress,
+        CancellationToken cancellationToken)
+    {
         // ── Phase 1: Resolve all items sequentially (API calls are rate-limited) ──
         _logger.LogInformation("=== Phase 1: Resolving themes for {Count} items ===", items.Count);
 
@@ -116,7 +153,7 @@ public class ThemeDownloader : IScheduledTask
                     foreach (var file in result.MediaFiles)
                     {
                         var volume = file.IsVideo ? videoConfig.Volume : audioConfig.Volume;
-                        if (config.ForceRedownload || !_fileSystem.FileExists(file.Path))
+                        if (forceRedownload || !_fileSystem.FileExists(file.Path))
                         {
                             allDownloads.Add((file, volume, itemName));
                         }
@@ -124,7 +161,7 @@ public class ThemeDownloader : IScheduledTask
 
                     foreach (var extra in result.ExtraFiles)
                     {
-                        if (config.ForceRedownload || !_fileSystem.FileExists(extra.TargetPath))
+                        if (forceRedownload || !_fileSystem.FileExists(extra.TargetPath))
                         {
                             allExtras.Add((extra, itemName));
                         }
@@ -160,6 +197,7 @@ public class ThemeDownloader : IScheduledTask
         // ── Phase 2: Download all files in parallel ──
         _logger.LogInformation("=== Phase 2: Downloading {Count} files (MaxConcurrent={Max}) ===", allDownloads.Count, config.MaxConcurrentDownloads);
 
+        var completedDownloads = 0;
         if (allDownloads.Count > 0)
         {
             var throttler = new SemaphoreSlim(config.MaxConcurrentDownloads > 0 ? config.MaxConcurrentDownloads : 1);
@@ -193,6 +231,7 @@ public class ThemeDownloader : IScheduledTask
                                 {
                                     _logger.LogDebug("Downloading [{ItemName}] {Filename}...", dl.ItemName, Path.GetFileName(dl.File.Path));
                                     await DownloadFile(dl.File.Url, dl.File.Path, dl.Volume, cancellationToken).ConfigureAwait(false);
+                                    _ = Interlocked.Increment(ref completedDownloads);
                                     _logger.LogInformation("Downloaded [{ItemName}] {Filename}", dl.ItemName, Path.GetFileName(dl.File.Path));
                                     break;
                                 }
@@ -228,6 +267,8 @@ public class ThemeDownloader : IScheduledTask
         }
 
         // ── Extras ──
+        var completedExtras = 0;
+        var failedExtras = 0;
         foreach (var extra in allExtras)
         {
             try
@@ -246,9 +287,11 @@ public class ThemeDownloader : IScheduledTask
                     result.HardLinkVerified,
                     result.LinkCount,
                     result.FallbackReason);
+                completedExtras++;
             }
             catch (Exception ex)
             {
+                failedExtras++;
                 _logger.LogWarning(ex, "Failed to create extras file: {Path}", extra.Extra.TargetPath);
             }
         }
@@ -259,7 +302,7 @@ public class ThemeDownloader : IScheduledTask
             CleanupDirectory(cleanup.Directory, cleanup.DesiredFiles, cleanup.Themes);
         }
 
-        _logger.LogInformation("Anime Themes Download Task Completed. Downloaded {Count} files.", allDownloads.Count);
+        return new ThemeDownloadExecutionResult(items.Count, allDownloads.Count, completedDownloads, allExtras.Count, completedExtras, failedExtras);
     }
 
     /// <inheritdoc />
