@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using AnimeThemesSync.Shared.Configuration;
 using AnimeThemesSync.Shared.Models;
@@ -63,6 +65,89 @@ public static class ThemeFilePlanner
         }
 
         return new ThemeOutputPlan(mediaFiles, extraFiles, anime.AnimeThemes);
+    }
+
+    public static List<ScoredCandidate> GetBrowserCandidates(IEnumerable<AnimeThemesTheme> themes)
+    {
+        return ThemeScoringService.GetScoredCandidates(themes.ToList(), ignoreOp: false, ignoreEd: false, ignoreOverlaps: false, ignoreCredits: false)
+            .OrderBy(GetThemeTypeOrder)
+            .ThenBy(c => c.Theme.Sequence ?? int.MaxValue)
+            .ThenBy(c => c.Entry.Version ?? 1)
+            .ThenBy(c => c.Theme.Slug ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(c => c.Score)
+            .ToList();
+    }
+
+    public static ThemeOutputPlan BuildSingleCandidatePlan(
+        AnimeThemesAnime anime,
+        ScoredCandidate candidate,
+        int order,
+        string itemPath,
+        bool includeAudio,
+        bool includeVideo,
+        bool includeExtras)
+    {
+        var mediaFiles = new List<ThemeFilePlan>();
+        var extraFiles = new List<ThemeExtraPlan>();
+        var themeKey = BuildThemeKey(candidate);
+        var backdropsPath = Path.Combine(itemPath, "backdrops");
+        var themeMusicPath = Path.Combine(itemPath, "theme-music");
+        var extrasPath = Path.Combine(itemPath, "extras");
+
+        ThemeFilePlan? videoPlan = null;
+        if (includeVideo && !string.IsNullOrWhiteSpace(candidate.Video.Link))
+        {
+            videoPlan = new ThemeFilePlan(
+                Path.Combine(backdropsPath, BuildVideoFileName(candidate, order, themeKey)),
+                candidate.Video.Link!,
+                true,
+                order,
+                themeKey);
+            mediaFiles.Add(videoPlan);
+        }
+
+        var audioUrl = candidate.Video.Audio?.Link ?? candidate.Video.Link;
+        if (includeAudio && !string.IsNullOrWhiteSpace(audioUrl))
+        {
+            mediaFiles.Add(new ThemeFilePlan(
+                Path.Combine(themeMusicPath, BuildAudioFileName(candidate, order, themeKey)),
+                audioUrl!,
+                false,
+                order,
+                themeKey));
+        }
+
+        if (includeExtras && videoPlan != null)
+        {
+            extraFiles.Add(new ThemeExtraPlan(
+                videoPlan.Path,
+                Path.Combine(extrasPath, BuildExtrasFileName(candidate, order))));
+        }
+
+        return new ThemeOutputPlan(mediaFiles, extraFiles, anime.AnimeThemes ?? new List<AnimeThemesTheme>());
+    }
+
+    public static string BuildBrowserRowId(ScoredCandidate candidate)
+    {
+        if (candidate.Theme.Id > 0 && candidate.Entry.Id > 0 && candidate.Video.Id > 0)
+        {
+            var audioId = candidate.Video.Audio?.Id;
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "t{0}-e{1}-v{2}-a{3}",
+                candidate.Theme.Id,
+                candidate.Entry.Id,
+                candidate.Video.Id,
+                audioId.HasValue && audioId.Value > 0 ? audioId.Value.ToString(CultureInfo.InvariantCulture) : "0");
+        }
+
+        var source = string.Join(
+            "|",
+            BuildThemeKey(candidate),
+            candidate.Entry.Version?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+            candidate.Video.Link ?? string.Empty,
+            candidate.Video.Audio?.Link ?? string.Empty);
+        return "h" + ComputeStableHash(source);
     }
 
     /// <summary>
@@ -402,5 +487,20 @@ public static class ThemeFilePlanner
         }
 
         return stem[..maxStemLength].Trim(' ', '.', '-') + extension;
+    }
+
+    private static string ComputeStableHash(string value)
+    {
+#pragma warning disable CA1850
+        using var sha = SHA256.Create();
+        var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(value));
+#pragma warning restore CA1850
+        var builder = new StringBuilder(16);
+        for (var i = 0; i < 8 && i < hash.Length; i++)
+        {
+            builder.Append(hash[i].ToString("x2", CultureInfo.InvariantCulture));
+        }
+
+        return builder.ToString();
     }
 }

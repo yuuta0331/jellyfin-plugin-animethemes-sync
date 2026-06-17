@@ -137,6 +137,122 @@ public class ThemeFilePlannerTests
     }
 
     [Fact]
+    public void BuildBrowserRowId_UsesIdsAndFallsBackToStableHash()
+    {
+        var anime = CreateAnime();
+        var theme = anime.AnimeThemes![0];
+        var entry = theme.Entries![0];
+        var video = entry.Videos![0];
+        theme.Id = 10;
+        entry.Id = 20;
+        video.Id = 30;
+        video.Audio!.Id = 40;
+
+        var candidate = ThemeFilePlanner.GetBrowserCandidates(anime.AnimeThemes).First();
+        var rowId = ThemeFilePlanner.BuildBrowserRowId(candidate);
+
+        Assert.Equal("t10-e20-v30-a40", rowId);
+
+        candidate.Theme.Id = 0;
+        candidate.Entry.Id = 0;
+        candidate.Video.Id = 0;
+
+        var fallback = ThemeFilePlanner.BuildBrowserRowId(candidate);
+        Assert.StartsWith("h", fallback, StringComparison.Ordinal);
+        Assert.Equal(fallback, ThemeFilePlanner.BuildBrowserRowId(candidate));
+    }
+
+    [Fact]
+    public void BuildSingleCandidatePlan_CreatesOnlySelectedThemeOutputsWithBrowserOrder()
+    {
+        var anime = CreateAnime();
+        var candidates = ThemeFilePlanner.GetBrowserCandidates(anime.AnimeThemes!);
+        var selected = candidates[1];
+
+        var plan = ThemeFilePlanner.BuildSingleCandidatePlan(
+            anime,
+            selected,
+            order: 2,
+            Path.Combine("Media", "Bakemonogatari"),
+            includeAudio: true,
+            includeVideo: true,
+            includeExtras: true);
+
+        Assert.Equal(2, plan.MediaFiles.Count);
+        Assert.Single(plan.ExtraFiles);
+        Assert.Equal("02-OP2 - Kaerimichi - Emiri Katou - Eps 3-5 - Spoiler WEB720.webm", Path.GetFileName(plan.MediaFiles.Single(f => f.IsVideo).Path));
+        Assert.Equal("02-OP2 - Kaerimichi - Emiri Katou.mp3", Path.GetFileName(plan.MediaFiles.Single(f => !f.IsVideo).Path));
+        Assert.Equal("AnimeThemes - 02 - OP2 - Kaerimichi - Emiri Katou - Eps 3-5 - Spoiler WEB720.webm", Path.GetFileName(plan.ExtraFiles.Single().TargetPath));
+    }
+
+    [Fact]
+    public void ConfigurationPages_DoNotContainRemovedPresetControlsOrFlatActionButtons()
+    {
+        var root = FindRepositoryRoot();
+        var files = new[]
+        {
+            Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "configPage.html"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "configPage.html"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "configPage.js"),
+            Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js")
+        };
+
+        foreach (var file in files)
+        {
+            var content = File.ReadAllText(file);
+            Assert.DoesNotContain("ConfigurationPreset", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("ApplyPresetButton", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("applyConfigurationPreset", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("button-flat", content, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void BrowserPages_UseAuthenticatedLocalMediaUrls()
+    {
+        var root = FindRepositoryRoot();
+        var files = new[]
+        {
+            Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js")
+        };
+
+        foreach (var file in files)
+        {
+            var content = File.ReadAllText(file);
+            Assert.Contains("getAccessToken", content, StringComparison.Ordinal);
+            Assert.Contains("appendQuery(url, 'api_key', token)", content, StringComparison.Ordinal);
+            Assert.Contains("LocalMedia?target=", content, StringComparison.Ordinal);
+            Assert.Contains("Play Video", content, StringComparison.Ordinal);
+            Assert.Contains("Play Audio", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("Play Extra", content, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void BrowserPages_StartDownloadJobsAndPollProgress()
+    {
+        var root = FindRepositoryRoot();
+        var files = new[]
+        {
+            Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js")
+        };
+
+        foreach (var file in files)
+        {
+            var content = File.ReadAllText(file);
+            Assert.Contains("AnimeThemesSync/Jobs/ThemeDownload", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesSync/Jobs/ItemDownload", content, StringComparison.Ordinal);
+            Assert.Contains("pollDownloadJob", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesBrowserProgressBar", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("/Download?force=", content, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void ThemeExtrasFileService_CopyOnlyCreatesBrowseableExtra()
     {
         var directory = Path.Combine(Path.GetTempPath(), "AnimeThemesSyncTests", Guid.NewGuid().ToString("N"));
@@ -313,5 +429,16 @@ public class ThemeFilePlannerTests
                 }
             ]
         };
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "Jellyfin.Plugin.AnimeThemesSync.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName ?? throw new DirectoryNotFoundException("Repository root was not found.");
     }
 }

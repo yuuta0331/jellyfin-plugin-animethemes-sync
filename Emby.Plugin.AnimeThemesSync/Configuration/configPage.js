@@ -77,12 +77,6 @@ var AnimeThemesSyncConfig = {
                         });
                     }
 
-                    var applyPresetButton = document.querySelector('#ApplyPresetButton');
-                    if (applyPresetButton && applyPresetButton.getAttribute('data-preset-bound') !== 'true') {
-                        applyPresetButton.setAttribute('data-preset-bound', 'true');
-                        applyPresetButton.addEventListener('click', applyConfigurationPreset);
-                    }
-
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId).then(function (config) {
                         try {
@@ -295,70 +289,6 @@ var AnimeThemesSyncConfig = {
                 config.MovieVideoIgnoreEd = document.querySelector('#MovieVideoIgnoreEd').checked;
                 config.MovieVideoIgnoreOverlaps = document.querySelector('#MovieVideoIgnoreOverlaps').checked;
                 config.MovieVideoIgnoreCredits = document.querySelector('#MovieVideoIgnoreCredits').checked;
-            }
-
-            function setChecked(id, value) {
-                document.querySelector('#' + id).checked = value;
-            }
-
-            function setNumber(id, value) {
-                document.querySelector('#' + id).value = value;
-                var slider = document.querySelector('#' + id + 'Slider');
-                if (slider) {
-                    slider.value = value;
-                }
-            }
-
-            function applyMediaPreset(prefix, audioMax, videoMax, includeEd, ignoreCredits) {
-                setNumber(prefix + 'AudioMaxThemes', audioMax);
-                setNumber(prefix + 'VideoMaxThemes', videoMax);
-                setNumber(prefix + 'AudioVolume', 100);
-                setNumber(prefix + 'VideoVolume', 100);
-                setChecked(prefix + 'AudioIgnoreOp', false);
-                setChecked(prefix + 'AudioIgnoreEd', !includeEd);
-                setChecked(prefix + 'AudioIgnoreOverlaps', false);
-                setChecked(prefix + 'AudioIgnoreCredits', ignoreCredits);
-                setChecked(prefix + 'VideoIgnoreOp', false);
-                setChecked(prefix + 'VideoIgnoreEd', !includeEd);
-                setChecked(prefix + 'VideoIgnoreOverlaps', false);
-                setChecked(prefix + 'VideoIgnoreCredits', ignoreCredits);
-            }
-
-            function applyConfigurationPreset() {
-                var preset = document.querySelector('#ConfigurationPreset').value;
-                if (!preset) {
-                    Dashboard.alert({ title: 'Preset Required', message: 'Choose a preset first.' });
-                    return;
-                }
-
-                setChecked('ThemeDownloadingEnabled', true);
-                setChecked('AllowAdd', true);
-                setChecked('ForceRedownload', false);
-                setChecked('AllowDelete', false);
-                setNumber('MaxConcurrentDownloads', 1);
-                setNumber('DownloadTimeoutSeconds', 600);
-                document.querySelector('#ExtrasLinkMode').value = '0';
-
-                if (preset === 'theme') {
-                    setChecked('ExtrasEnabled', false);
-                    applyMediaPreset('Series', 1, 1, false, false);
-                    applyMediaPreset('Movie', 1, 1, false, false);
-                } else if (preset === 'browse') {
-                    setChecked('ExtrasEnabled', true);
-                    applyMediaPreset('Series', 1, 4, true, false);
-                    applyMediaPreset('Movie', 1, 3, true, false);
-                } else if (preset === 'space') {
-                    setChecked('ExtrasEnabled', false);
-                    applyMediaPreset('Series', 1, 0, false, true);
-                    applyMediaPreset('Movie', 1, 0, false, true);
-                } else if (preset === 'quality') {
-                    setChecked('ExtrasEnabled', true);
-                    applyMediaPreset('Series', 2, 6, true, true);
-                    applyMediaPreset('Movie', 2, 4, true, true);
-                    setNumber('MaxConcurrentDownloads', 2);
-                }
-
-                Dashboard.alert({ title: 'Preset Applied', message: 'Review the updated fields and save the configuration.' });
             }
 
             function normalizeExtrasLinkMode(value) {

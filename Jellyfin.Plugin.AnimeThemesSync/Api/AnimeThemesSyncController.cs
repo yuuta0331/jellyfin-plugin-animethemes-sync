@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using AnimeThemesSync.Shared.Models;
+using AnimeThemesSync.Shared.Services;
 using Jellyfin.Plugin.AnimeThemesSync.ScheduledTasks;
 using MediaBrowser.Common.Api;
 using Microsoft.AspNetCore.Authorization;
@@ -90,6 +92,77 @@ public sealed class AnimeThemesSyncController : ControllerBase
             return Ok(result);
         }
         catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("Jobs/ItemDownload")]
+    [ProducesResponseType(typeof(ThemeDownloadJobStartResult), StatusCodes.Status200OK)]
+    public ActionResult<ThemeDownloadJobStartResult> StartItemDownloadJob(
+        [FromQuery] Guid itemId,
+        [FromQuery] bool force)
+    {
+        var job = ThemeDownloadJobService.Start(
+            "Downloading item themes...",
+            (progress, cancellationToken) => _themeDownloader.DownloadItemByIdAsync(itemId, force, progress, cancellationToken));
+        return Ok(job);
+    }
+
+    [HttpPost("Jobs/ThemeDownload")]
+    [ProducesResponseType(typeof(ThemeDownloadJobStartResult), StatusCodes.Status200OK)]
+    public ActionResult<ThemeDownloadJobStartResult> StartThemeDownloadJob(
+        [FromQuery] Guid itemId,
+        [FromQuery] string rowId,
+        [FromQuery] bool force)
+    {
+        var job = ThemeDownloadJobService.Start(
+            "Downloading theme...",
+            (progress, cancellationToken) => _themeDownloader.DownloadThemeByRowIdAsync(itemId, rowId, force, progress, cancellationToken));
+        return Ok(job);
+    }
+
+    [HttpGet("Jobs/{jobId}")]
+    [ProducesResponseType(typeof(ThemeDownloadJobStatus), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<ThemeDownloadJobStatus> GetDownloadJob(string jobId)
+    {
+        var status = ThemeDownloadJobService.Get(jobId);
+        return status == null ? NotFound() : Ok(status);
+    }
+
+    /// <summary>
+    /// Streams local media for one saved AnimeThemes browser row.
+    /// </summary>
+    /// <param name="itemId">The Jellyfin item identifier.</param>
+    /// <param name="rowId">The Browser row identifier.</param>
+    /// <param name="target">The local target: video, audio, or extra.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The local media file.</returns>
+    [HttpGet("Items/{itemId:guid}/Themes/{rowId}/LocalMedia")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetLocalMedia(
+        Guid itemId,
+        string rowId,
+        [FromQuery] string target,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var media = await _themeDownloader.GetLocalThemeMediaAsync(itemId, rowId, target, cancellationToken).ConfigureAwait(false);
+            return PhysicalFile(media.Path, media.ContentType, enableRangeProcessing: true);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (FileNotFoundException)
         {
             return NotFound();
         }

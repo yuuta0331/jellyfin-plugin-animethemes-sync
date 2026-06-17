@@ -1,90 +1,360 @@
-<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-centerfocus="true" data-bindheader="true" data-controller="__plugin/animethemessyncbrowserjs20260617c" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-centerfocus="true" data-bindheader="true" data-controller="__plugin/animethemessyncbrowserjs20260617g" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.06.17-c.</div>
+                <div class="fieldDescription">UI version: 2026.06.17-g.</div>
 
-                <div class="verticalSection">
-                    <div class="selectContainer">
+                <div class="verticalSection ats-browser-toolbar">
+                    <div class="inputContainer ats-search">
+                        <label class="inputLabel inputLabelUnfocused" for="AnimeThemesBrowserSearch">Search</label>
+                        <input id="AnimeThemesBrowserSearch" type="text" is="emby-input" autocomplete="off" />
+                    </div>
+                    <div class="selectContainer ats-item-select">
                         <label class="selectLabel" for="AnimeThemesBrowserItemSelect">Library Item</label>
                         <select is="emby-select" id="AnimeThemesBrowserItemSelect" class="emby-select-withcolor emby-select"></select>
                     </div>
-                    <div style="display: flex; gap: 1em; flex-wrap: wrap; align-items: center;">
-                        <button is="emby-button" type="button" class="raised emby-button" id="AnimeThemesBrowserRefreshItems">
-                            <span>Refresh Items</span>
+                    <div class="ats-toolbar-actions">
+                        <button is="emby-button" type="button" class="raised emby-button ats-action-button" id="AnimeThemesBrowserRefreshItems">
+                            <span>Refresh</span>
                         </button>
-                        <button is="emby-button" type="button" class="raised emby-button" id="AnimeThemesBrowserLoadThemes">
-                            <span>Load Themes</span>
+                        <button is="emby-button" type="button" class="raised emby-button ats-action-button" id="AnimeThemesBrowserLoadThemes">
+                            <span>Load</span>
                         </button>
-                        <button is="emby-button" type="button" class="raised emby-button" id="AnimeThemesBrowserDownload">
-                            <span>Download This Item</span>
+                        <button is="emby-button" type="button" class="raised emby-button ats-action-button" id="AnimeThemesBrowserDownload">
+                            <span>Download Item</span>
                         </button>
-                        <label class="emby-checkbox-label">
+                        <label class="emby-checkbox-label ats-force">
                             <input id="AnimeThemesBrowserForce" type="checkbox" is="emby-checkbox" />
                             <span>Force</span>
                         </label>
                     </div>
                 </div>
 
-                <div class="verticalSection">
-                    <h2 class="sectionTitle" id="AnimeThemesBrowserTitle">Themes</h2>
-                    <div id="AnimeThemesBrowserMeta" class="fieldDescription"></div>
-                    <div style="overflow-x: auto; margin-top: 1em;">
-                        <table class="detailTable" style="width: 100%; border-collapse: collapse;">
-                            <thead>
-                                <tr>
-                                    <th>Theme</th>
-                                    <th>Song</th>
-                                    <th>Artist</th>
-                                    <th>Episodes</th>
-                                    <th>Flags</th>
-                                    <th>Quality</th>
-                                    <th>Local</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="AnimeThemesBrowserRows"></tbody>
-                        </table>
+                <div class="verticalSection ats-filters">
+                    <div class="selectContainer">
+                        <label class="selectLabel" for="AnimeThemesBrowserTypeFilter">Type</label>
+                        <select is="emby-select" id="AnimeThemesBrowserTypeFilter" class="emby-select-withcolor emby-select">
+                            <option value="all">All</option>
+                            <option value="OP">OP</option>
+                            <option value="ED">ED</option>
+                        </select>
                     </div>
+                    <div class="selectContainer">
+                        <label class="selectLabel" for="AnimeThemesBrowserStatusFilter">Saved</label>
+                        <select is="emby-select" id="AnimeThemesBrowserStatusFilter" class="emby-select-withcolor emby-select">
+                            <option value="all">All</option>
+                            <option value="saved">Saved</option>
+                            <option value="missing">Missing</option>
+                        </select>
+                    </div>
+                    <div class="selectContainer">
+                        <label class="selectLabel" for="AnimeThemesBrowserFlagFilter">Flags</label>
+                        <select is="emby-select" id="AnimeThemesBrowserFlagFilter" class="emby-select-withcolor emby-select">
+                            <option value="all">All</option>
+                            <option value="spoiler">Spoiler</option>
+                            <option value="nsfw">NSFW</option>
+                            <option value="safe">No Spoiler/NSFW</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="verticalSection ats-progress" id="AnimeThemesBrowserProgress" style="display: none;">
+                    <div class="ats-progress-header">
+                        <span id="AnimeThemesBrowserProgressText">Preparing...</span>
+                        <span id="AnimeThemesBrowserProgressPercent">0%</span>
+                    </div>
+                    <div class="ats-progress-track">
+                        <div class="ats-progress-bar" id="AnimeThemesBrowserProgressBar"></div>
+                    </div>
+                </div>
+
+                <div class="verticalSection ats-hero" id="AnimeThemesBrowserHero">
+                    <div class="ats-backdrop" id="AnimeThemesBrowserBackdrop"></div>
+                    <div class="ats-hero-content">
+                        <div class="ats-poster-wrap">
+                            <img id="AnimeThemesBrowserPoster" class="ats-poster" alt="" />
+                            <div id="AnimeThemesBrowserPosterFallback" class="ats-poster-fallback">AT</div>
+                        </div>
+                        <div class="ats-title-block">
+                            <img id="AnimeThemesBrowserLogo" class="ats-logo" alt="" />
+                            <h2 class="sectionTitle" id="AnimeThemesBrowserTitle">Themes</h2>
+                            <div id="AnimeThemesBrowserMeta" class="fieldDescription"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="verticalSection">
+                    <div id="AnimeThemesBrowserRows" class="ats-theme-list"></div>
                 </div>
             </div>
         </div>
 
+        <div id="AnimeThemesBrowserPlayer" class="ats-player" aria-hidden="true">
+            <div class="ats-player-panel">
+                <div class="ats-player-header">
+                    <h3 id="AnimeThemesBrowserPlayerTitle">Playback</h3>
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AnimeThemesBrowserPlayerClose">
+                        <span>Close</span>
+                    </button>
+                </div>
+                <div id="AnimeThemesBrowserPlayerBody" class="ats-player-body"></div>
+            </div>
+        </div>
+
         <style>
-            #AnimeThemesBrowserPage th,
-            #AnimeThemesBrowserPage td {
-                border-bottom: 1px solid rgba(127, 127, 127, .28);
-                padding: .75em .6em;
-                text-align: left;
-                vertical-align: top;
+            #AnimeThemesBrowserPage .ats-browser-toolbar,
+            #AnimeThemesBrowserPage .ats-filters {
+                display: grid;
+                grid-template-columns: minmax(14rem, 1fr) minmax(16rem, 2fr) auto;
+                gap: 1rem;
+                align-items: end;
             }
 
-            #AnimeThemesBrowserPage .theme-status {
-                display: inline-block;
-                margin: 0 .35em .35em 0;
-                padding: .15em .45em;
-                border-radius: 4px;
-                background: rgba(127, 127, 127, .12);
+            #AnimeThemesBrowserPage .ats-filters {
+                grid-template-columns: repeat(3, minmax(10rem, 1fr));
+            }
+
+            #AnimeThemesBrowserPage .ats-toolbar-actions,
+            #AnimeThemesBrowserPage .ats-actions,
+            #AnimeThemesBrowserPage .ats-status-list {
+                display: flex;
+                gap: .5rem;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+
+            #AnimeThemesBrowserPage .ats-action-button,
+            #AnimeThemesBrowserPage .ats-button-secondary {
+                min-height: 2.6rem;
+                border: 1px solid rgba(127, 127, 127, .55) !important;
+                border-radius: 6px;
+                color: inherit;
+            }
+
+            #AnimeThemesBrowserPage .ats-button-secondary {
+                background: rgba(127, 127, 127, .08);
+            }
+
+            #AnimeThemesBrowserPage .ats-button-secondary:hover {
+                background: rgba(127, 127, 127, .18);
+            }
+
+            #AnimeThemesBrowserPage .ats-button-secondary:disabled,
+            #AnimeThemesBrowserPage .ats-action-button:disabled {
+                opacity: .45;
+            }
+
+            #AnimeThemesBrowserPage .ats-hero {
+                position: relative;
+                min-height: 15rem;
+                overflow: hidden;
+                border: 1px solid rgba(127, 127, 127, .26);
+                border-radius: 8px;
+                background: rgba(127, 127, 127, .08);
+            }
+
+            #AnimeThemesBrowserPage .ats-backdrop {
+                position: absolute;
+                inset: 0;
+                background-position: center;
+                background-size: cover;
+                opacity: .34;
+            }
+
+            #AnimeThemesBrowserPage .ats-hero-content {
+                position: relative;
+                display: grid;
+                grid-template-columns: 8rem minmax(0, 1fr);
+                gap: 1rem;
+                align-items: end;
+                min-height: 15rem;
+                padding: 1rem;
+                background: linear-gradient(90deg, rgba(0, 0, 0, .48), rgba(0, 0, 0, .12));
+            }
+
+            #AnimeThemesBrowserPage .ats-poster-wrap {
+                position: relative;
+                width: 8rem;
+                aspect-ratio: 2 / 3;
+                border-radius: 6px;
+                overflow: hidden;
+                border: 1px solid rgba(127, 127, 127, .4);
+                background: rgba(127, 127, 127, .16);
+            }
+
+            #AnimeThemesBrowserPage .ats-poster,
+            #AnimeThemesBrowserPage .ats-logo {
+                display: none;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+            #AnimeThemesBrowserPage .ats-logo {
+                width: auto;
+                max-width: min(26rem, 100%);
+                max-height: 5rem;
+                object-fit: contain;
+                object-position: left bottom;
+                margin-bottom: .5rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-poster-fallback {
+                display: grid;
+                place-items: center;
+                width: 100%;
+                height: 100%;
+                font-size: 1.6rem;
+                font-weight: 700;
+            }
+
+            #AnimeThemesBrowserPage .ats-theme-list {
+                display: grid;
+                gap: .75rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-theme-card {
+                display: grid;
+                grid-template-columns: minmax(0, 1.4fr) minmax(12rem, .8fr) minmax(16rem, 1fr);
+                gap: .75rem;
+                padding: .9rem;
                 border: 1px solid rgba(127, 127, 127, .28);
+                border-radius: 8px;
+                background: rgba(127, 127, 127, .06);
+            }
+
+            #AnimeThemesBrowserPage .ats-theme-main {
+                min-width: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-theme-key {
+                font-size: 1rem;
+                font-weight: 700;
+                margin-bottom: .35rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-song,
+            #AnimeThemesBrowserPage .ats-artist,
+            #AnimeThemesBrowserPage .ats-detail {
+                overflow-wrap: anywhere;
+            }
+
+            #AnimeThemesBrowserPage .ats-chip {
+                display: inline-flex;
+                align-items: center;
+                min-height: 1.65rem;
+                margin: 0 .35rem .35rem 0;
+                padding: .1rem .45rem;
+                border: 1px solid rgba(127, 127, 127, .42);
+                border-radius: 4px;
+                background: rgba(127, 127, 127, .1);
                 color: inherit;
                 white-space: nowrap;
             }
 
-            #AnimeThemesBrowserPage .theme-status.ok {
-                background: rgba(76, 175, 80, .14);
+            #AnimeThemesBrowserPage .ats-chip.ok {
                 border-color: rgba(76, 175, 80, .55);
+                background: rgba(76, 175, 80, .14);
             }
 
-            #AnimeThemesBrowserPage .theme-status.missing {
-                background: rgba(244, 67, 54, .1);
+            #AnimeThemesBrowserPage .ats-chip.missing {
                 border-color: rgba(244, 67, 54, .45);
+                background: rgba(244, 67, 54, .1);
             }
 
-            #AnimeThemesBrowserPage .theme-actions {
+            #AnimeThemesBrowserPage .ats-player {
+                display: none;
+                position: fixed;
+                inset: 0;
+                z-index: 9999;
+                padding: 1rem;
+                background: rgba(0, 0, 0, .7);
+                align-items: center;
+                justify-content: center;
+            }
+
+            #AnimeThemesBrowserPage .ats-player.open {
                 display: flex;
-                gap: .5em;
-                flex-wrap: wrap;
+            }
+
+            #AnimeThemesBrowserPage .ats-player-panel {
+                width: min(72rem, 100%);
+                max-height: 92vh;
+                border: 1px solid rgba(127, 127, 127, .45);
+                border-radius: 8px;
+                background: var(--theme-body-background, #202020);
+                color: inherit;
+                padding: 1rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-player-header {
+                display: flex;
+                justify-content: space-between;
+                gap: 1rem;
+                align-items: center;
+                margin-bottom: .75rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-player-header h3 {
+                margin: 0;
+                font-size: 1.1rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-player-body video,
+            #AnimeThemesBrowserPage .ats-player-body audio {
+                width: 100%;
+                max-height: 76vh;
+            }
+
+            #AnimeThemesBrowserPage .ats-progress {
+                border: 1px solid rgba(127, 127, 127, .28);
+                border-radius: 8px;
+                padding: .75rem;
+                background: rgba(127, 127, 127, .06);
+            }
+
+            #AnimeThemesBrowserPage .ats-progress-header {
+                display: flex;
+                justify-content: space-between;
+                gap: 1rem;
+                margin-bottom: .5rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-progress-track {
+                height: .55rem;
+                overflow: hidden;
+                border-radius: 999px;
+                background: rgba(127, 127, 127, .2);
+            }
+
+            #AnimeThemesBrowserPage .ats-progress-bar {
+                width: 0%;
+                height: 100%;
+                border-radius: inherit;
+                background: currentColor;
+                transition: width .18s ease;
+            }
+
+            @media (max-width: 760px) {
+                #AnimeThemesBrowserPage .ats-browser-toolbar,
+                #AnimeThemesBrowserPage .ats-filters,
+                #AnimeThemesBrowserPage .ats-theme-card {
+                    grid-template-columns: 1fr;
+                }
+
+                #AnimeThemesBrowserPage .ats-hero-content {
+                    grid-template-columns: 5rem minmax(0, 1fr);
+                    min-height: 11rem;
+                }
+
+                #AnimeThemesBrowserPage .ats-poster-wrap {
+                    width: 5rem;
+                }
+
+                #AnimeThemesBrowserPage .ats-logo {
+                    max-height: 3.5rem;
+                }
             }
         </style>
-</div>
+    </div>
 </div>

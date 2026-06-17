@@ -12,105 +12,391 @@
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.06.17-c.</div>
+                <div class="fieldDescription">UI version: 2026.06.17-g.</div>
 
-                <div class="verticalSection">
-                    <div class="selectContainer">
+                <div class="verticalSection ats-browser-toolbar">
+                    <div class="inputContainer ats-search">
+                        <label class="inputLabel inputLabelUnfocused" for="AnimeThemesBrowserSearch">Search</label>
+                        <input id="AnimeThemesBrowserSearch" type="text" is="emby-input" autocomplete="off" />
+                    </div>
+                    <div class="selectContainer ats-item-select">
                         <label class="selectLabel" for="AnimeThemesBrowserItemSelect">Library Item</label>
                         <select is="emby-select" id="AnimeThemesBrowserItemSelect" class="emby-select-withcolor emby-select"></select>
                     </div>
-                    <div style="display: flex; gap: 1em; flex-wrap: wrap; align-items: center;">
-                        <button is="emby-button" type="button" class="raised emby-button" id="AnimeThemesBrowserRefreshItems">
-                            <span>Refresh Items</span>
+                    <div class="ats-toolbar-actions">
+                        <button is="emby-button" type="button" class="raised emby-button ats-action-button" id="AnimeThemesBrowserRefreshItems">
+                            <span>Refresh</span>
                         </button>
-                        <button is="emby-button" type="button" class="raised emby-button" id="AnimeThemesBrowserLoadThemes">
-                            <span>Load Themes</span>
+                        <button is="emby-button" type="button" class="raised emby-button ats-action-button" id="AnimeThemesBrowserLoadThemes">
+                            <span>Load</span>
                         </button>
-                        <button is="emby-button" type="button" class="raised emby-button" id="AnimeThemesBrowserDownload">
-                            <span>Download This Item</span>
+                        <button is="emby-button" type="button" class="raised emby-button ats-action-button" id="AnimeThemesBrowserDownload">
+                            <span>Download Item</span>
                         </button>
-                        <label class="emby-checkbox-label">
+                        <label class="emby-checkbox-label ats-force">
                             <input id="AnimeThemesBrowserForce" type="checkbox" is="emby-checkbox" />
                             <span>Force</span>
                         </label>
                     </div>
                 </div>
 
-                <div class="verticalSection">
-                    <h2 class="sectionTitle" id="AnimeThemesBrowserTitle">Themes</h2>
-                    <div id="AnimeThemesBrowserMeta" class="fieldDescription"></div>
-                    <div style="overflow-x: auto; margin-top: 1em;">
-                        <table class="detailTable" style="width: 100%; border-collapse: collapse;">
-                            <thead>
-                                <tr>
-                                    <th>Theme</th>
-                                    <th>Song</th>
-                                    <th>Artist</th>
-                                    <th>Episodes</th>
-                                    <th>Flags</th>
-                                    <th>Quality</th>
-                                    <th>Local</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="AnimeThemesBrowserRows"></tbody>
-                        </table>
+                <div class="verticalSection ats-filters">
+                    <div class="selectContainer">
+                        <label class="selectLabel" for="AnimeThemesBrowserTypeFilter">Type</label>
+                        <select is="emby-select" id="AnimeThemesBrowserTypeFilter" class="emby-select-withcolor emby-select">
+                            <option value="all">All</option>
+                            <option value="OP">OP</option>
+                            <option value="ED">ED</option>
+                        </select>
                     </div>
+                    <div class="selectContainer">
+                        <label class="selectLabel" for="AnimeThemesBrowserStatusFilter">Saved</label>
+                        <select is="emby-select" id="AnimeThemesBrowserStatusFilter" class="emby-select-withcolor emby-select">
+                            <option value="all">All</option>
+                            <option value="saved">Saved</option>
+                            <option value="missing">Missing</option>
+                        </select>
+                    </div>
+                    <div class="selectContainer">
+                        <label class="selectLabel" for="AnimeThemesBrowserFlagFilter">Flags</label>
+                        <select is="emby-select" id="AnimeThemesBrowserFlagFilter" class="emby-select-withcolor emby-select">
+                            <option value="all">All</option>
+                            <option value="spoiler">Spoiler</option>
+                            <option value="nsfw">NSFW</option>
+                            <option value="safe">No Spoiler/NSFW</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="verticalSection ats-progress" id="AnimeThemesBrowserProgress" style="display: none;">
+                    <div class="ats-progress-header">
+                        <span id="AnimeThemesBrowserProgressText">Preparing...</span>
+                        <span id="AnimeThemesBrowserProgressPercent">0%</span>
+                    </div>
+                    <div class="ats-progress-track">
+                        <div class="ats-progress-bar" id="AnimeThemesBrowserProgressBar"></div>
+                    </div>
+                </div>
+
+                <div class="verticalSection ats-hero" id="AnimeThemesBrowserHero">
+                    <div class="ats-backdrop" id="AnimeThemesBrowserBackdrop"></div>
+                    <div class="ats-hero-content">
+                        <div class="ats-poster-wrap">
+                            <img id="AnimeThemesBrowserPoster" class="ats-poster" alt="" />
+                            <div id="AnimeThemesBrowserPosterFallback" class="ats-poster-fallback">AT</div>
+                        </div>
+                        <div class="ats-title-block">
+                            <img id="AnimeThemesBrowserLogo" class="ats-logo" alt="" />
+                            <h2 class="sectionTitle" id="AnimeThemesBrowserTitle">Themes</h2>
+                            <div id="AnimeThemesBrowserMeta" class="fieldDescription"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="verticalSection">
+                    <div id="AnimeThemesBrowserRows" class="ats-theme-list"></div>
                 </div>
             </div>
         </div>
 
+        <div id="AnimeThemesBrowserPlayer" class="ats-player" aria-hidden="true">
+            <div class="ats-player-panel">
+                <div class="ats-player-header">
+                    <h3 id="AnimeThemesBrowserPlayerTitle">Playback</h3>
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AnimeThemesBrowserPlayerClose">
+                        <span>Close</span>
+                    </button>
+                </div>
+                <div id="AnimeThemesBrowserPlayerBody" class="ats-player-body"></div>
+            </div>
+        </div>
+
         <style>
-            #AnimeThemesBrowserPage th,
-            #AnimeThemesBrowserPage td {
-                border-bottom: 1px solid rgba(127, 127, 127, .28);
-                padding: .75em .6em;
-                text-align: left;
-                vertical-align: top;
+            #AnimeThemesBrowserPage .ats-browser-toolbar,
+            #AnimeThemesBrowserPage .ats-filters {
+                display: grid;
+                grid-template-columns: minmax(14rem, 1fr) minmax(16rem, 2fr) auto;
+                gap: 1rem;
+                align-items: end;
             }
 
-            #AnimeThemesBrowserPage .theme-status {
-                display: inline-block;
-                margin: 0 .35em .35em 0;
-                padding: .15em .45em;
-                border-radius: 4px;
-                background: rgba(127, 127, 127, .12);
+            #AnimeThemesBrowserPage .ats-filters {
+                grid-template-columns: repeat(3, minmax(10rem, 1fr));
+            }
+
+            #AnimeThemesBrowserPage .ats-toolbar-actions,
+            #AnimeThemesBrowserPage .ats-actions,
+            #AnimeThemesBrowserPage .ats-status-list {
+                display: flex;
+                gap: .5rem;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+
+            #AnimeThemesBrowserPage .ats-action-button,
+            #AnimeThemesBrowserPage .ats-button-secondary {
+                min-height: 2.6rem;
+                border: 1px solid rgba(127, 127, 127, .55) !important;
+                border-radius: 6px;
+                color: inherit;
+            }
+
+            #AnimeThemesBrowserPage .ats-button-secondary {
+                background: rgba(127, 127, 127, .08);
+            }
+
+            #AnimeThemesBrowserPage .ats-button-secondary:hover {
+                background: rgba(127, 127, 127, .18);
+            }
+
+            #AnimeThemesBrowserPage .ats-button-secondary:disabled,
+            #AnimeThemesBrowserPage .ats-action-button:disabled {
+                opacity: .45;
+            }
+
+            #AnimeThemesBrowserPage .ats-hero {
+                position: relative;
+                min-height: 15rem;
+                overflow: hidden;
+                border: 1px solid rgba(127, 127, 127, .26);
+                border-radius: 8px;
+                background: rgba(127, 127, 127, .08);
+            }
+
+            #AnimeThemesBrowserPage .ats-backdrop {
+                position: absolute;
+                inset: 0;
+                background-position: center;
+                background-size: cover;
+                opacity: .34;
+            }
+
+            #AnimeThemesBrowserPage .ats-hero-content {
+                position: relative;
+                display: grid;
+                grid-template-columns: 8rem minmax(0, 1fr);
+                gap: 1rem;
+                align-items: end;
+                min-height: 15rem;
+                padding: 1rem;
+                background: linear-gradient(90deg, rgba(0, 0, 0, .48), rgba(0, 0, 0, .12));
+            }
+
+            #AnimeThemesBrowserPage .ats-poster-wrap {
+                position: relative;
+                width: 8rem;
+                aspect-ratio: 2 / 3;
+                border-radius: 6px;
+                overflow: hidden;
+                border: 1px solid rgba(127, 127, 127, .4);
+                background: rgba(127, 127, 127, .16);
+            }
+
+            #AnimeThemesBrowserPage .ats-poster,
+            #AnimeThemesBrowserPage .ats-logo {
+                display: none;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+            #AnimeThemesBrowserPage .ats-logo {
+                width: auto;
+                max-width: min(26rem, 100%);
+                max-height: 5rem;
+                object-fit: contain;
+                object-position: left bottom;
+                margin-bottom: .5rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-poster-fallback {
+                display: grid;
+                place-items: center;
+                width: 100%;
+                height: 100%;
+                font-size: 1.6rem;
+                font-weight: 700;
+            }
+
+            #AnimeThemesBrowserPage .ats-theme-list {
+                display: grid;
+                gap: .75rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-theme-card {
+                display: grid;
+                grid-template-columns: minmax(0, 1.4fr) minmax(12rem, .8fr) minmax(16rem, 1fr);
+                gap: .75rem;
+                padding: .9rem;
                 border: 1px solid rgba(127, 127, 127, .28);
+                border-radius: 8px;
+                background: rgba(127, 127, 127, .06);
+            }
+
+            #AnimeThemesBrowserPage .ats-theme-main {
+                min-width: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-theme-key {
+                font-size: 1rem;
+                font-weight: 700;
+                margin-bottom: .35rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-song,
+            #AnimeThemesBrowserPage .ats-artist,
+            #AnimeThemesBrowserPage .ats-detail {
+                overflow-wrap: anywhere;
+            }
+
+            #AnimeThemesBrowserPage .ats-chip {
+                display: inline-flex;
+                align-items: center;
+                min-height: 1.65rem;
+                margin: 0 .35rem .35rem 0;
+                padding: .1rem .45rem;
+                border: 1px solid rgba(127, 127, 127, .42);
+                border-radius: 4px;
+                background: rgba(127, 127, 127, .1);
                 color: inherit;
                 white-space: nowrap;
             }
 
-            #AnimeThemesBrowserPage .theme-status.ok {
-                background: rgba(76, 175, 80, .14);
+            #AnimeThemesBrowserPage .ats-chip.ok {
                 border-color: rgba(76, 175, 80, .55);
+                background: rgba(76, 175, 80, .14);
             }
 
-            #AnimeThemesBrowserPage .theme-status.missing {
-                background: rgba(244, 67, 54, .1);
+            #AnimeThemesBrowserPage .ats-chip.missing {
                 border-color: rgba(244, 67, 54, .45);
+                background: rgba(244, 67, 54, .1);
             }
 
-            #AnimeThemesBrowserPage .theme-actions {
+            #AnimeThemesBrowserPage .ats-player {
+                display: none;
+                position: fixed;
+                inset: 0;
+                z-index: 9999;
+                padding: 1rem;
+                background: rgba(0, 0, 0, .7);
+                align-items: center;
+                justify-content: center;
+            }
+
+            #AnimeThemesBrowserPage .ats-player.open {
                 display: flex;
-                gap: .5em;
-                flex-wrap: wrap;
+            }
+
+            #AnimeThemesBrowserPage .ats-player-panel {
+                width: min(72rem, 100%);
+                max-height: 92vh;
+                border: 1px solid rgba(127, 127, 127, .45);
+                border-radius: 8px;
+                background: var(--theme-body-background, #202020);
+                color: inherit;
+                padding: 1rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-player-header {
+                display: flex;
+                justify-content: space-between;
+                gap: 1rem;
+                align-items: center;
+                margin-bottom: .75rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-player-header h3 {
+                margin: 0;
+                font-size: 1.1rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-player-body video,
+            #AnimeThemesBrowserPage .ats-player-body audio {
+                width: 100%;
+                max-height: 76vh;
+            }
+
+            #AnimeThemesBrowserPage .ats-progress {
+                border: 1px solid rgba(127, 127, 127, .28);
+                border-radius: 8px;
+                padding: .75rem;
+                background: rgba(127, 127, 127, .06);
+            }
+
+            #AnimeThemesBrowserPage .ats-progress-header {
+                display: flex;
+                justify-content: space-between;
+                gap: 1rem;
+                margin-bottom: .5rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-progress-track {
+                height: .55rem;
+                overflow: hidden;
+                border-radius: 999px;
+                background: rgba(127, 127, 127, .2);
+            }
+
+            #AnimeThemesBrowserPage .ats-progress-bar {
+                width: 0%;
+                height: 100%;
+                border-radius: inherit;
+                background: currentColor;
+                transition: width .18s ease;
+            }
+
+            @media (max-width: 760px) {
+                #AnimeThemesBrowserPage .ats-browser-toolbar,
+                #AnimeThemesBrowserPage .ats-filters,
+                #AnimeThemesBrowserPage .ats-theme-card {
+                    grid-template-columns: 1fr;
+                }
+
+                #AnimeThemesBrowserPage .ats-hero-content {
+                    grid-template-columns: 5rem minmax(0, 1fr);
+                    min-height: 11rem;
+                }
+
+                #AnimeThemesBrowserPage .ats-poster-wrap {
+                    width: 5rem;
+                }
+
+                #AnimeThemesBrowserPage .ats-logo {
+                    max-height: 3.5rem;
+                }
             }
         </style>
 
         <script>
             (function () {
                 var page = document.querySelector('#AnimeThemesBrowserPage');
+                var state = { items: [], filteredItems: [], currentItem: null, currentResult: null };
                 var itemSelect = page.querySelector('#AnimeThemesBrowserItemSelect');
-                var rowsBody = page.querySelector('#AnimeThemesBrowserRows');
+                var rowsContainer = page.querySelector('#AnimeThemesBrowserRows');
+                var searchInput = page.querySelector('#AnimeThemesBrowserSearch');
+                var typeFilter = page.querySelector('#AnimeThemesBrowserTypeFilter');
+                var statusFilter = page.querySelector('#AnimeThemesBrowserStatusFilter');
+                var flagFilter = page.querySelector('#AnimeThemesBrowserFlagFilter');
                 var title = page.querySelector('#AnimeThemesBrowserTitle');
                 var meta = page.querySelector('#AnimeThemesBrowserMeta');
+                var poster = page.querySelector('#AnimeThemesBrowserPoster');
+                var posterFallback = page.querySelector('#AnimeThemesBrowserPosterFallback');
+                var logo = page.querySelector('#AnimeThemesBrowserLogo');
+                var backdrop = page.querySelector('#AnimeThemesBrowserBackdrop');
+                var player = page.querySelector('#AnimeThemesBrowserPlayer');
+                var playerBody = page.querySelector('#AnimeThemesBrowserPlayerBody');
+                var playerTitle = page.querySelector('#AnimeThemesBrowserPlayerTitle');
+                var progressPanel = page.querySelector('#AnimeThemesBrowserProgress');
+                var progressText = page.querySelector('#AnimeThemesBrowserProgressText');
+                var progressPercent = page.querySelector('#AnimeThemesBrowserProgressPercent');
+                var progressBar = page.querySelector('#AnimeThemesBrowserProgressBar');
 
                 function value(obj, pascal, camel) {
                     return obj ? obj[pascal] !== undefined ? obj[pascal] : obj[camel] : null;
                 }
 
-                function text(value) {
-                    return value === null || value === undefined || value === '' ? '-' : String(value);
+                function text(raw) {
+                    return raw === null || raw === undefined || raw === '' ? '-' : String(raw);
                 }
 
                 function apiGet(path) {
@@ -121,20 +407,113 @@
                     return ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl(path), dataType: 'json' });
                 }
 
+                function apiUrl(path, authenticated) {
+                    var url = ApiClient.getUrl(path);
+                    if (!authenticated) {
+                        return url;
+                    }
+
+                    var token = getAccessToken();
+                    return token ? appendQuery(url, 'api_key', token) : url;
+                }
+
+                function getAccessToken() {
+                    try {
+                        if (typeof ApiClient.accessToken === 'function') {
+                            return ApiClient.accessToken.call(ApiClient);
+                        }
+
+                        if (typeof ApiClient.accessToken === 'string') {
+                            return ApiClient.accessToken;
+                        }
+
+                        var serverInfo = typeof ApiClient.serverInfo === 'function'
+                            ? ApiClient.serverInfo.call(ApiClient)
+                            : ApiClient.serverInfo || ApiClient._serverInfo;
+                        return serverInfo && (serverInfo.AccessToken || serverInfo.accessToken);
+                    } catch (err) {
+                        return null;
+                    }
+                }
+
+                function appendQuery(url, key, rawValue) {
+                    var separator = url.indexOf('?') === -1 ? '?' : '&';
+                    return url + separator + encodeURIComponent(key) + '=' + encodeURIComponent(rawValue);
+                }
+
+                function setProgress(visible, message, progress) {
+                    progressPanel.style.display = visible ? '' : 'none';
+                    var value = Math.max(0, Math.min(100, Math.round(progress || 0)));
+                    progressText.textContent = message || '';
+                    progressPercent.textContent = value + '%';
+                    progressBar.style.width = value + '%';
+                }
+
+                function getErrorMessage(err) {
+                    if (!err) return 'Unknown error';
+                    if (err.responseJSON && err.responseJSON.error) return err.responseJSON.error;
+                    if (err.responseText) return err.responseText;
+                    return String(err);
+                }
+
+                function setImage(img, path, fallback) {
+                    img.style.display = 'none';
+                    img.removeAttribute('src');
+                    if (fallback) fallback.style.display = '';
+                    if (!path) return;
+                    img.onload = function () {
+                        img.style.display = 'block';
+                        if (fallback) fallback.style.display = 'none';
+                    };
+                    img.onerror = function () {
+                        img.style.display = 'none';
+                        if (fallback) fallback.style.display = '';
+                    };
+                    img.src = apiUrl(path, false);
+                }
+
+                function setBackdrop(path) {
+                    backdrop.style.backgroundImage = path ? 'url("' + apiUrl(path, false) + '")' : '';
+                }
+
+                function selectedItem() {
+                    var id = itemSelect.value;
+                    return state.items.find(function (item) { return String(value(item, 'Id', 'id')) === id; }) || null;
+                }
+
+                function itemMatchesSearch(item) {
+                    var query = searchInput.value.trim().toLowerCase();
+                    if (!query) return true;
+                    return [
+                        value(item, 'Name', 'name'),
+                        value(item, 'AnimeThemesSlug', 'animeThemesSlug'),
+                        value(item, 'AniListId', 'aniListId'),
+                        value(item, 'MyAnimeListId', 'myAnimeListId')
+                    ].join(' ').toLowerCase().indexOf(query) !== -1;
+                }
+
+                function renderItemOptions() {
+                    var previous = itemSelect.value;
+                    state.filteredItems = state.items.filter(itemMatchesSearch);
+                    itemSelect.innerHTML = '';
+                    state.filteredItems.forEach(function (item) {
+                        var option = document.createElement('option');
+                        option.value = value(item, 'Id', 'id');
+                        option.textContent = text(value(item, 'Name', 'name')) + ' (' + text(value(item, 'Type', 'type')) + ')';
+                        itemSelect.appendChild(option);
+                    });
+                    if (previous && state.filteredItems.some(function (item) { return String(value(item, 'Id', 'id')) === previous; })) {
+                        itemSelect.value = previous;
+                    }
+                }
+
                 function loadItems() {
                     Dashboard.showLoadingMsg();
                     apiGet('AnimeThemesSync/Items').then(function (items) {
-                        itemSelect.innerHTML = '';
-                        (items || []).forEach(function (item) {
-                            var option = document.createElement('option');
-                            option.value = value(item, 'Id', 'id');
-                            option.textContent = text(value(item, 'Name', 'name')) + ' (' + text(value(item, 'Type', 'type')) + ')';
-                            itemSelect.appendChild(option);
-                        });
+                        state.items = items || [];
+                        renderItemOptions();
                         Dashboard.hideLoadingMsg();
-                        if (itemSelect.value) {
-                            loadThemes();
-                        }
+                        if (itemSelect.value) loadThemes();
                     }).catch(function (err) {
                         Dashboard.hideLoadingMsg();
                         Dashboard.alert({ title: 'Browser Error', message: 'Failed to load items: ' + err });
@@ -143,128 +522,316 @@
 
                 function loadThemes() {
                     var itemId = itemSelect.value;
-                    if (!itemId) {
-                        return;
-                    }
-
+                    if (!itemId) return;
+                    state.currentItem = selectedItem();
                     Dashboard.showLoadingMsg();
                     apiGet('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes').then(function (result) {
                         Dashboard.hideLoadingMsg();
-                        renderThemes(result || {});
+                        state.currentResult = result || {};
+                        renderHero();
+                        renderThemes();
                     }).catch(function (err) {
                         Dashboard.hideLoadingMsg();
                         Dashboard.alert({ title: 'Browser Error', message: 'Failed to load themes: ' + err });
                     });
                 }
 
-                function renderThemes(result) {
-                    var rows = value(result, 'Themes', 'themes') || [];
+                function renderHero() {
+                    var item = state.currentItem || {};
+                    var result = state.currentResult || {};
                     title.textContent = text(value(result, 'Name', 'name')) + ' - Themes';
+                    var name = value(result, 'Name', 'name') || value(item, 'Name', 'name') || 'AT';
+                    posterFallback.textContent = String(name).trim().slice(0, 2).toUpperCase();
+                    setImage(poster, value(item, 'PrimaryImageUrl', 'primaryImageUrl'), posterFallback);
+                    setImage(logo, value(item, 'LogoImageUrl', 'logoImageUrl'), null);
+                    setBackdrop(value(item, 'BackdropImageUrl', 'backdropImageUrl') || value(item, 'ThumbImageUrl', 'thumbImageUrl'));
+
+                    meta.innerHTML = '';
+                    var count = (value(result, 'Themes', 'themes') || []).length;
+                    var countSpan = document.createElement('span');
+                    countSpan.textContent = count + ' themes';
+                    meta.appendChild(countSpan);
                     var url = value(result, 'AnimeThemesUrl', 'animeThemesUrl');
-                    meta.textContent = '';
                     if (url) {
-                        var animeLink = document.createElement('a');
-                        animeLink.setAttribute('is', 'emby-linkbutton');
-                        animeLink.className = 'button-link';
-                        animeLink.target = '_blank';
-                        animeLink.rel = 'noopener';
-                        animeLink.href = url;
-                        animeLink.textContent = 'Open AnimeThemes';
-                        meta.appendChild(animeLink);
+                        var link = document.createElement('a');
+                        link.setAttribute('is', 'emby-linkbutton');
+                        link.className = 'button-link';
+                        link.target = '_blank';
+                        link.rel = 'noopener';
+                        link.href = url;
+                        link.textContent = 'Open AnimeThemes';
+                        meta.appendChild(document.createTextNode('  '));
+                        meta.appendChild(link);
+                    }
+                }
+
+                function rowMatches(row) {
+                    var query = searchInput.value.trim().toLowerCase();
+                    if (query) {
+                        var haystack = [
+                            value(row, 'ThemeKey', 'themeKey'),
+                            value(row, 'SongTitle', 'songTitle'),
+                            value(row, 'Artists', 'artists'),
+                            value(row, 'Episodes', 'episodes'),
+                            value(row, 'Labels', 'labels')
+                        ].join(' ').toLowerCase();
+                        if (haystack.indexOf(query) === -1) return false;
                     }
 
-                    rowsBody.innerHTML = '';
+                    var type = typeFilter.value;
+                    if (type !== 'all' && String(value(row, 'Type', 'type')).toUpperCase() !== type) return false;
+
+                    var saved = !!(value(row, 'BackdropExists', 'backdropExists') || value(row, 'ThemeMusicExists', 'themeMusicExists') || value(row, 'ExtraExists', 'extraExists'));
+                    if (statusFilter.value === 'saved' && !saved) return false;
+                    if (statusFilter.value === 'missing' && saved) return false;
+
+                    var spoiler = !!value(row, 'Spoiler', 'spoiler');
+                    var nsfw = !!value(row, 'Nsfw', 'nsfw');
+                    if (flagFilter.value === 'spoiler' && !spoiler) return false;
+                    if (flagFilter.value === 'nsfw' && !nsfw) return false;
+                    if (flagFilter.value === 'safe' && (spoiler || nsfw)) return false;
+                    return true;
+                }
+
+                function renderThemes() {
+                    var rows = (value(state.currentResult, 'Themes', 'themes') || []).filter(rowMatches);
+                    rowsContainer.innerHTML = '';
+                    if (!rows.length) {
+                        var empty = document.createElement('div');
+                        empty.className = 'fieldDescription';
+                        empty.textContent = 'No themes match the current filters.';
+                        rowsContainer.appendChild(empty);
+                        return;
+                    }
 
                     rows.forEach(function (row) {
-                        var tr = document.createElement('tr');
-                        var flags = [];
-                        if (value(row, 'Spoiler', 'spoiler')) flags.push('Spoiler');
-                        if (value(row, 'Nsfw', 'nsfw')) flags.push('NSFW');
-                        var labels = value(row, 'Labels', 'labels');
-                        if (labels) flags.push(labels);
-
-                        appendCell(tr, text(value(row, 'ThemeKey', 'themeKey')));
-                        appendCell(tr, text(value(row, 'SongTitle', 'songTitle')));
-                        appendCell(tr, text(value(row, 'Artists', 'artists')));
-                        appendCell(tr, text(value(row, 'Episodes', 'episodes')));
-                        appendCell(tr, text(flags.join(', ')));
-                        appendCell(tr, text(value(row, 'Quality', 'quality')));
-
-                        var localCell = document.createElement('td');
-                        addStatus(localCell, 'Video', value(row, 'BackdropExists', 'backdropExists'), value(row, 'BackdropPath', 'backdropPath'));
-                        addStatus(localCell, 'Audio', value(row, 'ThemeMusicExists', 'themeMusicExists'), value(row, 'ThemeMusicPath', 'themeMusicPath'));
-                        addStatus(localCell, 'Extras', value(row, 'ExtraExists', 'extraExists'), value(row, 'ExtraPath', 'extraPath'));
-                        tr.appendChild(localCell);
-
-                        var actionsCell = document.createElement('td');
-                        var actions = document.createElement('div');
-                        actions.className = 'theme-actions';
-                        actionsCell.appendChild(actions);
-                        tr.appendChild(actionsCell);
-                        addOpenButton(actions, 'Video', value(row, 'VideoUrl', 'videoUrl'));
-                        addOpenButton(actions, 'Audio', value(row, 'AudioUrl', 'audioUrl'));
-                        addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'));
-                        rowsBody.appendChild(tr);
+                        rowsContainer.appendChild(createThemeCard(row));
                     });
                 }
 
-                function appendCell(row, cellText) {
-                    var td = document.createElement('td');
-                    td.textContent = cellText;
-                    row.appendChild(td);
+                function createThemeCard(row) {
+                    var card = document.createElement('div');
+                    card.className = 'ats-theme-card';
+
+                    var main = document.createElement('div');
+                    main.className = 'ats-theme-main';
+                    appendDiv(main, 'ats-theme-key', padOrder(value(row, 'Order', 'order')) + ' - ' + text(value(row, 'ThemeKey', 'themeKey')));
+                    appendDiv(main, 'ats-song', text(value(row, 'SongTitle', 'songTitle')));
+                    appendDiv(main, 'ats-artist fieldDescription', text(value(row, 'Artists', 'artists')));
+                    card.appendChild(main);
+
+                    var detail = document.createElement('div');
+                    detail.className = 'ats-detail';
+                    appendDiv(detail, 'fieldDescription', 'Episodes: ' + text(value(row, 'Episodes', 'episodes')));
+                    appendDiv(detail, 'fieldDescription', 'Quality: ' + text(value(row, 'Quality', 'quality')));
+                    var flags = document.createElement('div');
+                    flags.className = 'ats-status-list';
+                    addFlagChips(flags, row);
+                    detail.appendChild(flags);
+                    card.appendChild(detail);
+
+                    var side = document.createElement('div');
+                    var status = document.createElement('div');
+                    status.className = 'ats-status-list';
+                    addStatus(status, 'Video', value(row, 'BackdropExists', 'backdropExists'), value(row, 'BackdropPath', 'backdropPath'));
+                    addStatus(status, 'Audio', value(row, 'ThemeMusicExists', 'themeMusicExists'), value(row, 'ThemeMusicPath', 'themeMusicPath'));
+                    addStatus(status, 'Extras', value(row, 'ExtraExists', 'extraExists'), value(row, 'ExtraPath', 'extraPath'));
+                    side.appendChild(status);
+
+                    var actions = document.createElement('div');
+                    actions.className = 'ats-actions';
+                    addDownloadButton(actions, row);
+                    addLocalVideoButton(actions, row);
+                    addPlayButton(actions, row, 'audio', 'Play Audio', value(row, 'SavedAudioPlayable', 'savedAudioPlayable'));
+                    addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'));
+                    side.appendChild(actions);
+                    card.appendChild(side);
+                    return card;
+                }
+
+                function appendDiv(parent, className, content) {
+                    var div = document.createElement('div');
+                    div.className = className;
+                    div.textContent = content;
+                    parent.appendChild(div);
+                }
+
+                function padOrder(order) {
+                    var number = parseInt(order || 0, 10);
+                    return number > 0 && number < 10 ? '0' + number : String(order || '-');
+                }
+
+                function addFlagChips(container, row) {
+                    if (value(row, 'Spoiler', 'spoiler')) addChip(container, 'Spoiler', '');
+                    if (value(row, 'Nsfw', 'nsfw')) addChip(container, 'NSFW', '');
+                    var labels = value(row, 'Labels', 'labels');
+                    if (labels) {
+                        String(labels).split(',').forEach(function (label) { addChip(container, label.trim(), ''); });
+                    }
                 }
 
                 function addStatus(container, label, exists, path) {
-                    var span = document.createElement('span');
-                    span.className = 'theme-status ' + (path && exists ? 'ok' : 'missing');
-                    span.textContent = label + ': ' + (!path ? 'not selected' : exists ? 'saved' : 'missing');
-                    if (!path) {
-                        container.appendChild(span);
-                        return;
-                    }
-
-                    span.title = path;
-                    container.appendChild(span);
+                    var chip = addChip(container, label + ': ' + (!path ? 'not selected' : exists ? 'saved' : 'missing'), exists ? 'ok' : 'missing');
+                    if (path) chip.title = path;
                 }
 
-                function addOpenButton(container, label, url) {
-                    if (!url) {
-                        return;
-                    }
+                function addChip(container, label, modifier) {
+                    var span = document.createElement('span');
+                    span.className = 'ats-chip' + (modifier ? ' ' + modifier : '');
+                    span.textContent = label;
+                    container.appendChild(span);
+                    return span;
+                }
 
+                function createButton(label, secondary) {
                     var button = document.createElement('button');
                     button.setAttribute('is', 'emby-button');
                     button.type = 'button';
-                    button.className = 'button-flat emby-button';
+                    button.className = secondary ? 'emby-button ats-button-secondary' : 'raised emby-button ats-action-button';
                     var labelSpan = document.createElement('span');
                     labelSpan.textContent = label;
                     button.appendChild(labelSpan);
+                    return button;
+                }
+
+                function addDownloadButton(container, row) {
+                    var button = createButton('Download', false);
+                    button.addEventListener('click', function () {
+                        downloadTheme(row);
+                    });
+                    container.appendChild(button);
+                }
+
+                function addLocalVideoButton(container, row) {
+                    var hasExtra = !!value(row, 'SavedExtraPlayable', 'savedExtraPlayable');
+                    var hasVideo = !!value(row, 'SavedVideoPlayable', 'savedVideoPlayable');
+                    var button = createButton('Play Video', true);
+                    button.disabled = !hasExtra && !hasVideo;
+                    button.title = hasExtra ? 'Plays the browseable extras file.' : hasVideo ? 'Plays the local theme video file.' : 'No local video has been saved.';
+                    button.addEventListener('click', function () {
+                        if (!button.disabled) openPlayer(row, hasExtra ? 'extra' : 'video');
+                    });
+                    container.appendChild(button);
+                }
+
+                function addPlayButton(container, row, target, label, playable) {
+                    var button = createButton(label, true);
+                    button.disabled = !playable;
+                    button.addEventListener('click', function () {
+                        if (!button.disabled) openPlayer(row, target);
+                    });
+                    container.appendChild(button);
+                }
+
+                function addOpenButton(container, label, url) {
+                    if (!url) return;
+                    var button = createButton(label, true);
                     button.addEventListener('click', function () {
                         window.open(url, '_blank', 'noopener');
                     });
                     container.appendChild(button);
                 }
 
+                function downloadTheme(row) {
+                    var itemId = itemSelect.value;
+                    var rowId = value(row, 'RowId', 'rowId');
+                    if (!itemId || !rowId) return;
+                    var force = page.querySelector('#AnimeThemesBrowserForce').checked;
+                    startDownloadJob('AnimeThemesSync/Jobs/ThemeDownload?ItemId=' + encodeURIComponent(itemId) + '&RowId=' + encodeURIComponent(rowId) + '&Force=' + force);
+                }
+
                 function downloadItem() {
                     var itemId = itemSelect.value;
-                    if (!itemId) {
-                        return;
-                    }
-
+                    if (!itemId) return;
                     var force = page.querySelector('#AnimeThemesBrowserForce').checked;
-                    Dashboard.showLoadingMsg();
-                    apiPost('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/DownloadThemes?force=' + force).then(function () {
-                        Dashboard.hideLoadingMsg();
-                        loadThemes();
+                    startDownloadJob('AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(itemId) + '&Force=' + force);
+                }
+
+                function startDownloadJob(path) {
+                    setProgress(true, 'Starting...', 0);
+                    apiPost(path).then(function (job) {
+                        pollDownloadJob(value(job, 'JobId', 'jobId'));
                     }).catch(function (err) {
-                        Dashboard.hideLoadingMsg();
-                        Dashboard.alert({ title: 'Download Error', message: 'Failed to download item: ' + err });
+                        setProgress(true, 'Failed to start: ' + getErrorMessage(err), 0);
+                        Dashboard.alert({ title: 'Download Error', message: 'Failed to start download: ' + getErrorMessage(err) });
                     });
                 }
 
+                function pollDownloadJob(jobId) {
+                    if (!jobId) {
+                        setProgress(true, 'Failed to start: no job id returned', 0);
+                        return;
+                    }
+
+                    apiGet('AnimeThemesSync/Jobs/' + encodeURIComponent(jobId)).then(function (job) {
+                        var status = value(job, 'Status', 'status');
+                        var progress = value(job, 'Progress', 'progress') || 0;
+                        var message = value(job, 'Message', 'message') || status || 'Running';
+                        setProgress(true, message, progress);
+                        if (status === 'Completed') {
+                            loadThemes();
+                            setTimeout(function () { setProgress(false, '', 0); }, 1600);
+                            return;
+                        }
+
+                        if (status === 'Failed') {
+                            var error = value(job, 'Error', 'error') || 'Download failed.';
+                            setProgress(true, error, progress);
+                            Dashboard.alert({ title: 'Download Error', message: error });
+                            return;
+                        }
+
+                        setTimeout(function () { pollDownloadJob(jobId); }, 1000);
+                    }).catch(function (err) {
+                        setProgress(true, 'Failed to read progress: ' + getErrorMessage(err), 0);
+                        Dashboard.alert({ title: 'Download Error', message: 'Failed to read download progress: ' + getErrorMessage(err) });
+                    });
+                }
+
+                function openPlayer(row, target) {
+                    var rowId = value(row, 'RowId', 'rowId');
+                    var itemId = itemSelect.value;
+                    state.lastFocus = document.activeElement;
+                    var src = apiUrl('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes/' + encodeURIComponent(rowId) + '/LocalMedia?target=' + encodeURIComponent(target) + '&_=' + Date.now(), true);
+                    playerTitle.textContent = text(value(row, 'ThemeKey', 'themeKey')) + ' - ' + target;
+                    playerBody.innerHTML = '';
+                    var element = document.createElement(target === 'audio' ? 'audio' : 'video');
+                    element.controls = true;
+                    element.autoplay = true;
+                    element.src = src;
+                    playerBody.appendChild(element);
+                    player.classList.add('open');
+                    player.setAttribute('aria-hidden', 'false');
+                }
+
+                function closePlayer() {
+                    if (player.contains(document.activeElement)) {
+                        document.activeElement.blur();
+                    }
+
+                    player.classList.remove('open');
+                    player.setAttribute('aria-hidden', 'true');
+                    playerBody.innerHTML = '';
+                    if (state.lastFocus && typeof state.lastFocus.focus === 'function') {
+                        state.lastFocus.focus();
+                    }
+                }
+
+                searchInput.addEventListener('input', function () {
+                    renderItemOptions();
+                    renderThemes();
+                });
+                typeFilter.addEventListener('change', renderThemes);
+                statusFilter.addEventListener('change', renderThemes);
+                flagFilter.addEventListener('change', renderThemes);
+                itemSelect.addEventListener('change', loadThemes);
                 page.querySelector('#AnimeThemesBrowserRefreshItems').addEventListener('click', loadItems);
                 page.querySelector('#AnimeThemesBrowserLoadThemes').addEventListener('click', loadThemes);
                 page.querySelector('#AnimeThemesBrowserDownload').addEventListener('click', downloadItem);
+                page.querySelector('#AnimeThemesBrowserPlayerClose').addEventListener('click', closePlayer);
+                player.addEventListener('click', function (event) {
+                    if (event.target === player) closePlayer();
+                });
                 page.addEventListener('pageshow', loadItems);
             })();
         </script>

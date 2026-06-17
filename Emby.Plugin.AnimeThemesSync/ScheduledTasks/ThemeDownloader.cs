@@ -18,6 +18,7 @@ using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
+using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Tasks;
@@ -101,6 +102,15 @@ public class ThemeDownloader : IScheduledTask
     /// <returns>The execution result.</returns>
     public async Task<ThemeDownloadExecutionResult> DownloadItemByIdAsync(Guid itemId, bool forceRedownload, CancellationToken cancellationToken)
     {
+        return await DownloadItemByIdAsync(itemId, forceRedownload, null, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ThemeDownloadExecutionResult> DownloadItemByIdAsync(
+        Guid itemId,
+        bool forceRedownload,
+        IProgress<double>? progress,
+        CancellationToken cancellationToken)
+    {
         var config = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
         if (!config.ThemeDownloadingEnabled)
         {
@@ -114,7 +124,7 @@ public class ThemeDownloader : IScheduledTask
         }
 
         _logger.LogInformation("Starting Anime Themes on-demand download for {ItemName} ({ItemId})...", item.Name, itemId);
-        return await ProcessItems(new[] { item }, config, forceRedownload || config.ForceRedownload, null, cancellationToken).ConfigureAwait(false);
+        return await ProcessItems(new[] { item }, config, forceRedownload || config.ForceRedownload, progress, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -131,8 +141,233 @@ public class ThemeDownloader : IScheduledTask
                 i is Series ? "Series" : "Movie",
                 i.ProviderIds.TryGetValue(Constants.AnimeThemesProviderId, out var slug) ? slug : null,
                 i.ProviderIds.TryGetValue(Constants.AniListProviderId, out var aniListId) ? aniListId : null,
-                i.ProviderIds.TryGetValue(Constants.MyAnimeListProviderId, out var malId) ? malId : null))
+                i.ProviderIds.TryGetValue(Constants.MyAnimeListProviderId, out var malId) ? malId : null,
+                BuildImageUrl(i, ImageType.Primary, "Primary"),
+                BuildImageUrl(i, ImageType.Logo, "Logo"),
+                BuildImageUrl(i, ImageType.Backdrop, "Backdrop/0"),
+                BuildImageUrl(i, ImageType.Thumb, "Thumb")))
             .ToList();
+    }
+
+    public async Task<ThemeDownloadExecutionResult> DownloadThemeByRowIdAsync(
+        Guid itemId,
+        string rowId,
+        bool forceRedownload,
+        CancellationToken cancellationToken)
+    {
+        return await DownloadThemeByRowIdAsync(itemId, rowId, forceRedownload, null, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ThemeDownloadExecutionResult> DownloadThemeByRowIdAsync(
+        Guid itemId,
+        string rowId,
+        bool forceRedownload,
+        IProgress<double>? progress,
+        CancellationToken cancellationToken)
+    {
+        var config = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
+        if (!config.ThemeDownloadingEnabled)
+        {
+            throw new InvalidOperationException("Theme downloading is disabled in plugin configuration.");
+        }
+
+        if (!config.AllowAdd)
+        {
+            throw new InvalidOperationException("Adding theme files is disabled in plugin configuration.");
+        }
+
+        var item = GetSupportedItem(itemId);
+        _logger.LogInformation("Starting Anime Themes theme-row download for {ItemName} ({ItemId}, RowId={RowId})...", item.Name, itemId, rowId);
+        progress?.Report(5);
+        var selection = await BuildSingleThemeSelectionAsync(item, rowId, cancellationToken).ConfigureAwait(false);
+        progress?.Report(20);
+        var audioConfig = CreateThemeConfig(item, config, isVideo: false);
+        var videoConfig = CreateThemeConfig(item, config, isVideo: true);
+        var plan = ThemeFilePlanner.BuildSingleCandidatePlan(
+            selection.Anime,
+            selection.Candidate,
+            selection.Order,
+            item.Path,
+            includeAudio: true,
+            includeVideo: true,
+            includeExtras: config.ExtrasEnabled);
+
+        var pendingMedia = plan.MediaFiles
+            .Where(file => forceRedownload || config.ForceRedownload || !_fileSystem.FileExists(file.Path))
+            .ToList();
+        var pendingExtras = plan.ExtraFiles
+            .Where(extra => forceRedownload || config.ForceRedownload || !_fileSystem.FileExists(extra.TargetPath))
+            .ToList();
+        var totalSteps = Math.Max(1, pendingMedia.Count + pendingExtras.Count);
+        var finishedSteps = 0;
+        var downloadsPlanned = 0;
+        var downloadsCompleted = 0;
+        foreach (var file in pendingMedia)
+        {
+            downloadsPlanned++;
+            var dir = Path.GetDirectoryName(file.Path);
+            if (dir != null && !_fileSystem.DirectoryExists(dir))
+            {
+                _ = Directory.CreateDirectory(dir);
+            }
+
+            _logger.LogInformation("Downloading AnimeThemes row media [{ItemName}] {Filename}", item.Name, Path.GetFileName(file.Path));
+            await DownloadFile(file.Url, file.Path, file.IsVideo ? videoConfig.Volume : audioConfig.Volume, cancellationToken).ConfigureAwait(false);
+            downloadsCompleted++;
+            finishedSteps++;
+            progress?.Report(20 + ((double)finishedSteps / totalSteps * 75));
+        }
+
+        var extrasPlanned = 0;
+        var extrasCompleted = 0;
+        var extraFailures = 0;
+        foreach (var extra in pendingExtras)
+        {
+            extrasPlanned++;
+            try
+            {
+                var result = ThemeExtrasFileService.EnsureExtraFileDetailed(
+                    extra.SourcePath,
+                    extra.TargetPath,
+                    config.ExtrasLinkMode,
+                    forceRedownload || config.ForceRedownload);
+                if (string.Equals(result.Action, "skipped", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                extrasCompleted++;
+                _logger.LogInformation(
+                    "Extras {Action} [{ItemName}] {Filename} (HardLinkVerified={HardLinkVerified}, LinkCount={LinkCount}, FallbackReason={FallbackReason})",
+                    result.Action,
+                    item.Name,
+                    Path.GetFileName(extra.TargetPath),
+                    result.HardLinkVerified,
+                    result.LinkCount,
+                    result.FallbackReason);
+            }
+            catch (Exception ex)
+            {
+                extraFailures++;
+                _logger.LogError(ex, "Failed to create extra for {ItemName}: {Path}", item.Name, extra.TargetPath);
+            }
+
+            finishedSteps++;
+            progress?.Report(20 + ((double)finishedSteps / totalSteps * 75));
+        }
+
+        progress?.Report(100);
+        return new ThemeDownloadExecutionResult(1, downloadsPlanned, downloadsCompleted, extrasPlanned, extrasCompleted, extraFailures);
+    }
+
+    public async Task<ThemeLocalMediaResult> GetLocalThemeMediaAsync(
+        Guid itemId,
+        string rowId,
+        string target,
+        CancellationToken cancellationToken)
+    {
+        var item = GetSupportedItem(itemId);
+        var result = await GetThemeBrowserItemAsync(itemId, cancellationToken).ConfigureAwait(false);
+        var row = result.Themes.FirstOrDefault(r => string.Equals(r.RowId, rowId, StringComparison.OrdinalIgnoreCase))
+            ?? throw new KeyNotFoundException("The requested theme row was not found.");
+
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            throw new InvalidOperationException("Local media target is required.");
+        }
+
+        var path = target.ToLowerInvariant() switch
+        {
+            "video" => row.BackdropExists ? row.BackdropPath : null,
+            "audio" => row.ThemeMusicExists ? row.ThemeMusicPath : null,
+            "extra" => row.ExtraExists ? row.ExtraPath : null,
+            _ => throw new InvalidOperationException("Unsupported local media target.")
+        };
+
+        if (string.IsNullOrWhiteSpace(path) || !_fileSystem.FileExists(path))
+        {
+            throw new FileNotFoundException("The requested local theme media was not found.");
+        }
+
+        ValidateLocalMediaPath(item.Path, path);
+        var extension = Path.GetExtension(path);
+        var contentType = extension.Equals(".mp3", StringComparison.OrdinalIgnoreCase)
+            ? "audio/mpeg"
+            : "video/webm";
+        return new ThemeLocalMediaResult(path, contentType, Path.GetFileName(path));
+    }
+
+    private static string? BuildImageUrl(BaseItem item, ImageType imageType, string imagePath)
+    {
+        return item.HasImage(imageType, 0)
+            ? string.Format(CultureInfo.InvariantCulture, "Items/{0}/Images/{1}", item.Id, imagePath)
+            : null;
+    }
+
+    private BaseItem GetSupportedItem(Guid itemId)
+    {
+        var item = _libraryManager.GetItemById(itemId) ?? throw new KeyNotFoundException("The requested item was not found.");
+        if (item is not Series && item is not Movie)
+        {
+            throw new InvalidOperationException("Only Series and Movie items are supported.");
+        }
+
+        return item;
+    }
+
+    private async Task<(AnimeThemesAnime Anime, ScoredCandidate Candidate, int Order)> BuildSingleThemeSelectionAsync(
+        BaseItem item,
+        string rowId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(rowId))
+        {
+            throw new InvalidOperationException("Theme row id is required.");
+        }
+
+        var anime = await ResolveAnime(item, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("No AnimeThemes resource was found for this item.");
+        if (anime.AnimeThemes == null)
+        {
+            throw new InvalidOperationException("No AnimeThemes themes were found for this item.");
+        }
+
+        var candidates = ThemeFilePlanner.GetBrowserCandidates(anime.AnimeThemes);
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            if (string.Equals(ThemeFilePlanner.BuildBrowserRowId(candidates[i]), rowId, StringComparison.OrdinalIgnoreCase))
+            {
+                return (anime, candidates[i], i + 1);
+            }
+        }
+
+        throw new KeyNotFoundException("The requested theme row was not found.");
+    }
+
+    private static void ValidateLocalMediaPath(string itemPath, string mediaPath)
+    {
+        var root = Path.GetFullPath(itemPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var fullPath = Path.GetFullPath(mediaPath);
+        if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The requested local media path is outside the library item.");
+        }
+
+        var extension = Path.GetExtension(fullPath);
+        if (!extension.Equals(".webm", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".mp3", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The requested local media type is not supported.");
+        }
+
+        var relative = fullPath[root.Length..];
+        var firstSegment = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).FirstOrDefault();
+        if (!string.Equals(firstSegment, "backdrops", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(firstSegment, "theme-music", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(firstSegment, "extras", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The requested local media path is not managed by AnimeThemes Sync.");
+        }
     }
 
     /// <summary>
@@ -558,55 +793,50 @@ public class ThemeDownloader : IScheduledTask
 
     private List<ThemeBrowserThemeRow> BuildBrowserRows(BaseItem item, AnimeThemesAnime anime, PluginConfiguration config)
     {
-        var audioConfig = CreateThemeConfig(item, config, isVideo: false);
-        var videoConfig = CreateThemeConfig(item, config, isVideo: true);
-        var plan = ThemeFilePlanner.BuildPlan(anime, item.Path, audioConfig, videoConfig, config.ExtrasEnabled);
-
-        var videoPlans = plan.MediaFiles
-            .Where(f => f.IsVideo)
-            .GroupBy(f => f.Url, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-        var audioPlans = plan.MediaFiles
-            .Where(f => !f.IsVideo)
-            .GroupBy(f => f.Url, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-        var extraPlans = plan.ExtraFiles
-            .GroupBy(f => f.SourcePath, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-
-        return ThemeScoringService.GetScoredCandidates(anime.AnimeThemes!, ignoreOp: false, ignoreEd: false, ignoreOverlaps: false, ignoreCredits: false)
-            .OrderBy(GetThemeTypeOrder)
-            .ThenBy(c => c.Theme.Sequence ?? int.MaxValue)
-            .ThenBy(c => c.Entry.Version ?? 1)
-            .ThenBy(c => c.Theme.Slug ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(c => c.Score)
-            .Select(c => BuildBrowserRow(c, anime, videoPlans, audioPlans, extraPlans))
+        return ThemeFilePlanner.GetBrowserCandidates(anime.AnimeThemes!)
+            .Select((c, index) =>
+            {
+                var order = index + 1;
+                var plan = ThemeFilePlanner.BuildSingleCandidatePlan(
+                    anime,
+                    c,
+                    order,
+                    item.Path,
+                    includeAudio: true,
+                    includeVideo: true,
+                    includeExtras: config.ExtrasEnabled);
+                return BuildBrowserRow(
+                    c,
+                    order,
+                    anime,
+                    plan.MediaFiles.FirstOrDefault(f => f.IsVideo),
+                    plan.MediaFiles.FirstOrDefault(f => !f.IsVideo),
+                    plan.ExtraFiles.FirstOrDefault());
+            })
             .ToList();
     }
 
     private ThemeBrowserThemeRow BuildBrowserRow(
         ScoredCandidate candidate,
+        int order,
         AnimeThemesAnime anime,
-        Dictionary<string, ThemeFilePlan> videoPlans,
-        Dictionary<string, ThemeFilePlan> audioPlans,
-        Dictionary<string, ThemeExtraPlan> extraPlans)
+        ThemeFilePlan? videoPlan,
+        ThemeFilePlan? audioPlan,
+        ThemeExtraPlan? extraPlan)
     {
-        var videoPlan = !string.IsNullOrWhiteSpace(candidate.Video.Link) &&
-                        videoPlans.TryGetValue(candidate.Video.Link, out var vp)
-            ? vp
-            : null;
         var audioUrl = candidate.Video.Audio?.Link ?? candidate.Video.Link;
-        var audioPlan = !string.IsNullOrWhiteSpace(audioUrl) &&
-                        audioPlans.TryGetValue(audioUrl, out var ap)
-            ? ap
-            : null;
-        var extraPlan = videoPlan != null && extraPlans.TryGetValue(videoPlan.Path, out var ep) ? ep : null;
         var labels = string.Join(", ", ThemeFilePlanner.BuildLabels(candidate));
         var animeThemesUrl = !string.IsNullOrWhiteSpace(anime.Slug)
             ? Constants.AnimeThemesWebUrl + "/anime/" + anime.Slug
             : null;
 
         return new ThemeBrowserThemeRow(
+            ThemeFilePlanner.BuildBrowserRowId(candidate),
+            order,
+            candidate.Theme.Id,
+            candidate.Entry.Id,
+            candidate.Video.Id,
+            candidate.Video.Audio?.Id,
             ThemeFilePlanner.BuildThemeKey(candidate),
             candidate.Theme.Type ?? "Theme",
             candidate.Theme.Sequence,
@@ -625,9 +855,12 @@ public class ThemeDownloader : IScheduledTask
             audioUrl,
             videoPlan?.Path,
             videoPlan != null && _fileSystem.FileExists(videoPlan.Path),
+            videoPlan != null && _fileSystem.FileExists(videoPlan.Path),
             audioPlan?.Path,
             audioPlan != null && _fileSystem.FileExists(audioPlan.Path),
+            audioPlan != null && _fileSystem.FileExists(audioPlan.Path),
             extraPlan?.TargetPath,
+            extraPlan != null && _fileSystem.FileExists(extraPlan.TargetPath),
             extraPlan != null && _fileSystem.FileExists(extraPlan.TargetPath),
             animeThemesUrl);
     }
@@ -768,7 +1001,7 @@ public class ThemeDownloader : IScheduledTask
     /// </summary>
     private async Task FfmpegProcess(string inputPath, string outputPath, int volume, bool isVideo, CancellationToken cancellationToken)
     {
-        var encoderPath = _mediaEncoder.FfmpegConfig?.EncoderPath;
+        var encoderPath = FfmpegPathResolver.ResolveEncoderPath(_mediaEncoder);
         if (string.IsNullOrEmpty(encoderPath))
         {
             _logger.LogWarning("FFmpeg not found. Copying raw file without conversion.");

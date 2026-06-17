@@ -9,7 +9,11 @@ public sealed record ThemeBrowserLibraryItem(
     string Type,
     string? AnimeThemesSlug,
     string? AniListId,
-    string? MyAnimeListId);
+    string? MyAnimeListId,
+    string? PrimaryImageUrl,
+    string? LogoImageUrl,
+    string? BackdropImageUrl,
+    string? ThumbImageUrl);
 
 public sealed record ThemeBrowserItemResult(
     Guid ItemId,
@@ -20,6 +24,12 @@ public sealed record ThemeBrowserItemResult(
     List<ThemeBrowserThemeRow> Themes);
 
 public sealed record ThemeBrowserThemeRow(
+    string RowId,
+    int Order,
+    int ThemeId,
+    int EntryId,
+    int VideoId,
+    int? AudioId,
     string ThemeKey,
     string Type,
     int? Sequence,
@@ -38,8 +48,16 @@ public sealed record ThemeBrowserThemeRow(
     string? AudioUrl,
     string? BackdropPath,
     bool BackdropExists,
+    bool SavedVideoPlayable,
     string? ThemeMusicPath,
     bool ThemeMusicExists,
+    bool SavedAudioPlayable,
     string? ExtraPath,
     bool ExtraExists,
+    bool SavedExtraPlayable,
     string? AnimeThemesUrl);
+
+public sealed record ThemeLocalMediaResult(
+    string Path,
+    string ContentType,
+    string FileName);
