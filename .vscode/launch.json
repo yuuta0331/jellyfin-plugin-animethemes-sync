@@ -1,19 +1,51 @@
 {
-    // Paths and plugin names are configured in settings.json
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "type": "coreclr",
-            "name": "Launch",
-            "request": "launch",
-            "preLaunchTask": "build-and-copy",
-            "program": "${config:jellyfinDir}/bin/Debug/net9.0/jellyfin.dll",
-            "args": [
-               //"--nowebclient"
-               "--webdir",
-               "${config:jellyfinWebDir}/dist/"
-            ],
-            "cwd": "${config:jellyfinDir}",
-        }
-    ]
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Jellyfin (Testy Debug)",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${config:jellyfinServerExe}",
+      "args": [
+        "--datadir",
+        "${config:jellyfinTestyDataDir}",
+        "--cachedir",
+        "${config:jellyfinTestyCacheDir}",
+        "--ffmpeg",
+        "${config:jellyfinFfmpegExe}"
+      ],
+      "cwd": "${config:jellyfinServerCwd}",
+      "stopAtEntry": false,
+      "console": "internalConsole",
+      "preLaunchTask": "prepare:jellyfin:f5"
+    },
+    {
+      "name": "Jellyfin (Testy Debug, No Deploy)",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${config:jellyfinServerExe}",
+      "args": [
+        "--datadir",
+        "${config:jellyfinTestyDataDir}",
+        "--cachedir",
+        "${config:jellyfinTestyCacheDir}",
+        "--ffmpeg",
+        "${config:jellyfinFfmpegExe}"
+      ],
+      "cwd": "${config:jellyfinServerCwd}",
+      "stopAtEntry": false,
+      "console": "internalConsole",
+      "preLaunchTask": "build:all"
+    },
+    {
+      "name": "Emby Server (Build Plugin Only)",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${config:embyServerExe}",
+      "cwd": "C:/Users/miyag/PApp/embyserver-win-x64-4.9.3.0/system",
+      "stopAtEntry": false,
+      "console": "internalConsole",
+      "preLaunchTask": "prepare:emby:debug"
+    }
+  ]
 }

@@ -1,76 +1,252 @@
 {
-  // Paths and plugin name are configured in settings.json
   "version": "2.0.0",
   "tasks": [
     {
-      // A chain task - build the plugin, then copy it to your
-      // jellyfin server's plugin directory
-      "label": "build-and-copy",
-      "dependsOrder": "sequence",
-      "dependsOn": [
-        "build",
-        "make-plugin-dir",
-        "copy-dll"
-      ]
-    },
-    {
-      // Build the plugin
-      "label": "build",
-      "command": "dotnet",
+      "label": "restore",
       "type": "shell",
+      "command": "dotnet",
       "args": [
-        "publish",
-        "--configuration=Debug",
-        "${workspaceFolder}/${config:pluginName}.sln",
-        "/property:GenerateFullPaths=true",
-        "/consoleloggerparameters:NoSummary"
+        "restore",
+        "${workspaceFolder}/Jellyfin.Plugin.AnimeThemesSync.sln"
       ],
-      "group": "build",
-      "presentation": {
-        "reveal": "silent"
-      },
       "problemMatcher": "$msCompile"
     },
     {
-      // Ensure the plugin directory exists before trying to use it
-      "label": "make-plugin-dir",
+      "label": "build:shared",
       "type": "shell",
-      "command": "mkdir",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/AnimeThemesSync.Shared/AnimeThemesSync.Shared.csproj",
+        "--configuration",
+        "Debug",
+        "-nologo"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build:jellyfin",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/Jellyfin.Plugin.AnimeThemesSync/Jellyfin.Plugin.AnimeThemesSync.csproj",
+        "--configuration",
+        "Debug",
+        "-nologo"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build:emby",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/Emby.Plugin.AnimeThemesSync/Emby.Plugin.AnimeThemesSync.csproj",
+        "--configuration",
+        "Debug",
+        "-nologo"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "deploy:emby",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "build:emby",
+        "copy:emby:system-plugin"
+      ],
+      "problemMatcher": [
+        "$armcc5"
+      ]
+    },
+    {
+      "label": "copy:emby:system-plugin",
+      "type": "process",
+      "command": "pwsh",
       "windows": {
+        "command": "pwsh",
         "args": [
-          "-Force",
-          "-Path",
-          "${config:jellyfinWindowsDataDir}/plugins/${config:pluginName}/"
+          "-NoProfile",
+          "-Command",
+          "$ErrorActionPreference = \"Stop\"; $pluginDll = \"${config:embyPluginDllPath}\"; $destDir = Split-Path $pluginDll -Parent; $srcDll = \"${workspaceFolder}/Emby.Plugin.AnimeThemesSync/bin/Debug/net8.0/Emby.Plugin.AnimeThemesSync.dll\"; New-Item -ItemType Directory -Path $destDir -Force | Out-Null; Copy-Item $srcDll -Destination $pluginDll -Force; if (-not (Test-Path $pluginDll)) { throw \"Missing plugin after copy: $pluginDll\" }"
         ]
       },
       "linux": {
+        "command": "bash",
         "args": [
-          "-p",
-          "${config:jellyfinLinuxDataDir}/plugins/${config:pluginName}/"
+          "-lc",
+          "plugin='${config:embyPluginDllPath}'; dest=$(dirname \"$plugin\"); src='${workspaceFolder}/Emby.Plugin.AnimeThemesSync/bin/Debug/net8.0/Emby.Plugin.AnimeThemesSync.dll'; mkdir -p \"$dest\" && cp -f \"$src\" \"$plugin\" && test -f \"$plugin\""
         ]
       }
     },
     {
-      // Copy the plugin dll to the jellyfin plugin install path
-      // This command copies every .dll from the build directory to the plugin dir
-      // Usually, you probablly only need ${config:pluginName}.dll
-      // But some plugins may bundle extra requirements
-      "label": "copy-dll",
-      "type": "shell",
-      "command": "cp",
+      "label": "start:emby",
+      "type": "process",
+      "command": "pwsh",
       "windows": {
+        "command": "pwsh",
         "args": [
-          "./${config:pluginName}/bin/Debug/net9.0/publish/*",
-          "${config:jellyfinWindowsDataDir}/plugins/${config:pluginName}/"
+          "-NoProfile",
+          "-Command",
+          "Start-Process -FilePath \"${config:embyServerExe}\""
         ]
       },
       "linux": {
+        "command": "bash",
         "args": [
-          "-r",
-          "./${config:pluginName}/bin/Debug/net9.0/publish/*",
-          "${config:jellyfinLinuxDataDir}/plugins/${config:pluginName}/"
+          "-lc",
+          "\"${config:embyServerExe}\" &"
         ]
       }
     },
+    {
+      "label": "restart:emby",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "stop:emby",
+        "deploy:emby",
+        "start:emby"
+      ]
+    },
+    {
+      "label": "prepare:emby:debug",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "stop:emby",
+        "deploy:emby"
+      ]
+    },
+    {
+      "label": "stop:emby",
+      "type": "process",
+      "command": "pwsh",
+      "windows": {
+        "command": "pwsh",
+        "args": [
+          "-NoProfile",
+          "-Command",
+          "$targets = Get-Process -Name EmbyServer, embytray -ErrorAction SilentlyContinue; foreach ($p in $targets) { try { Stop-Process -Id $p.Id -Force -ErrorAction Stop } catch { Write-Warning (\"Could not stop process {0} (PID {1}). Continuing.\" -f $p.ProcessName, $p.Id) } }; exit 0"
+        ]
+      },
+      "linux": {
+        "command": "bash",
+        "args": [
+          "-lc",
+          "pkill -f EmbyServer || true"
+        ]
+      }
+    },
+    {
+      "label": "build:tests",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/Jellyfin.Plugin.AnimeThemesSync.Tests/Jellyfin.Plugin.AnimeThemesSync.Tests.csproj",
+        "--configuration",
+        "Debug",
+        "-nologo"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build:all",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "build:shared",
+        "build:jellyfin",
+        "build:emby"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "publish:jellyfin",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "publish",
+        "${workspaceFolder}/Jellyfin.Plugin.AnimeThemesSync/Jellyfin.Plugin.AnimeThemesSync.csproj",
+        "--configuration",
+        "Debug",
+        "-p:CopyToTestyAfterBuild=false",
+        "-nologo"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "deploy:jellyfin:testy",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "build:jellyfin",
+        "copy:jellyfin:testy"
+      ]
+    },
+    {
+      "label": "show:build-outputs",
+      "type": "process",
+      "command": "pwsh",
+      "windows": {
+        "command": "pwsh",
+        "args": [
+          "-NoProfile",
+          "-Command",
+          "Write-Host \"\"; Write-Host \"===== Build Outputs =====\" -ForegroundColor Cyan; $jf = \"${workspaceFolder}/Jellyfin.Plugin.AnimeThemesSync/bin/Debug/net9.0/Jellyfin.Plugin.AnimeThemesSync.dll\"; $emby = \"${workspaceFolder}/Emby.Plugin.AnimeThemesSync/bin/Debug/net8.0/Emby.Plugin.AnimeThemesSync.dll\"; $shared = \"${workspaceFolder}/AnimeThemesSync.Shared/bin/Debug/netstandard2.1/AnimeThemesSync.Shared.dll\"; Write-Host (\"[Shared ] \" + $shared); Write-Host (\"[Jellyfin] \" + $jf); Write-Host (\"[Emby   ] \" + $emby); Write-Host \"\"; Write-Host \"===== Deploy Target =====\" -ForegroundColor Cyan; Write-Host (\"[Jellyfin Testy] ${config:jellyfinTestyDataDir}/plugins/${config:pluginName}\"); Write-Host (\"[Emby DLL ] ${config:embyPluginDllPath}\");"
+        ]
+      },
+      "linux": {
+        "command": "bash",
+        "args": [
+          "-lc",
+          "echo; echo '===== Build Outputs ====='; echo '[Shared ] ${workspaceFolder}/AnimeThemesSync.Shared/bin/Debug/netstandard2.1/AnimeThemesSync.Shared.dll'; echo '[Jellyfin] ${workspaceFolder}/Jellyfin.Plugin.AnimeThemesSync/bin/Debug/net9.0/Jellyfin.Plugin.AnimeThemesSync.dll'; echo '[Emby   ] ${workspaceFolder}/Emby.Plugin.AnimeThemesSync/bin/Debug/net8.0/Emby.Plugin.AnimeThemesSync.dll'; echo; echo '===== Deploy Target ====='; echo '[Jellyfin Linux] ${config:jellyfinLinuxDataDir}/plugins/${config:pluginName}'; echo '[Emby DLL ] ${config:embyPluginDllPath}'"
+        ]
+      }
+    },
+    {
+      "label": "prepare:f5",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "build:all",
+        "deploy:jellyfin:testy",
+        "deploy:emby",
+        "show:build-outputs"
+      ]
+    },
+    {
+      "label": "prepare:jellyfin:f5",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "build:shared",
+        "build:jellyfin",
+        "deploy:jellyfin:testy",
+        "show:build-outputs"
+      ]
+    },
+    {
+      "label": "copy:jellyfin:testy",
+      "type": "process",
+      "command": "pwsh",
+      "windows": {
+        "command": "pwsh",
+        "args": [
+          "-NoProfile",
+          "-Command",
+          "$pluginsRoot = \"${config:jellyfinTestyDataDir}/plugins\"; $src = \"${workspaceFolder}/Jellyfin.Plugin.AnimeThemesSync/bin/Debug/net9.0/Jellyfin.Plugin.AnimeThemesSync.dll\"; $versioned = Get-ChildItem $pluginsRoot -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'AnimeThemesSync_*' } | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($versioned) { $dest = $versioned.FullName } else { $dest = Join-Path $pluginsRoot \"${config:pluginName}\"; New-Item -ItemType Directory -Path $dest -Force | Out-Null }; Copy-Item $src -Destination (Join-Path $dest \"Jellyfin.Plugin.AnimeThemesSync.dll\") -Force; Write-Host (\"Copied to: \" + $dest)"
+        ]
+      },
+      "linux": {
+        "command": "bash",
+        "args": [
+          "-lc",
+          "dest='${config:jellyfinLinuxDataDir}/plugins/${config:pluginName}'; mkdir -p \"$dest\" && cp -f ${workspaceFolder}/Jellyfin.Plugin.AnimeThemesSync/bin/Debug/net9.0/Jellyfin.Plugin.AnimeThemesSync.dll \"$dest/Jellyfin.Plugin.AnimeThemesSync.dll\""
+        ]
+      }
+    }
   ]
 }

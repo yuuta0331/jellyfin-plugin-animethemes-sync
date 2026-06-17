@@ -14,6 +14,13 @@
     // However ${env:XDG_DATA_HOME} does not work in Visual Studio Code's development container!
     "jellyfinWindowsDataDir": "${env:LOCALAPPDATA}/jellyfin",
     "jellyfinLinuxDataDir": "$HOME/.local/share/jellyfin",
+    "jellyfinTestyDataDir": "C:/Users/miyag/PApp/jellyfin_10.11.6-amd64/Testy/data",
+    "jellyfinTestyCacheDir": "C:/Users/miyag/PApp/jellyfin_10.11.6-amd64/Testy/cache",
+    "jellyfinServerExe": "C:/Users/miyag/PApp/jellyfin_10.11.6-amd64/jellyfin/jellyfin.exe",
+    "jellyfinServerCwd": "C:/Users/miyag/PApp/jellyfin_10.11.6-amd64/jellyfin",
+    "jellyfinFfmpegExe": "C:/Users/miyag/PApp/jellyfin_10.11.6-amd64/jellyfin/ffmpeg.exe",
+    "embyServerExe": "C:/Users/miyag/PApp/embyserver-win-x64-4.9.3.0/system/EmbyServer.exe",
+    "embyPluginDllPath": "C:/Users/miyag/PApp/embyserver-win-x64-4.9.3.0/programdata/plugins/Emby.Plugin.AnimeThemesSync.dll",
     // The name of the plugin
-    "pluginName": "Jellyfin.Plugin.AnimeThemesSync",
+    "pluginName": "Jellyfin.Plugin.AnimeThemesSync"
 }
