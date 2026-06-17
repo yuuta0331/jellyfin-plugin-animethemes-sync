@@ -90,9 +90,9 @@ public class ThemeDownloader : IScheduledTask
         // ── Phase 1: Resolve all items sequentially (API calls are rate-limited) ──
         _logger.LogInformation("=== Phase 1: Resolving themes for {Count} items ===", items.Count);
 
-        // Each entry: (TargetPath, Url, IsVideo, Volume, ItemName)
-        var allDownloads = new List<(string Path, string Url, bool IsVideo, int Volume, string ItemName)>();
-        var cleanupTasks = new List<(string Directory, Dictionary<string, (string Url, bool IsVideo)> DesiredFiles, List<AnimeThemesTheme> Themes)>();
+        var allDownloads = new List<(ThemeFilePlan File, int Volume, string ItemName)>();
+        var allExtras = new List<(ThemeExtraPlan Extra, string ItemName)>();
+        var cleanupTasks = new List<(string Directory, HashSet<string> DesiredFiles, List<AnimeThemesTheme> Themes)>();
 
         for (var i = 0; i < items.Count; i++)
         {
@@ -111,26 +111,50 @@ public class ThemeDownloader : IScheduledTask
             var result = await ResolveItem(item, audioConfig, videoConfig, cancellationToken).ConfigureAwait(false);
             if (result != null)
             {
-                foreach (var file in result.Value.DesiredFiles)
+                if (config.AllowAdd)
                 {
-                    var volume = file.Value.IsVideo ? videoConfig.Volume : audioConfig.Volume;
-                    if (config.ForceRedownload || !_fileSystem.FileExists(file.Key))
+                    foreach (var file in result.MediaFiles)
                     {
-                        allDownloads.Add((file.Key, file.Value.Url, file.Value.IsVideo, volume, itemName));
+                        var volume = file.IsVideo ? videoConfig.Volume : audioConfig.Volume;
+                        if (config.ForceRedownload || !_fileSystem.FileExists(file.Path))
+                        {
+                            allDownloads.Add((file, volume, itemName));
+                        }
+                    }
+
+                    foreach (var extra in result.ExtraFiles)
+                    {
+                        if (config.ForceRedownload || !_fileSystem.FileExists(extra.TargetPath))
+                        {
+                            allExtras.Add((extra, itemName));
+                        }
                     }
                 }
 
                 // Queue cleanup tasks
-                if (config.AllowDelete && result.Value.Themes != null)
+                if (config.AllowDelete && result.Themes != null)
                 {
                     var themeMusicPath = Path.Combine(item.Path, "theme-music");
                     var backdropsPath = Path.Combine(item.Path, "backdrops");
-                    cleanupTasks.Add((themeMusicPath, result.Value.DesiredFiles, result.Value.Themes));
-                    cleanupTasks.Add((backdropsPath, result.Value.DesiredFiles, result.Value.Themes));
+                    var extrasPath = Path.Combine(item.Path, "extras");
+                    cleanupTasks.Add((themeMusicPath, result.MediaFiles.Where(f => !f.IsVideo).Select(f => f.Path).ToHashSet(StringComparer.OrdinalIgnoreCase), result.Themes));
+                    cleanupTasks.Add((backdropsPath, result.MediaFiles.Where(f => f.IsVideo).Select(f => f.Path).ToHashSet(StringComparer.OrdinalIgnoreCase), result.Themes));
+                    cleanupTasks.Add((extrasPath, result.ExtraFiles.Select(f => f.TargetPath).ToHashSet(StringComparer.OrdinalIgnoreCase), result.Themes));
                 }
             }
 
             progress?.Report((double)(i + 1) / items.Count * 50); // Phase 1 = 0-50%
+        }
+
+        _logger.LogInformation(
+            "Extras configuration: Enabled={ExtrasEnabled}, LinkMode={ExtrasLinkMode}, Planned={PlannedExtras}",
+            config.ExtrasEnabled,
+            config.ExtrasLinkMode,
+            allExtras.Count);
+
+        if (!config.ExtrasEnabled)
+        {
+            _logger.LogInformation("Browseable OP/ED extras are disabled. Enable \"Create Browseable OP/ED Extras\" to create the extras folder.");
         }
 
         // ── Phase 2: Download all files in parallel ──
@@ -156,7 +180,7 @@ public class ThemeDownloader : IScheduledTask
                     {
                         try
                         {
-                            var dir = Path.GetDirectoryName(dl.Path);
+                            var dir = Path.GetDirectoryName(dl.File.Path);
                             if (dir != null && !_fileSystem.DirectoryExists(dir))
                             {
                                 _ = Directory.CreateDirectory(dir);
@@ -167,9 +191,9 @@ public class ThemeDownloader : IScheduledTask
                             {
                                 try
                                 {
-                                    _logger.LogDebug("Downloading [{ItemName}] {Filename}...", dl.ItemName, Path.GetFileName(dl.Path));
-                                    await DownloadFile(dl.Url, dl.Path, dl.Volume, cancellationToken).ConfigureAwait(false);
-                                    _logger.LogInformation("Downloaded [{ItemName}] {Filename}", dl.ItemName, Path.GetFileName(dl.Path));
+                                    _logger.LogDebug("Downloading [{ItemName}] {Filename}...", dl.ItemName, Path.GetFileName(dl.File.Path));
+                                    await DownloadFile(dl.File.Url, dl.File.Path, dl.Volume, cancellationToken).ConfigureAwait(false);
+                                    _logger.LogInformation("Downloaded [{ItemName}] {Filename}", dl.ItemName, Path.GetFileName(dl.File.Path));
                                     break;
                                 }
                                 catch (OperationCanceledException)
@@ -180,12 +204,12 @@ public class ThemeDownloader : IScheduledTask
                                 {
                                     if (attempt < MaxRetries)
                                     {
-                                        _logger.LogWarning(ex, "Download attempt {Attempt}/{MaxRetries} failed for {Url}. Retrying...", attempt, MaxRetries, dl.Url);
+                                        _logger.LogWarning(ex, "Download attempt {Attempt}/{MaxRetries} failed for {Url}. Retrying...", attempt, MaxRetries, dl.File.Url);
                                         await Task.Delay(TimeSpan.FromSeconds(attempt * 2), cancellationToken).ConfigureAwait(false);
                                     }
                                     else
                                     {
-                                        _logger.LogError(ex, "Download failed after {MaxRetries} attempts for {Url}. Skipping file.", MaxRetries, dl.Url);
+                                        _logger.LogError(ex, "Download failed after {MaxRetries} attempts for {Url}. Skipping file.", MaxRetries, dl.File.Url);
                                     }
                                 }
                             }
@@ -201,6 +225,32 @@ public class ThemeDownloader : IScheduledTask
             }
 
             await Task.WhenAll(downloadTasks).ConfigureAwait(false);
+        }
+
+        // ── Extras ──
+        foreach (var extra in allExtras)
+        {
+            try
+            {
+                var result = ThemeExtrasFileService.EnsureExtraFileDetailed(
+                    extra.Extra.SourcePath,
+                    extra.Extra.TargetPath,
+                    config.ExtrasLinkMode,
+                    config.ForceRedownload);
+
+                _logger.LogInformation(
+                    "Extras {Action} [{ItemName}] {Filename} (HardLinkVerified={HardLinkVerified}, LinkCount={LinkCount}, FallbackReason={FallbackReason})",
+                    result.Action,
+                    extra.ItemName,
+                    Path.GetFileName(extra.Extra.TargetPath),
+                    result.HardLinkVerified,
+                    result.LinkCount,
+                    result.FallbackReason);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to create extras file: {Path}", extra.Extra.TargetPath);
+            }
         }
 
         // ── Cleanup ──
@@ -346,7 +396,7 @@ public class ThemeDownloader : IScheduledTask
     /// Resolves a single library item to determine its desired theme files.
     /// Returns null if the item cannot be resolved.
     /// </summary>
-    private async Task<(Dictionary<string, (string Url, bool IsVideo)> DesiredFiles, List<AnimeThemesTheme> Themes)?> ResolveItem(
+    private async Task<ThemeOutputPlan?> ResolveItem(
         BaseItem item,
         ThemeConfig audioConfig,
         ThemeConfig videoConfig,
@@ -403,109 +453,8 @@ public class ThemeDownloader : IScheduledTask
             return null;
         }
 
-        var backdropsPath = Path.Combine(item.Path, "backdrops");
-        var themeMusicPath = Path.Combine(item.Path, "theme-music");
-
-        // Determine desired files: Key = Destination Path, Value = (URL, IsVideo)
-        var desiredFiles = new Dictionary<string, (string Url, bool IsVideo)>();
-
-        CollectDesiredFiles(desiredFiles, anime, videoConfig, backdropsPath, isVideo: true);
-        CollectDesiredFiles(desiredFiles, anime, audioConfig, themeMusicPath, isVideo: false);
-
-        return (desiredFiles, anime.AnimeThemes);
-    }
-
-    /// <summary>
-    /// Collects desired files for either audio or video themes, iterating at the entry level.
-    /// </summary>
-    private void CollectDesiredFiles(
-        Dictionary<string, (string Url, bool IsVideo)> desiredFiles,
-        AnimeThemesAnime anime,
-        ThemeConfig config,
-        string targetDir,
-        bool isVideo)
-    {
-        if (config.MaxThemes <= 0 || anime.AnimeThemes == null)
-        {
-            return;
-        }
-
-        var mediaType = isVideo ? "Video" : "Audio";
-
-        // Get all scored candidates at the entry level
-        var candidates = ThemeScoringService.GetScoredCandidates(
-            anime.AnimeThemes,
-            config.IgnoreOp,
-            config.IgnoreEd,
-            config.IgnoreOverlaps,
-            config.IgnoreCredits);
-
-        // Log all candidates for debugging
-        _logger.LogInformation(
-            "[{MediaType}] {Count} candidate entries found (MaxThemes={Max})",
-            mediaType,
-            candidates.Count,
-            config.MaxThemes);
-
-        foreach (var c in candidates)
-        {
-            var versionLabel = c.Entry.Version > 1
-                ? string.Format(CultureInfo.InvariantCulture, "v{0}", c.Entry.Version)
-                : "v1";
-
-            _logger.LogInformation(
-                "  [{MediaType}] {Slug} {Version} | {Basename} | Score={Score} ({Breakdown})",
-                mediaType,
-                c.Theme.Slug ?? c.Theme.Type ?? "?",
-                versionLabel,
-                c.Video.Basename ?? "?",
-                c.Score,
-                ThemeScoringService.GetScoreBreakdown(c.Entry, c.Video));
-        }
-
-        // Select up to MaxThemes entries
-        var count = 0;
-        foreach (var candidate in candidates)
-        {
-            if (count >= config.MaxThemes)
-            {
-                break;
-            }
-
-            var slug = candidate.Theme.Slug ?? candidate.Theme.Type;
-            var versionSuffix = candidate.Entry.Version > 1
-                ? string.Format(CultureInfo.InvariantCulture, "v{0}", candidate.Entry.Version)
-                : string.Empty;
-
-            string? link;
-            string filename;
-            if (isVideo)
-            {
-                link = candidate.Video.Link;
-                filename = $"{slug}{versionSuffix}-video.webm";
-            }
-            else
-            {
-                link = candidate.Video.Audio?.Link ?? candidate.Video.Link;
-                filename = $"{slug}{versionSuffix}.mp3";
-            }
-
-            if (!string.IsNullOrEmpty(link))
-            {
-                var path = Path.Combine(targetDir, filename);
-                if (!desiredFiles.ContainsKey(path))
-                {
-                    desiredFiles.Add(path, (link!, isVideo));
-                    count++;
-
-                    _logger.LogInformation(
-                        "  → Selected [{MediaType}] {Filename} (Score={Score})",
-                        mediaType,
-                        filename,
-                        candidate.Score);
-                }
-            }
-        }
+        var config = Plugin.Instance?.Configuration;
+        return ThemeFilePlanner.BuildPlan(anime, item.Path, audioConfig, videoConfig, config?.ExtrasEnabled ?? false);
     }
 
     /// <summary>
@@ -513,7 +462,7 @@ public class ThemeDownloader : IScheduledTask
     /// </summary>
     private void CleanupDirectory(
         string directory,
-        Dictionary<string, (string Url, bool IsVideo)> desiredFiles,
+        HashSet<string> desiredFiles,
         List<AnimeThemesTheme> themes)
     {
         if (!_fileSystem.DirectoryExists(directory))
@@ -523,13 +472,12 @@ public class ThemeDownloader : IScheduledTask
 
         foreach (var file in _fileSystem.GetFilePaths(directory, false))
         {
-            if (desiredFiles.ContainsKey(file))
+            if (desiredFiles.Contains(file))
             {
                 continue;
             }
 
-            var filename = Path.GetFileName(file);
-            if (themes.Any(t => !string.IsNullOrEmpty(t.Slug) && filename.Contains(t.Slug, StringComparison.OrdinalIgnoreCase)))
+            if (ThemeFilePlanner.IsPluginOwnedFile(file, themes))
             {
                 _logger.LogInformation("Deleting unwanted theme file: {Path}", file);
                 _fileSystem.DeleteFile(file);

@@ -71,7 +71,8 @@ public sealed class AnimeThemesService
     /// <returns>The found anime or null.</returns>
     public async Task<AnimeThemesAnime?> GetAnimeBySlug(string slug, CancellationToken cancellationToken)
     {
-        var url = $"{Constants.AnimeThemesBaseUrl}/anime/{slug}?include=images,resources,animethemes.animethemeentries.videos.audio";
+        const string Include = "images,resources,animethemes.animethemeentries.videos.audio,animethemes.group,animethemes.song,animethemes.song.artists,animethemes.song.performances.artist";
+        var url = $"{Constants.AnimeThemesBaseUrl}/anime/{slug}?include={Include}";
         return await GetAnimeFromUrl(url, cancellationToken).ConfigureAwait(false);
     }
 

@@ -84,6 +84,30 @@
                                 folders if they match AnimeThemes naming convention but are no longer desired.
                             </div>
                         </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="ExtrasEnabled" name="ExtrasEnabled" type="checkbox" is="emby-checkbox" />
+                                <span>Create Browseable OP/ED Extras</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Creates rich display names in the `extras` folder so OP/ED videos can be opened from
+                                the normal Extras/Special Features area. Theme videos still remain in `backdrops`.
+                            </div>
+                        </div>
+
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="ExtrasLinkMode">Extras File Mode</label>
+                            <select is="emby-select" id="ExtrasLinkMode" name="ExtrasLinkMode" class="emby-select-withcolor emby-select">
+                                <option value="0">Hard link, copy if unavailable</option>
+                                <option value="1">Hard link only</option>
+                                <option value="2">Copy only</option>
+                            </select>
+                            <div class="fieldDescription">
+                                Hard links save disk space. Copy fallback is useful when the media folder and extras
+                                folder are on file systems that do not support hard links.
+                            </div>
+                        </div>
                     </div>
 
                     <div class="verticalSection">
@@ -552,6 +576,13 @@
                         }
                     }
 
+                    var extrasLinkMode = document.querySelector('#ExtrasLinkMode');
+                    if (extrasLinkMode) {
+                        extrasLinkMode.addEventListener('change', function () {
+                            document.querySelector('#ExtrasEnabled').checked = true;
+                        });
+                    }
+
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId).then(function (config) {
                         try {
@@ -564,6 +595,8 @@
                             document.querySelector('#AllowAdd').checked = getValue(config, 'AllowAdd', true);
                             document.querySelector('#ForceRedownload').checked = getValue(config, 'ForceRedownload', false);
                             document.querySelector('#AllowDelete').checked = getValue(config, 'AllowDelete', false);
+                            document.querySelector('#ExtrasEnabled').checked = getValue(config, 'ExtrasEnabled', false);
+                            document.querySelector('#ExtrasLinkMode').value = normalizeExtrasLinkMode(getValue(config, 'ExtrasLinkMode', 0));
                             document.querySelector('#TagsEnabled').checked = getValue(config, 'TagsEnabled', true);
 
                             // Initialize Toggle
@@ -633,7 +666,9 @@
 
             document.querySelector('#RunTaskButton').addEventListener('click', function () {
                 Dashboard.showLoadingMsg();
-                ApiClient.getScheduledTasks().then(function (tasks) {
+                saveCurrentConfiguration(false).then(function () {
+                    return ApiClient.getScheduledTasks();
+                }).then(function (tasks) {
                     var task = tasks.find(function (t) {
                         return t.Key === 'AnimeThemesSyncDownloader';
                     });
@@ -652,8 +687,8 @@
                     }
                 }).catch(function (err) {
                     Dashboard.hideLoadingMsg();
-                    console.error('Failed to list scheduled tasks: ', err);
-                    Dashboard.alert({ message: 'Failed to retrieve scheduled tasks. ' + err, title: 'Task Error' });
+                    console.error('Failed to save configuration or start task: ', err);
+                    Dashboard.alert({ message: 'Failed to save configuration or start task: ' + err, title: 'Task Error' });
                 });
             });
 
@@ -661,66 +696,83 @@
                 .addEventListener('submit', function (e) {
                     e.preventDefault();
                     Dashboard.showLoadingMsg();
-                    ApiClient.getPluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId).then(function (config) {
-                        // Global
-                        config.ThemeDownloadingEnabled = document.querySelector('#ThemeDownloadingEnabled').checked;
-                        config.MaxConcurrentDownloads = parseInt(document.querySelector('#MaxConcurrentDownloads').value) || 1;
-                        config.DownloadTimeoutSeconds = parseInt(document.querySelector('#DownloadTimeoutSeconds').value) || 600;
-                        config.AllowAdd = document.querySelector('#AllowAdd').checked;
-                        config.ForceRedownload = document.querySelector('#ForceRedownload').checked;
-                        config.AllowDelete = document.querySelector('#AllowDelete').checked;
-                        config.TagsEnabled = document.querySelector('#TagsEnabled').checked;
-                        config.TagFormat = document.querySelector('#TagFormat').value;
-                        config.TagSeasonSpring = document.querySelector('#TagSeasonSpring').value;
-                        config.TagSeasonSummer = document.querySelector('#TagSeasonSummer').value;
-                        config.TagSeasonFall = document.querySelector('#TagSeasonFall').value;
-                        config.TagSeasonWinter = document.querySelector('#TagSeasonWinter').value;
-
-                        // Series Audio
-                        config.SeriesAudioMaxThemes = parseInt(document.querySelector('#SeriesAudioMaxThemes').value) || 0;
-                        config.SeriesAudioVolume = parseInt(document.querySelector('#SeriesAudioVolume').value) || 0;
-                        config.SeriesAudioIgnoreOp = document.querySelector('#SeriesAudioIgnoreOp').checked;
-                        config.SeriesAudioIgnoreEd = document.querySelector('#SeriesAudioIgnoreEd').checked;
-                        config.SeriesAudioIgnoreOverlaps = document.querySelector('#SeriesAudioIgnoreOverlaps').checked;
-                        config.SeriesAudioIgnoreCredits = document.querySelector('#SeriesAudioIgnoreCredits').checked;
-
-                        // Series Video
-                        config.SeriesVideoMaxThemes = parseInt(document.querySelector('#SeriesVideoMaxThemes').value) || 0;
-                        config.SeriesVideoVolume = parseInt(document.querySelector('#SeriesVideoVolume').value) || 0;
-                        config.SeriesVideoIgnoreOp = document.querySelector('#SeriesVideoIgnoreOp').checked;
-                        config.SeriesVideoIgnoreEd = document.querySelector('#SeriesVideoIgnoreEd').checked;
-                        config.SeriesVideoIgnoreOverlaps = document.querySelector('#SeriesVideoIgnoreOverlaps').checked;
-                        config.SeriesVideoIgnoreCredits = document.querySelector('#SeriesVideoIgnoreCredits').checked;
-
-                        // Movie Audio
-                        config.MovieAudioMaxThemes = parseInt(document.querySelector('#MovieAudioMaxThemes').value) || 0;
-                        config.MovieAudioVolume = parseInt(document.querySelector('#MovieAudioVolume').value) || 0;
-                        config.MovieAudioIgnoreOp = document.querySelector('#MovieAudioIgnoreOp').checked;
-                        config.MovieAudioIgnoreEd = document.querySelector('#MovieAudioIgnoreEd').checked;
-                        config.MovieAudioIgnoreOverlaps = document.querySelector('#MovieAudioIgnoreOverlaps').checked;
-                        config.MovieAudioIgnoreCredits = document.querySelector('#MovieAudioIgnoreCredits').checked;
-
-                        // Movie Video
-                        config.MovieVideoMaxThemes = parseInt(document.querySelector('#MovieVideoMaxThemes').value) || 0;
-                        config.MovieVideoVolume = parseInt(document.querySelector('#MovieVideoVolume').value) || 0;
-                        config.MovieVideoIgnoreOp = document.querySelector('#MovieVideoIgnoreOp').checked;
-                        config.MovieVideoIgnoreEd = document.querySelector('#MovieVideoIgnoreEd').checked;
-                        config.MovieVideoIgnoreOverlaps = document.querySelector('#MovieVideoIgnoreOverlaps').checked;
-                        config.MovieVideoIgnoreCredits = document.querySelector('#MovieVideoIgnoreCredits').checked;
-
-                        ApiClient.updatePluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId, config).then(function (result) {
-                            Dashboard.processPluginConfigurationUpdateResult(result);
-                        }).catch(function (err) {
-                            Dashboard.hideLoadingMsg();
-                            Dashboard.alert({ message: 'Failed to save configuration: ' + err, title: 'Save Error' });
-                        });
-                    }).catch(function (err) {
+                    saveCurrentConfiguration(true).catch(function (err) {
                         Dashboard.hideLoadingMsg();
-                        Dashboard.alert({ message: 'Failed to retrieve configuration for saving: ' + err, title: 'Save Error' });
+                        Dashboard.alert({ message: 'Failed to save configuration: ' + err, title: 'Save Error' });
                     });
 
                     return false;
                 });
+
+            function saveCurrentConfiguration(showResult) {
+                return ApiClient.getPluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId).then(function (config) {
+                    applyFormValues(config);
+                    return ApiClient.updatePluginConfiguration(AnimeThemesSyncConfig.pluginUniqueId, config).then(function (result) {
+                        if (showResult) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        }
+
+                        return result;
+                    });
+                });
+            }
+
+            function applyFormValues(config) {
+                // Global
+                config.ThemeDownloadingEnabled = document.querySelector('#ThemeDownloadingEnabled').checked;
+                config.MaxConcurrentDownloads = parseInt(document.querySelector('#MaxConcurrentDownloads').value) || 1;
+                config.DownloadTimeoutSeconds = parseInt(document.querySelector('#DownloadTimeoutSeconds').value) || 600;
+                config.AllowAdd = document.querySelector('#AllowAdd').checked;
+                config.ForceRedownload = document.querySelector('#ForceRedownload').checked;
+                config.AllowDelete = document.querySelector('#AllowDelete').checked;
+                config.ExtrasEnabled = document.querySelector('#ExtrasEnabled').checked;
+                config.ExtrasLinkMode = parseInt(document.querySelector('#ExtrasLinkMode').value) || 0;
+                config.TagsEnabled = document.querySelector('#TagsEnabled').checked;
+                config.TagFormat = document.querySelector('#TagFormat').value;
+                config.TagSeasonSpring = document.querySelector('#TagSeasonSpring').value;
+                config.TagSeasonSummer = document.querySelector('#TagSeasonSummer').value;
+                config.TagSeasonFall = document.querySelector('#TagSeasonFall').value;
+                config.TagSeasonWinter = document.querySelector('#TagSeasonWinter').value;
+
+                // Series Audio
+                config.SeriesAudioMaxThemes = parseInt(document.querySelector('#SeriesAudioMaxThemes').value) || 0;
+                config.SeriesAudioVolume = parseInt(document.querySelector('#SeriesAudioVolume').value) || 0;
+                config.SeriesAudioIgnoreOp = document.querySelector('#SeriesAudioIgnoreOp').checked;
+                config.SeriesAudioIgnoreEd = document.querySelector('#SeriesAudioIgnoreEd').checked;
+                config.SeriesAudioIgnoreOverlaps = document.querySelector('#SeriesAudioIgnoreOverlaps').checked;
+                config.SeriesAudioIgnoreCredits = document.querySelector('#SeriesAudioIgnoreCredits').checked;
+
+                // Series Video
+                config.SeriesVideoMaxThemes = parseInt(document.querySelector('#SeriesVideoMaxThemes').value) || 0;
+                config.SeriesVideoVolume = parseInt(document.querySelector('#SeriesVideoVolume').value) || 0;
+                config.SeriesVideoIgnoreOp = document.querySelector('#SeriesVideoIgnoreOp').checked;
+                config.SeriesVideoIgnoreEd = document.querySelector('#SeriesVideoIgnoreEd').checked;
+                config.SeriesVideoIgnoreOverlaps = document.querySelector('#SeriesVideoIgnoreOverlaps').checked;
+                config.SeriesVideoIgnoreCredits = document.querySelector('#SeriesVideoIgnoreCredits').checked;
+
+                // Movie Audio
+                config.MovieAudioMaxThemes = parseInt(document.querySelector('#MovieAudioMaxThemes').value) || 0;
+                config.MovieAudioVolume = parseInt(document.querySelector('#MovieAudioVolume').value) || 0;
+                config.MovieAudioIgnoreOp = document.querySelector('#MovieAudioIgnoreOp').checked;
+                config.MovieAudioIgnoreEd = document.querySelector('#MovieAudioIgnoreEd').checked;
+                config.MovieAudioIgnoreOverlaps = document.querySelector('#MovieAudioIgnoreOverlaps').checked;
+                config.MovieAudioIgnoreCredits = document.querySelector('#MovieAudioIgnoreCredits').checked;
+
+                // Movie Video
+                config.MovieVideoMaxThemes = parseInt(document.querySelector('#MovieVideoMaxThemes').value) || 0;
+                config.MovieVideoVolume = parseInt(document.querySelector('#MovieVideoVolume').value) || 0;
+                config.MovieVideoIgnoreOp = document.querySelector('#MovieVideoIgnoreOp').checked;
+                config.MovieVideoIgnoreEd = document.querySelector('#MovieVideoIgnoreEd').checked;
+                config.MovieVideoIgnoreOverlaps = document.querySelector('#MovieVideoIgnoreOverlaps').checked;
+                config.MovieVideoIgnoreCredits = document.querySelector('#MovieVideoIgnoreCredits').checked;
+            }
+
+            function normalizeExtrasLinkMode(value) {
+                if (value === 'HardLinkOnly') return '1';
+                if (value === 'CopyOnly') return '2';
+                if (value === 'HardLinkWithCopyFallback') return '0';
+                return String(value || 0);
+            }
         </script>
     </div>
 </body>

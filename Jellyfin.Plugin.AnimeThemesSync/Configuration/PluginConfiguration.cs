@@ -1,4 +1,5 @@
 using System;
+using AnimeThemesSync.Shared.Configuration;
 using MediaBrowser.Model.Plugins;
 
 namespace Jellyfin.Plugin.AnimeThemesSync.Configuration;
@@ -31,6 +32,8 @@ public class PluginConfiguration : BasePluginConfiguration
         AllowAdd = true;
         ForceRedownload = false;
         AllowDelete = false;
+        ExtrasEnabled = false;
+        ExtrasLinkMode = ExtrasLinkMode.HardLinkWithCopyFallback;
         TagsEnabled = true;
         TagLocalization = "None";
         TagSeasonSpring = "Spring";
@@ -88,6 +91,10 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool ForceRedownload { get; set; }
 
     public bool AllowDelete { get; set; }
+
+    public bool ExtrasEnabled { get; set; }
+
+    public ExtrasLinkMode ExtrasLinkMode { get; set; }
 
     public bool TagsEnabled { get; set; }
 
