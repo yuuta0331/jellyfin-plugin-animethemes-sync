@@ -60,6 +60,17 @@ public class GetAnimeThemesItems : IReturn<IReadOnlyList<ThemeBrowserLibraryItem
 {
 }
 
+[Route("/AnimeThemesSync/Summary", "GET", Summary = "Gets AnimeThemes Browser local media summary.")]
+public class GetAnimeThemesBrowserSummary : IReturn<ThemeBrowserSummary>
+{
+}
+
+[Route("/AnimeThemesSync/ThemeFiles/Delete", "POST", Summary = "Deletes local AnimeThemes files.")]
+public class DeleteAnimeThemesFiles : IReturn<ThemeDeleteResult>
+{
+    public string Scope { get; set; } = "all";
+}
+
 /// <summary>
 /// Request to get AnimeThemes Browser rows for one item.
 /// </summary>
@@ -149,6 +160,23 @@ public class AnimeThemesSyncService : IService
     public object Get(GetAnimeThemesItems request)
     {
         return _themeDownloader.GetBrowserItems();
+    }
+
+    public object Get(GetAnimeThemesBrowserSummary request)
+    {
+        return _themeDownloader.GetBrowserSummary();
+    }
+
+    public object Post(DeleteAnimeThemesFiles request)
+    {
+        try
+        {
+            return _themeDownloader.DeleteThemeFiles(request.Scope);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
     }
 
     /// <summary>

@@ -9,8 +9,12 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         view.setAttribute('data-ats-script-bound', 'true');
 
         var page = view;
-        var state = { items: [], filteredItems: [], currentItem: null, currentResult: null };
+        var state = { items: [], filteredItems: [], currentItem: null, currentResult: null, viewMode: 'poster' };
         var itemSelect = page.querySelector('#AnimeThemesBrowserItemSelect');
+        var libraryView = page.querySelector('#AnimeThemesBrowserLibraryView');
+        var detailView = page.querySelector('#AnimeThemesBrowserDetailView');
+        var itemGrid = page.querySelector('#AnimeThemesBrowserItemGrid');
+        var libraryCount = page.querySelector('#AnimeThemesBrowserLibraryCount');
         var rowsContainer = page.querySelector('#AnimeThemesBrowserRows');
         var searchInput = page.querySelector('#AnimeThemesBrowserSearch');
         var typeFilter = page.querySelector('#AnimeThemesBrowserTypeFilter');
@@ -29,6 +33,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         var progressText = page.querySelector('#AnimeThemesBrowserProgressText');
         var progressPercent = page.querySelector('#AnimeThemesBrowserProgressPercent');
         var progressBar = page.querySelector('#AnimeThemesBrowserProgressBar');
+        var summaryItems = page.querySelector('#AnimeThemesSummaryItems');
+        var summaryVideos = page.querySelector('#AnimeThemesSummaryVideos');
+        var summarySongs = page.querySelector('#AnimeThemesSummarySongs');
+        var summaryExtras = page.querySelector('#AnimeThemesSummaryExtras');
+        var summaryBytes = page.querySelector('#AnimeThemesSummaryBytes');
 
         function value(obj, pascal, camel) {
             return obj ? obj[pascal] !== undefined ? obj[pascal] : obj[camel] : null;
@@ -78,6 +87,19 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         function appendQuery(url, key, rawValue) {
             var separator = url.indexOf('?') === -1 ? '?' : '&';
             return url + separator + encodeURIComponent(key) + '=' + encodeURIComponent(rawValue);
+        }
+
+        function formatBytes(value) {
+            var bytes = Number(value || 0);
+            if (bytes < 1024) return bytes + ' B';
+            var units = ['KB', 'MB', 'GB', 'TB'];
+            var size = bytes / 1024;
+            var index = 0;
+            while (size >= 1024 && index < units.length - 1) {
+                size /= 1024;
+                index++;
+            }
+            return size.toFixed(size >= 10 ? 1 : 2) + ' ' + units[index];
         }
 
         function setProgress(visible, message, progress) {
@@ -144,19 +166,106 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             if (previous && state.filteredItems.some(function (item) { return String(value(item, 'Id', 'id')) === previous; })) {
                 itemSelect.value = previous;
             }
+            renderItemGrid();
+        }
+
+        function renderItemGrid() {
+            itemGrid.className = 'ats-item-grid ' + state.viewMode;
+            itemGrid.innerHTML = '';
+            libraryCount.textContent = state.filteredItems.length + ' / ' + state.items.length + ' items';
+            if (!state.filteredItems.length) {
+                var empty = document.createElement('div');
+                empty.className = 'fieldDescription';
+                empty.textContent = 'No library items match the current search.';
+                itemGrid.appendChild(empty);
+                return;
+            }
+
+            state.filteredItems.forEach(function (item) {
+                itemGrid.appendChild(createItemCard(item));
+            });
+        }
+
+        function createItemCard(item) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'ats-item-card';
+            var name = value(item, 'Name', 'name') || 'Unknown';
+
+            var imageWrap = document.createElement('div');
+            imageWrap.className = 'ats-item-image';
+            var image = document.createElement('img');
+            image.alt = '';
+            var fallback = document.createElement('div');
+            fallback.className = 'ats-item-fallback';
+            fallback.textContent = String(name).trim().slice(0, 2).toUpperCase();
+            imageWrap.appendChild(image);
+            imageWrap.appendChild(fallback);
+            button.appendChild(imageWrap);
+
+            var textWrap = document.createElement('div');
+            appendDiv(textWrap, 'ats-item-title', name);
+            appendDiv(textWrap, 'ats-item-meta', [
+                value(item, 'Type', 'type'),
+                value(item, 'AnimeThemesSlug', 'animeThemesSlug') || value(item, 'AniListId', 'aniListId') || value(item, 'MyAnimeListId', 'myAnimeListId')
+            ].filter(Boolean).join(' | '));
+            button.appendChild(textWrap);
+
+            var imagePath = state.viewMode === 'poster'
+                ? value(item, 'PrimaryImageUrl', 'primaryImageUrl')
+                : value(item, 'ThumbImageUrl', 'thumbImageUrl') || value(item, 'BackdropImageUrl', 'backdropImageUrl') || value(item, 'PrimaryImageUrl', 'primaryImageUrl');
+            setImage(image, imagePath, fallback);
+            button.addEventListener('click', function () {
+                openItemDetail(value(item, 'Id', 'id'));
+            });
+            return button;
+        }
+
+        function setViewMode(mode) {
+            state.viewMode = mode;
+            page.querySelectorAll('.ats-view-mode').forEach(function (button) {
+                button.classList.toggle('active', button.getAttribute('data-view-mode') === mode);
+            });
+            renderItemGrid();
+        }
+
+        function openLibraryView() {
+            detailView.style.display = 'none';
+            libraryView.style.display = '';
+            state.currentItem = null;
+            state.currentResult = null;
+            itemSelect.value = '';
+        }
+
+        function openItemDetail(itemId) {
+            if (!itemId) return;
+            itemSelect.value = itemId;
+            libraryView.style.display = 'none';
+            detailView.style.display = '';
+            loadThemes();
         }
 
         function loadItems() {
             Dashboard.showLoadingMsg();
-            apiGet('AnimeThemesSync/Items').then(function (items) {
+            Promise.all([apiGet('AnimeThemesSync/Items'), apiGet('AnimeThemesSync/Summary')]).then(function (results) {
+                var items = results[0];
+                var summary = results[1] || {};
                 state.items = items || [];
                 renderItemOptions();
+                renderSummary(summary);
                 Dashboard.hideLoadingMsg();
-                if (itemSelect.value) loadThemes();
             }).catch(function (err) {
                 Dashboard.hideLoadingMsg();
                 Dashboard.alert({ title: 'Browser Error', message: 'Failed to load items: ' + err });
             });
+        }
+
+        function renderSummary(summary) {
+            summaryItems.textContent = text(value(summary, 'Items', 'items'));
+            summaryVideos.textContent = text(value(summary, 'ThemeVideos', 'themeVideos'));
+            summarySongs.textContent = text(value(summary, 'ThemeSongs', 'themeSongs'));
+            summaryExtras.textContent = text(value(summary, 'Extras', 'extras'));
+            summaryBytes.textContent = formatBytes(value(summary, 'TotalBytes', 'totalBytes'));
         }
 
         function loadThemes() {
@@ -427,6 +536,28 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             });
         }
 
+        function deleteThemeFiles(scope) {
+            var label = scope === 'all' ? 'all AnimeThemes files' : scope === 'audio' ? 'theme songs' : 'theme videos and extras';
+            if (!window.confirm('Delete ' + label + '?')) {
+                return;
+            }
+
+            setProgress(true, 'Deleting ' + label + '...', 0);
+            apiPost('AnimeThemesSync/ThemeFiles/Delete?Scope=' + encodeURIComponent(scope)).then(function (result) {
+                var files = value(result, 'FilesDeleted', 'filesDeleted') || 0;
+                var bytes = value(result, 'BytesDeleted', 'bytesDeleted') || 0;
+                setProgress(true, 'Deleted ' + files + ' files (' + formatBytes(bytes) + ')', 100);
+                loadItems();
+                if (itemSelect.value) {
+                    loadThemes();
+                }
+                setTimeout(function () { setProgress(false, '', 0); }, 1800);
+            }).catch(function (err) {
+                setProgress(true, 'Delete failed: ' + getErrorMessage(err), 0);
+                Dashboard.alert({ title: 'Delete Error', message: getErrorMessage(err) });
+            });
+        }
+
         function openPlayer(row, target) {
             var rowId = value(row, 'RowId', 'rowId');
             var itemId = itemSelect.value;
@@ -458,20 +589,35 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
 
         searchInput.addEventListener('input', function () {
             renderItemOptions();
-            renderThemes();
+            if (state.currentResult) renderThemes();
         });
         typeFilter.addEventListener('change', renderThemes);
         statusFilter.addEventListener('change', renderThemes);
         flagFilter.addEventListener('change', renderThemes);
-        itemSelect.addEventListener('change', loadThemes);
+        itemSelect.addEventListener('change', function () {
+            if (itemSelect.value) openItemDetail(itemSelect.value);
+        });
         page.querySelector('#AnimeThemesBrowserRefreshItems').addEventListener('click', loadItems);
-        page.querySelector('#AnimeThemesBrowserLoadThemes').addEventListener('click', loadThemes);
         page.querySelector('#AnimeThemesBrowserDownload').addEventListener('click', downloadItem);
+        page.querySelector('#AnimeThemesBrowserBack').addEventListener('click', openLibraryView);
+        page.querySelectorAll('.ats-view-mode').forEach(function (button) {
+            button.addEventListener('click', function () {
+                setViewMode(button.getAttribute('data-view-mode') || 'poster');
+            });
+        });
+        page.querySelectorAll('[data-delete-scope]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                deleteThemeFiles(button.getAttribute('data-delete-scope') || 'all');
+            });
+        });
         page.querySelector('#AnimeThemesBrowserPlayerClose').addEventListener('click', closePlayer);
         player.addEventListener('click', function (event) {
             if (event.target === player) closePlayer();
         });
-        page.addEventListener('pageshow', loadItems);
+        page.addEventListener('pageshow', function () {
+            setViewMode(state.viewMode);
+            loadItems();
+        });
     }
 
     function View(view) {

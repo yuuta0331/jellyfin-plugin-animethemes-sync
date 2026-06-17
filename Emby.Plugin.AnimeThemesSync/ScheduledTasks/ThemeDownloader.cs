@@ -149,6 +149,60 @@ public class ThemeDownloader : IScheduledTask
             .ToList();
     }
 
+    public ThemeBrowserSummary GetBrowserSummary()
+    {
+        var items = GetEnabledLibraryItems();
+        var videos = 0;
+        var songs = 0;
+        var extras = 0;
+        long bytes = 0;
+
+        foreach (var item in items)
+        {
+            AccumulateLocalThemeDirectory(Path.Combine(item.Path, "backdrops"), ref videos, ref bytes);
+            AccumulateLocalThemeDirectory(Path.Combine(item.Path, "theme-music"), ref songs, ref bytes);
+            AccumulateLocalThemeDirectory(Path.Combine(item.Path, "extras"), ref extras, ref bytes);
+        }
+
+        return new ThemeBrowserSummary(items.Count, videos, songs, extras, bytes);
+    }
+
+    public ThemeDeleteResult DeleteThemeFiles(string scope)
+    {
+        var normalizedScope = string.IsNullOrWhiteSpace(scope) ? "all" : scope.Trim().ToLowerInvariant();
+        if (normalizedScope is not "all" and not "audio" and not "video" and not "extras")
+        {
+            throw new InvalidOperationException("Unsupported delete scope.");
+        }
+
+        var filesDeleted = 0;
+        long bytesDeleted = 0;
+        foreach (var item in GetEnabledLibraryItems())
+        {
+            var anime = ResolveAnime(item, CancellationToken.None).GetAwaiter().GetResult();
+            var themes = anime?.AnimeThemes ?? new List<AnimeThemesTheme>();
+
+            if (normalizedScope is "all" or "audio")
+            {
+                DeleteLocalThemeDirectory(Path.Combine(item.Path, "theme-music"), themes, ref filesDeleted, ref bytesDeleted);
+            }
+
+            if (normalizedScope is "all" or "video")
+            {
+                DeleteLocalThemeDirectory(Path.Combine(item.Path, "backdrops"), themes, ref filesDeleted, ref bytesDeleted);
+                DeleteLocalThemeDirectory(Path.Combine(item.Path, "extras"), themes, ref filesDeleted, ref bytesDeleted);
+            }
+
+            if (normalizedScope == "extras")
+            {
+                DeleteLocalThemeDirectory(Path.Combine(item.Path, "extras"), themes, ref filesDeleted, ref bytesDeleted);
+            }
+        }
+
+        _logger.LogInformation("Deleted AnimeThemes local files. Scope={Scope}, Files={Files}, Bytes={Bytes}", normalizedScope, filesDeleted, bytesDeleted);
+        return new ThemeDeleteResult(filesDeleted, bytesDeleted);
+    }
+
     public async Task<ThemeDownloadExecutionResult> DownloadThemeByRowIdAsync(
         Guid itemId,
         string rowId,
@@ -302,6 +356,57 @@ public class ThemeDownloader : IScheduledTask
         return item.HasImage(imageType, 0)
             ? string.Format(CultureInfo.InvariantCulture, "Items/{0}/Images/{1}", item.Id, imagePath)
             : null;
+    }
+
+    private void AccumulateLocalThemeDirectory(string directory, ref int count, ref long bytes)
+    {
+        if (!_fileSystem.DirectoryExists(directory))
+        {
+            return;
+        }
+
+        foreach (var file in _fileSystem.GetFilePaths(directory))
+        {
+            if (!IsSupportedThemeFile(file))
+            {
+                continue;
+            }
+
+            count++;
+            bytes += new FileInfo(file).Length;
+        }
+    }
+
+    private void DeleteLocalThemeDirectory(
+        string directory,
+        List<AnimeThemesTheme> themes,
+        ref int filesDeleted,
+        ref long bytesDeleted)
+    {
+        if (!_fileSystem.DirectoryExists(directory))
+        {
+            return;
+        }
+
+        foreach (var file in _fileSystem.GetFilePaths(directory))
+        {
+            if (!IsSupportedThemeFile(file) || !ThemeFilePlanner.IsPluginOwnedFile(file, themes))
+            {
+                continue;
+            }
+
+            var length = new FileInfo(file).Length;
+            _fileSystem.DeleteFile(file);
+            filesDeleted++;
+            bytesDeleted += length;
+        }
+    }
+
+    private static bool IsSupportedThemeFile(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return extension.Equals(".webm", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".mp3", StringComparison.OrdinalIgnoreCase);
     }
 
     private BaseItem GetSupportedItem(Guid itemId)

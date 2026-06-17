@@ -61,3 +61,14 @@ public sealed record ThemeLocalMediaResult(
     string Path,
     string ContentType,
     string FileName);
+
+public sealed record ThemeBrowserSummary(
+    int Items,
+    int ThemeVideos,
+    int ThemeSongs,
+    int Extras,
+    long TotalBytes);
+
+public sealed record ThemeDeleteResult(
+    int FilesDeleted,
+    long BytesDeleted);

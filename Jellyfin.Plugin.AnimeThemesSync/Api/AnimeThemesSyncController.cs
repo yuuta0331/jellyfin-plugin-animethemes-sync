@@ -43,6 +43,28 @@ public sealed class AnimeThemesSyncController : ControllerBase
         return Ok(_themeDownloader.GetBrowserItems());
     }
 
+    [HttpGet("Summary")]
+    [ProducesResponseType(typeof(ThemeBrowserSummary), StatusCodes.Status200OK)]
+    public ActionResult<ThemeBrowserSummary> GetSummary()
+    {
+        return Ok(_themeDownloader.GetBrowserSummary());
+    }
+
+    [HttpPost("ThemeFiles/Delete")]
+    [ProducesResponseType(typeof(ThemeDeleteResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public ActionResult<ThemeDeleteResult> DeleteThemeFiles([FromQuery] string scope)
+    {
+        try
+        {
+            return Ok(_themeDownloader.DeleteThemeFiles(scope));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     /// <summary>
     /// Gets AnimeThemes Browser rows for one item.
     /// </summary>

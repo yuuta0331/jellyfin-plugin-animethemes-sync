@@ -253,6 +253,39 @@ public class ThemeFilePlannerTests
     }
 
     [Fact]
+    public void BrowserPages_ShowLibraryGridViewModesSummaryAndDeleteActions()
+    {
+        var root = FindRepositoryRoot();
+        var htmlFiles = new[]
+        {
+            Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.html")
+        };
+
+        foreach (var file in htmlFiles)
+        {
+            var content = File.ReadAllText(file);
+            Assert.Contains("AnimeThemesBrowserItemGrid", content, StringComparison.Ordinal);
+            Assert.Contains("data-view-mode=\"poster\"", content, StringComparison.Ordinal);
+            Assert.Contains("data-view-mode=\"list\"", content, StringComparison.Ordinal);
+            Assert.Contains("data-view-mode=\"thumb\"", content, StringComparison.Ordinal);
+            Assert.Contains("data-delete-scope=\"audio\"", content, StringComparison.Ordinal);
+            Assert.Contains("data-delete-scope=\"video\"", content, StringComparison.Ordinal);
+            Assert.Contains("data-delete-scope=\"all\"", content, StringComparison.Ordinal);
+        }
+
+        var jellyfinPage = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+        Assert.Contains("AnimeThemesSync/Summary", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("AnimeThemesSync/ThemeFiles/Delete", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("setViewMode", jellyfinPage, StringComparison.Ordinal);
+
+        var embyController = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js"));
+        Assert.Contains("AnimeThemesSync/Summary", embyController, StringComparison.Ordinal);
+        Assert.Contains("AnimeThemesSync/ThemeFiles/Delete", embyController, StringComparison.Ordinal);
+        Assert.Contains("setViewMode", embyController, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ThemeExtrasFileService_CopyOnlyCreatesBrowseableExtra()
     {
         var directory = Path.Combine(Path.GetTempPath(), "AnimeThemesSyncTests", Guid.NewGuid().ToString("N"));
