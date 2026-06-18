@@ -91,6 +91,7 @@ var AnimeThemesSyncConfig = {
                             document.querySelector('#AllowDelete').checked = getValue(config, 'AllowDelete', false);
                             document.querySelector('#ExtrasEnabled').checked = getValue(config, 'ExtrasEnabled', false);
                             document.querySelector('#ExtrasLinkMode').value = normalizeExtrasLinkMode(getValue(config, 'ExtrasLinkMode', 0));
+                            document.querySelector('#SeasonThemeDownloadsEnabled').checked = getValue(config, 'SeasonThemeDownloadsEnabled', true);
                             document.querySelector('#TagsEnabled').checked = getValue(config, 'TagsEnabled', true);
                             document.querySelector('#SeasonThemeMappingsJson').value = formatSeasonMappings(getValue(config, 'SeasonThemeMappings', []));
 
@@ -252,6 +253,7 @@ var AnimeThemesSyncConfig = {
                 config.AllowDelete = document.querySelector('#AllowDelete').checked;
                 config.ExtrasEnabled = document.querySelector('#ExtrasEnabled').checked;
                 config.ExtrasLinkMode = parseInt(document.querySelector('#ExtrasLinkMode').value) || 0;
+                config.SeasonThemeDownloadsEnabled = document.querySelector('#SeasonThemeDownloadsEnabled').checked;
                 config.TagsEnabled = document.querySelector('#TagsEnabled').checked;
                 config.SeasonThemeMappings = parseSeasonMappings();
                 config.TagFormat = document.querySelector('#TagFormat').value;

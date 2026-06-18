@@ -33,6 +33,7 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 - OP/ED テーマの定期ダウンロード（動画/音声）
 - シリーズ・Season・映画の対応
 - 未一致Seasonを検索・保存できるSeason Finder UI
+- Season単位の出力を有効/無効にできる設定
 
 ## Installation
 
@@ -71,6 +72,7 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 - `Download Anime Themes` を実行
 - メディアフォルダ内にテーマファイルが作成されます（`backdrops` / `theme-music`）
 - シリーズにはシリーズ直下、Seasonに別マッピングがある場合は各Seasonフォルダ直下へ作成されます
+- 設定画面の `Enable Season Theme Downloads` を無効にすると、Season単位の出力を止めてシリーズ/映画単位の出力だけにできます
 - `AnimeThemes Browser` -> `Season Finder` を開くと、未一致Seasonの確認、AnimeThemes検索、OP/EDプレビュー、Seasonマッピング保存をJSON編集なしで実行できます
 
 ## Manual Linking
@@ -92,6 +94,7 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 3. 候補を選択してOP/EDをプレビューし、`Save mapping` または `Save & Download` を実行
 
 `Save & Download` はマッピング保存後にそのSeason itemのオンデマンドダウンロードを実行し、対象Seasonの `theme-music` / `backdrops` に出力します。設定画面の `SeasonThemeMappings` JSONはAdvanced用途のフォールバックとして引き続き利用できます。
+`Enable Season Theme Downloads` が無効の場合、Seasonマッピングは保存されたままですが、Seasonフォルダへの出力とSeason itemのオンデマンドダウンロードは再度有効化するまでスキップされます。
 
 ```json
 {

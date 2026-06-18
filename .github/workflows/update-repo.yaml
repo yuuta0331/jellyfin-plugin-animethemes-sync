@@ -39,6 +39,7 @@ jobs:
         run: |
           python .github/scripts/generate_manifest.py
           mkdir -p public
+          cp -R resource/images public/images
           mv manifest.json public/
 
       - name: Deploy to GitHub Pages

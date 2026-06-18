@@ -127,6 +127,8 @@ public class ThemeDownloader : IScheduledTask
             throw new InvalidOperationException("Only Series, Season, and Movie items are supported.");
         }
 
+        EnsureSeasonThemeDownloadsAllowed(item, config);
+
         _logger.LogInformation("Starting Anime Themes on-demand download for {ItemName} ({ItemId})...", item.Name, itemId);
         return await ProcessItems(new[] { item }, config, forceRedownload || config.ForceRedownload, progress, cancellationToken).ConfigureAwait(false);
     }
@@ -166,11 +168,14 @@ public class ThemeDownloader : IScheduledTask
             AccumulateLocalThemeDirectories(item.Path, ref videos, ref songs, ref extras, ref bytes);
             if (item is Series series)
             {
-                foreach (var season in GetSeasonItems(series))
+                if (IsSeasonThemeDownloadsEnabled())
                 {
-                    if (!string.IsNullOrWhiteSpace(season.Path))
+                    foreach (var season in GetSeasonItems(series))
                     {
-                        AccumulateLocalThemeDirectories(season.Path, ref videos, ref songs, ref extras, ref bytes);
+                        if (!string.IsNullOrWhiteSpace(season.Path))
+                        {
+                            AccumulateLocalThemeDirectories(season.Path, ref videos, ref songs, ref extras, ref bytes);
+                        }
                     }
                 }
             }
@@ -323,7 +328,7 @@ public class ThemeDownloader : IScheduledTask
             var themes = anime?.AnimeThemes ?? new List<AnimeThemesTheme>();
             DeleteThemeFilesForPath(item.Path, themes, normalizedScope, ref filesDeleted, ref bytesDeleted);
 
-            if (item is Series series)
+            if (item is Series series && IsSeasonThemeDownloadsEnabled())
             {
                 foreach (var season in GetSeasonItems(series))
                 {
@@ -399,6 +404,7 @@ public class ThemeDownloader : IScheduledTask
         }
 
         var item = GetSupportedItem(itemId);
+        EnsureSeasonThemeDownloadsAllowed(item, config);
         _logger.LogInformation("Starting Anime Themes theme-row download for {ItemName} ({ItemId}, RowId={RowId})...", item.Name, itemId, rowId);
         progress?.Report(5);
         var selection = await BuildSingleThemeSelectionAsync(item, rowId, cancellationToken).ConfigureAwait(false);
@@ -659,6 +665,27 @@ public class ThemeDownloader : IScheduledTask
             throw new InvalidOperationException("Only Series, Season, and Movie items are supported.");
         }
 
+        if (item is Season && !config.SeasonThemeDownloadsEnabled)
+        {
+            return new ThemeBrowserItemResult(
+                item.Id,
+                item.Name ?? "Unknown",
+                "Season",
+                null,
+                null,
+                [],
+                [
+                    BuildBrowserThemeGroup(
+                        item,
+                        "Season",
+                        item.IndexNumber,
+                        new BrowserAnimeResolution(null, "Disabled", "SeasonThemeDownloadsDisabled", false),
+                        [],
+                        "Season theme downloads are disabled in plugin configuration.",
+                        null)
+                ]);
+        }
+
         var resolution = await ResolveBrowserAnimeForItemAsync(item, cancellationToken).ConfigureAwait(false);
         var animeThemesUrl = BuildAnimeThemesUrl(resolution.Anime);
         var rows = BuildBrowserRowsForResolution(item, resolution, config);
@@ -696,7 +723,7 @@ public class ThemeDownloader : IScheduledTask
         var groups = new List<ThemeBrowserThemeGroup>();
         var seasons = GetSeasonItems(series);
         var seasonsWithPath = seasons.Where(s => !string.IsNullOrWhiteSpace(s.Path)).ToList();
-        if (seasonsWithPath.Count == 0)
+        if (!config.SeasonThemeDownloadsEnabled || seasonsWithPath.Count == 0)
         {
             groups.Add(BuildBrowserThemeGroup(
                 series,
@@ -1181,6 +1208,12 @@ public class ThemeDownloader : IScheduledTask
 
         var config = Plugin.Instance?.Configuration;
         var anime = await ResolveAnime(item, cancellationToken).ConfigureAwait(false);
+        if (item is Season && config?.SeasonThemeDownloadsEnabled == false)
+        {
+            _logger.LogInformation("  Season theme downloads are disabled. Skipping {ItemName}.", item.Name);
+            return null;
+        }
+
         if (anime == null && item is Season seasonItem)
         {
             var browserResolution = await ResolveBrowserAnimeForItemAsync(seasonItem, cancellationToken).ConfigureAwait(false);
@@ -1208,6 +1241,11 @@ public class ThemeDownloader : IScheduledTask
             }
 
             return ThemeFilePlanner.MergePlans(plans);
+        }
+
+        if (!IsSeasonThemeDownloadsEnabled(config))
+        {
+            return plans.Count == 0 ? null : ThemeFilePlanner.MergePlans(plans);
         }
 
         var seasons = GetSeasonItems(series);
@@ -1799,6 +1837,24 @@ public class ThemeDownloader : IScheduledTask
              (mapping.SeasonNumber.HasValue &&
               seasonNumber == mapping.SeasonNumber.Value &&
               MatchesPath(mapping.SeriesPath, seriesPath))));
+    }
+
+    private static bool IsSeasonThemeDownloadsEnabled()
+    {
+        return IsSeasonThemeDownloadsEnabled(Plugin.Instance?.Configuration);
+    }
+
+    private static bool IsSeasonThemeDownloadsEnabled(PluginConfiguration? config)
+    {
+        return config?.SeasonThemeDownloadsEnabled != false;
+    }
+
+    private static void EnsureSeasonThemeDownloadsAllowed(BaseItem item, PluginConfiguration config)
+    {
+        if (item is Season && !config.SeasonThemeDownloadsEnabled)
+        {
+            throw new InvalidOperationException("Season theme downloads are disabled in plugin configuration.");
+        }
     }
 
     private static bool HasThemeIdentity(SeasonThemeMapping mapping)

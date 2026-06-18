@@ -33,6 +33,7 @@ AnimeThemes Sync adds AnimeThemes.moe integration to your media server:
 - Scheduled OP/ED theme downloading (video/audio)
 - Series, season, and movie support
 - Season Finder UI for unmatched season mappings
+- Optional season-level downloads, so you can keep output at the series level when preferred
 
 ## Installation
 
@@ -71,6 +72,7 @@ AnimeThemes Sync adds AnimeThemes.moe integration to your media server:
 - Run `Download Anime Themes`.
 - Theme files will be created in media folders (`backdrops` / `theme-music`).
 - Series output remains under the series folder; season-specific mappings write to each season folder.
+- Disable `Enable Season Theme Downloads` in the plugin configuration to keep scheduled and on-demand output at the series/movie level.
 - Open `AnimeThemes Browser` -> `Season Finder` to review unmatched seasons, search AnimeThemes, preview OP/ED entries, and save season mappings without editing JSON.
 
 ## Manual Linking
@@ -92,6 +94,7 @@ If a season is unmatched or mapped incorrectly, open `AnimeThemes Browser` -> `S
 3. Select a candidate, preview the OP/ED rows, then choose `Save mapping` or `Save & Download`.
 
 `Save & Download` stores the mapping and runs an on-demand download for that season item, writing to that season's `theme-music` / `backdrops` folders. The plugin still supports `SeasonThemeMappings` JSON in the configuration page as an advanced fallback.
+If `Enable Season Theme Downloads` is disabled, mappings remain saved but season folder output and season on-demand downloads are skipped until the option is enabled again.
 
 ```json
 {

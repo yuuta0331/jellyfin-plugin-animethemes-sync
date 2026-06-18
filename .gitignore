@@ -1,13 +1,33 @@
+# Build output
 bin/
 obj/
+artifacts/
+dist/
+publish/
+TestResults/
+coverage/
+*.zip
+*.md5
+manifest.json
+
+# IDE / local machine state
 .vs/
+.vscode/
 .idea/
-artifacts
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Generated binaries and diagnostics
 *.log
+*.binlog
 *.dll
 *.pdb
 *.deps.json
 *.xml
-*.md5
-manifest.json
+
+# Python cache
 __pycache__/
+*.py[cod]
+

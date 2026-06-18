@@ -1,4 +1,4 @@
-<div is="emby-scroller" id="AnimeThemesSyncConfigPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-centerfocus="true" data-bindheader="true" data-controller="__plugin/animethemessyncconfigjs20260618g" data-title="AnimeThemes Sync"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesSyncConfigPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-centerfocus="true" data-bindheader="true" data-controller="__plugin/animethemessyncconfigjs20260619a" data-title="AnimeThemes Sync"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <form id="AnimeThemesSyncConfigForm">
@@ -7,7 +7,7 @@
                             is="emby-link" class="button-link emby-button">Help / GitHub</a>
                     </div>
                     <div class="fieldDescription">
-                        Configure how AnimeThemes (OP/ED) are downloaded and managed. UI version: 2026.06.18-g.
+                        Configure how AnimeThemes (OP/ED) are downloaded and managed. UI version: 2026.06.19-a.
                     </div>
 
                     <!-- Global Settings -->
@@ -96,6 +96,18 @@
                             <div class="fieldDescription">
                                 Hard links save disk space. Copy fallback is useful when the media folder and extras
                                 folder are on file systems that do not support hard links.
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="SeasonThemeDownloadsEnabled" name="SeasonThemeDownloadsEnabled" type="checkbox"
+                                    is="emby-checkbox" />
+                                <span>Enable Season Theme Downloads</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Enables separate OP/ED output for Season items. Disable this to keep downloads at the
+                                series level while leaving Season Finder mappings saved for later use.
                             </div>
                         </div>
                     </div>

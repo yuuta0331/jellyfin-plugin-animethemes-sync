@@ -265,6 +265,8 @@ public class ThemeFilePlannerTests
         foreach (var file in configPages)
         {
             var content = File.ReadAllText(file);
+            Assert.Contains("SeasonThemeDownloadsEnabled", content, StringComparison.Ordinal);
+            Assert.Contains("Enable Season Theme Downloads", content, StringComparison.Ordinal);
             Assert.Contains("SeasonThemeMappingsJson", content, StringComparison.Ordinal);
             Assert.Contains("Season Theme Mapping", content, StringComparison.Ordinal);
             Assert.Contains("Season Mappings JSON", content, StringComparison.Ordinal);
@@ -275,8 +277,20 @@ public class ThemeFilePlannerTests
         Assert.Contains("parseSeasonMappings", jellyfinPage, StringComparison.Ordinal);
 
         var embyController = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "configPage.js"));
+        Assert.Contains("SeasonThemeDownloadsEnabled", embyController, StringComparison.Ordinal);
         Assert.Contains("SeasonThemeMappings", embyController, StringComparison.Ordinal);
         Assert.Contains("parseSeasonMappings", embyController, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReleaseMetadataPublishesPluginImageFromGitHubPages()
+    {
+        var root = FindRepositoryRoot();
+        var buildYaml = File.ReadAllText(Path.Combine(root, "build.yaml"));
+        var updateRepoWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "update-repo.yaml"));
+
+        Assert.Contains("imageUrl: https://cassiscloud.github.io/jellyfin-plugin-animethemes-sync/images/jellyfin-plugin-animethemes-sync.jpeg", buildYaml, StringComparison.Ordinal);
+        Assert.Contains("cp -R resource/images public/images", updateRepoWorkflow, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -377,6 +391,8 @@ public class ThemeFilePlannerTests
         var embyDownloader = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs"));
         Assert.Contains("Uses series-level themes", jellyfinDownloader, StringComparison.Ordinal);
         Assert.Contains("Uses series-level themes", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("SeasonThemeDownloadsDisabled", jellyfinDownloader, StringComparison.Ordinal);
+        Assert.Contains("SeasonThemeDownloadsDisabled", embyDownloader, StringComparison.Ordinal);
     }
 
     [Fact]

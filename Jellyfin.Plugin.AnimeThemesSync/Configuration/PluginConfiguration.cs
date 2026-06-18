@@ -35,6 +35,7 @@ public class PluginConfiguration : BasePluginConfiguration
         AllowDelete = false;
         ExtrasEnabled = false;
         ExtrasLinkMode = ExtrasLinkMode.HardLinkWithCopyFallback;
+        SeasonThemeDownloadsEnabled = true;
         TagsEnabled = true;
         SeasonThemeMappings = [];
         TagLocalization = "None";
@@ -97,6 +98,8 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool ExtrasEnabled { get; set; }
 
     public ExtrasLinkMode ExtrasLinkMode { get; set; }
+
+    public bool SeasonThemeDownloadsEnabled { get; set; }
 
     public bool TagsEnabled { get; set; }
 
