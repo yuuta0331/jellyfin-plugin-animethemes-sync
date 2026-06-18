@@ -29,6 +29,8 @@
   - 映画向けメタデータ
 - `ScheduledTasks/ThemeDownloader.cs`
   - ダウンロードタスク
+  - Series / Season / Movie のテーマ出力計画を作成
+  - AniList relations と `SeasonThemeMappings` による Season 別 AnimeThemes 解決
 - `ExternalIds/`
   - AnimeThemes 用外部 ID / URL プロバイダ
 - `Configuration/`
@@ -42,6 +44,8 @@
   - シリーズ / 映画メタデータプロバイダ
 - `ScheduledTasks/ThemeDownloader.cs`
   - ダウンロードタスク
+  - Series / Season / Movie のテーマ出力計画を作成
+  - AniList relations と `SeasonThemeMappings` による Season 別 AnimeThemes 解決
 - `Helpers/`
   - Emby ロガーアダプタ、HttpClientFactory
 - `Configuration/`
@@ -51,14 +55,19 @@
 
 - `Services/AniListService.cs`
   - AniList GraphQL 検索
+  - AniList relations から続編/前日譚チェーンを取得
 - `Services/AnimeThemesService.cs`
   - AnimeThemes API クライアント
 - `Services/ThemeScoringService.cs`
   - OP/ED 候補スコアリング
+- `Services/ThemeFilePlanner.cs`
+  - `theme-music` / `backdrops` / `extras` の出力計画と cleanup plan を生成
+  - 複数出力先の計画を統合
 - `Models/`
   - AnimeThemes API DTO / スコアモデル
 - `Configuration/`
   - 音声/映像ごとのテーマ設定
+  - Season ごとの AnimeThemes 手動マッピングモデル
 - `Constants.cs`
   - プロバイダキー、API URL、HttpClient 名など
 - `RateLimiter.cs`

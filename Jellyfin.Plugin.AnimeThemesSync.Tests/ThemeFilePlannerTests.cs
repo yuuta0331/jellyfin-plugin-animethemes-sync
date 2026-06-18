@@ -253,6 +253,33 @@ public class ThemeFilePlannerTests
     }
 
     [Fact]
+    public void ConfigurationPagesExposeSeasonThemeMappings()
+    {
+        var root = FindRepositoryRoot();
+        var configPages = new[]
+        {
+            Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "configPage.html"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "configPage.html")
+        };
+
+        foreach (var file in configPages)
+        {
+            var content = File.ReadAllText(file);
+            Assert.Contains("SeasonThemeMappingsJson", content, StringComparison.Ordinal);
+            Assert.Contains("Season Theme Mapping", content, StringComparison.Ordinal);
+            Assert.Contains("Season Mappings JSON", content, StringComparison.Ordinal);
+        }
+
+        var jellyfinPage = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "configPage.html"));
+        Assert.Contains("SeasonThemeMappings", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("parseSeasonMappings", jellyfinPage, StringComparison.Ordinal);
+
+        var embyController = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "configPage.js"));
+        Assert.Contains("SeasonThemeMappings", embyController, StringComparison.Ordinal);
+        Assert.Contains("parseSeasonMappings", embyController, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BrowserPages_ShowLibraryGridViewModesSummaryAndDeleteActions()
     {
         var root = FindRepositoryRoot();

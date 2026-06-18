@@ -92,6 +92,7 @@ var AnimeThemesSyncConfig = {
                             document.querySelector('#ExtrasEnabled').checked = getValue(config, 'ExtrasEnabled', false);
                             document.querySelector('#ExtrasLinkMode').value = normalizeExtrasLinkMode(getValue(config, 'ExtrasLinkMode', 0));
                             document.querySelector('#TagsEnabled').checked = getValue(config, 'TagsEnabled', true);
+                            document.querySelector('#SeasonThemeMappingsJson').value = formatSeasonMappings(getValue(config, 'SeasonThemeMappings', []));
 
                             // Initialize Toggle
                             document.querySelector('#TagsEnabled').addEventListener('change', toggleTagOptions);
@@ -189,7 +190,7 @@ var AnimeThemesSyncConfig = {
             document.querySelector('#RunOnDemandButton').addEventListener('click', function () {
                 var itemId = (document.querySelector('#OnDemandItemId').value || '').trim();
                 if (!itemId) {
-                    Dashboard.alert({ message: 'Enter a Series or Movie Item ID.', title: 'Item ID Required' });
+                    Dashboard.alert({ message: 'Enter a Series, Season, or Movie Item ID.', title: 'Item ID Required' });
                     return;
                 }
 
@@ -252,6 +253,7 @@ var AnimeThemesSyncConfig = {
                 config.ExtrasEnabled = document.querySelector('#ExtrasEnabled').checked;
                 config.ExtrasLinkMode = parseInt(document.querySelector('#ExtrasLinkMode').value) || 0;
                 config.TagsEnabled = document.querySelector('#TagsEnabled').checked;
+                config.SeasonThemeMappings = parseSeasonMappings();
                 config.TagFormat = document.querySelector('#TagFormat').value;
                 config.TagSeasonSpring = document.querySelector('#TagSeasonSpring').value;
                 config.TagSeasonSummer = document.querySelector('#TagSeasonSummer').value;
@@ -296,6 +298,35 @@ var AnimeThemesSyncConfig = {
                 if (value === 'CopyOnly') return '2';
                 if (value === 'HardLinkWithCopyFallback') return '0';
                 return String(value || 0);
+            }
+
+            function formatSeasonMappings(value) {
+                if (!Array.isArray(value) || value.length === 0) {
+                    return '[]';
+                }
+
+                return JSON.stringify(value, null, 2);
+            }
+
+            function parseSeasonMappings() {
+                var textarea = document.querySelector('#SeasonThemeMappingsJson');
+                var raw = textarea ? textarea.value.trim() : '';
+                if (!raw) {
+                    return [];
+                }
+
+                var parsed;
+                try {
+                    parsed = JSON.parse(raw);
+                } catch (err) {
+                    throw new Error('Season Mappings JSON is invalid: ' + err.message);
+                }
+
+                if (!Array.isArray(parsed)) {
+                    throw new Error('Season Mappings JSON must be an array.');
+                }
+
+                return parsed;
             }
 
     }

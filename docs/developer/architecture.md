@@ -11,14 +11,29 @@
 2. スケジュール実行時（ThemeDownloader）
    - 対象ライブラリを走査
    - 作品ごとの desired files を計算
+   - Series の AniList ID から AniList relations を辿り、通常 Season を別 AnimeThemes anime へ自動割り当て
+   - `SeasonThemeMappings` がある場合は自動割り当てより優先
    - 並列数制限付きでダウンロード
    - 必要に応じて ffmpeg で音量調整 / 変換
-   - 不要ファイルをクリーンアップ
+   - Series / Season / Movie ごとの出力ディレクトリ単位で不要ファイルをクリーンアップ
+
+## Season Theme Flow
+
+- Series 直下の `theme-music` / `backdrops` は従来通り維持する。
+- Series 配下の Season に対しては、以下の順で AnimeThemes anime を解決する。
+  - 設定画面の `SeasonThemeMappings`
+  - Season item 自身の AnimeThemes / AniList / MAL provider id
+  - Series の AniList ID から取得した `SEQUEL` / `PREQUEL` relations
+- 自動 relations 解決では Movie / OVA / Special / Music 形式を通常 Season 候補から除外する。
+- Season が Series と同じ AnimeThemes anime に解決された場合は、重複回避のため Season 側には出力しない。
+- Season ごとに別 AnimeThemes anime が確定した場合は、`Season xx/theme-music` と `Season xx/backdrops` に出力する。
+- 自動割り当てが不正確な作品は `SeasonThemeMappings` で明示的に上書きする。
 
 ## Shared Services
 
 - `AniListService`
   - 検索候補をタイトル・年でスコアリング
+  - AniList relations から続編/前日譚チェーンを取得
   - `RateLimiter` により API 制限を吸収
 
 - `AnimeThemesService`
@@ -28,6 +43,11 @@
 - `ThemeScoringService`
   - OP/ED 種別、クレジット有無、重複などを評価
   - 上位候補をダウンロード対象として採用
+
+- `ThemeFilePlanner`
+  - Series / Season / Movie の出力先ごとに `theme-music` / `backdrops` / `extras` の desired files を構築
+  - 複数出力先の計画を `MergePlans` で統合
+  - 出力先ごとの cleanup plan を生成
 
 ## Host-specific Differences
 
@@ -46,6 +66,10 @@
 - メディア別
   - Series/Movie x Audio/Video の個別設定
   - 最大件数、OP/ED 除外、クレジット/重複除外、音量
+- Season mapping
+  - `SeasonThemeMappings` は Season item id、Season path、または Series path + Season number で対象 Season を指定
+  - 解決先は AnimeThemes slug、AniList ID、MyAnimeList ID のいずれか
+  - `Locked` は手動割り当てを将来の自動推定より優先する意図を示す
 
 ## Error Handling
 

@@ -1,5 +1,6 @@
 using MediaBrowser.Model.Plugins;
 using System;
+using System.Collections.Generic;
 using AnimeThemesSync.Shared.Configuration;
 
 namespace Emby.Plugin.AnimeThemesSync.Configuration;
@@ -35,6 +36,7 @@ public class PluginConfiguration : BasePluginConfiguration
         ExtrasEnabled = false;
         ExtrasLinkMode = ExtrasLinkMode.HardLinkWithCopyFallback;
         TagsEnabled = true;
+        SeasonThemeMappings = [];
         TagLocalization = "None";
         TagSeasonSpring = "Spring";
         TagSeasonSummer = "Summer";
@@ -97,6 +99,8 @@ public class PluginConfiguration : BasePluginConfiguration
     public ExtrasLinkMode ExtrasLinkMode { get; set; }
 
     public bool TagsEnabled { get; set; }
+
+    public List<SeasonThemeMapping> SeasonThemeMappings { get; set; }
 
     public string TagLocalization { get; set; }
 

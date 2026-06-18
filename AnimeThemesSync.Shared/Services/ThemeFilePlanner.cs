@@ -64,7 +64,10 @@ public static class ThemeFilePlanner
             }
         }
 
-        return new ThemeOutputPlan(mediaFiles, extraFiles, anime.AnimeThemes);
+        return new ThemeOutputPlan(mediaFiles, extraFiles, anime.AnimeThemes)
+        {
+            CleanupPlans = BuildCleanupPlans(itemPath, mediaFiles, extraFiles, anime.AnimeThemes)
+        };
     }
 
     public static List<ScoredCandidate> GetBrowserCandidates(IEnumerable<AnimeThemesTheme> themes)
@@ -125,6 +128,20 @@ public static class ThemeFilePlanner
         }
 
         return new ThemeOutputPlan(mediaFiles, extraFiles, anime.AnimeThemes ?? new List<AnimeThemesTheme>());
+    }
+
+    public static ThemeOutputPlan MergePlans(IEnumerable<ThemeOutputPlan> plans)
+    {
+        var planList = plans.ToList();
+        var merged = new ThemeOutputPlan(
+            planList.SelectMany(p => p.MediaFiles).ToList(),
+            planList.SelectMany(p => p.ExtraFiles).ToList(),
+            planList.SelectMany(p => p.Themes).ToList())
+        {
+            CleanupPlans = planList.SelectMany(p => p.CleanupPlans).ToList()
+        };
+
+        return merged;
     }
 
     public static string BuildBrowserRowId(ScoredCandidate candidate)
@@ -264,6 +281,33 @@ public static class ThemeFilePlanner
         }
 
         return plans;
+    }
+
+    private static List<ThemeCleanupPlan> BuildCleanupPlans(
+        string itemPath,
+        List<ThemeFilePlan> mediaFiles,
+        List<ThemeExtraPlan> extraFiles,
+        List<AnimeThemesTheme> themes)
+    {
+        var themeMusicPath = Path.Combine(itemPath, "theme-music");
+        var backdropsPath = Path.Combine(itemPath, "backdrops");
+        var extrasPath = Path.Combine(itemPath, "extras");
+
+        return
+        [
+            new ThemeCleanupPlan(
+                themeMusicPath,
+                mediaFiles.Where(f => !f.IsVideo).Select(f => f.Path).ToHashSet(StringComparer.OrdinalIgnoreCase),
+                themes),
+            new ThemeCleanupPlan(
+                backdropsPath,
+                mediaFiles.Where(f => f.IsVideo).Select(f => f.Path).ToHashSet(StringComparer.OrdinalIgnoreCase),
+                themes),
+            new ThemeCleanupPlan(
+                extrasPath,
+                extraFiles.Select(f => f.TargetPath).ToHashSet(StringComparer.OrdinalIgnoreCase),
+                themes)
+        ];
     }
 
     private static int GetThemeTypeOrder(ScoredCandidate candidate)

@@ -31,7 +31,7 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 - AniList / MyAnimeList ID を使ったメタデータマッチング
 - アイテム画面への AnimeThemes 外部リンク追加
 - OP/ED テーマの定期ダウンロード（動画/音声）
-- シリーズ・映画の両対応
+- シリーズ・Season・映画の対応
 
 ## Installation
 
@@ -69,6 +69,7 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 - Scheduled Tasks を開く
 - `Download Anime Themes` を実行
 - メディアフォルダ内にテーマファイルが作成されます（`backdrops` / `theme-music`）
+- シリーズにはシリーズ直下、Seasonに別マッピングがある場合は各Seasonフォルダ直下へ作成されます
 
 ## Manual Linking
 
@@ -78,6 +79,31 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 - `AnimeThemes ID`
 
 例: `https://animethemes.moe/anime/blackrock_shooter_tv` の slug は `blackrock_shooter_tv`
+
+### Seasonごとの手動マッピング
+
+複数期が1つのJellyfin/Embyシリーズにまとまっている場合、スケジュールタスクはシリーズのAniList IDからAniList relationsを辿り、通常SeasonをAnimeThemesの別作品へ自動割り当てします。
+自動割り当てを上書きしたい場合は、設定画面の `SeasonThemeMappings` JSONでSeasonフォルダをAnimeThemesの別作品へ割り当てられます。
+
+```json
+{
+  "SeasonThemeMappings": [
+    {
+      "Enabled": true,
+      "SeriesPath": "D:\\Anime\\Example Series",
+      "SeasonNumber": 2,
+      "AnimeThemesSlug": "example_series_second_season",
+      "Locked": true
+    },
+    {
+      "SeasonPath": "D:\\Anime\\Example Series\\Season 03",
+      "AniListId": 12345
+    }
+  ]
+}
+```
+
+シリーズ直下の `theme-music` / `backdrops` は維持されます。Seasonがシリーズ直下と同じAnimeThemes作品へ解決される場合、そのSeasonへの重複出力はスキップされます。
 
 ## License
 

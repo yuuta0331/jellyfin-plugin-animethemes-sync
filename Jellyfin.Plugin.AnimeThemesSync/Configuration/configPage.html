@@ -8,7 +8,7 @@
 
 <body>
     <div id="AnimeThemesSyncConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
-        data-require="emby-input,emby-button,emby-select,emby-checkbox">
+        data-require="emby-input,emby-button,emby-select,emby-checkbox,emby-textarea">
         <div data-role="content">
             <div class="content-primary">
                 <form id="AnimeThemesSyncConfigForm">
@@ -17,7 +17,7 @@
                             is="emby-link" class="button-link emby-button">Help / GitHub</a>
                     </div>
                     <div class="fieldDescription">
-                        Configure how AnimeThemes (OP/ED) are downloaded and managed. UI version: 2026.06.17-h.
+                        Configure how AnimeThemes (OP/ED) are downloaded and managed. UI version: 2026.06.18-b.
                     </div>
 
                     <!-- Global Settings -->
@@ -106,6 +106,22 @@
                             <div class="fieldDescription">
                                 Hard links save disk space. Copy fallback is useful when the media folder and extras
                                 folder are on file systems that do not support hard links.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h2 class="sectionTitle">Season Theme Mapping</h2>
+                        <div class="fieldDescription">
+                            Map specific Season folders to different AnimeThemes anime. Leave empty or use [] to disable.
+                            Matching supports SeasonPath, SeasonItemId, or SeriesPath + SeasonNumber.
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="SeasonThemeMappingsJson">Season Mappings JSON</label>
+                            <textarea id="SeasonThemeMappingsJson" is="emby-textarea" class="emby-textarea season-mapping-textarea" rows="12"></textarea>
+                            <div class="fieldDescription">
+                                Example:
+                                <code>[{"SeriesPath":"D:\\Anime\\Example Series","SeasonNumber":2,"AnimeThemesSlug":"example_series_2","Locked":true}]</code>
                             </div>
                         </div>
                     </div>
@@ -478,7 +494,7 @@
                             <label class="inputLabel inputLabelUnfocused" for="OnDemandItemId">Item ID</label>
                             <input id="OnDemandItemId" type="text" is="emby-input" />
                             <div class="fieldDescription">
-                                Paste a Series or Movie item ID to download OP/ED media for only that item.
+                                Paste a Series, Season, or Movie item ID to download OP/ED media for only that item.
                             </div>
                         </div>
                         <button is="emby-button" type="button" class="raised emby-button block" id="RunOnDemandButton">
@@ -525,6 +541,13 @@
             .custom-css-textarea {
                 height: 200px !important;
                 min-height: 200px;
+            }
+
+            .season-mapping-textarea {
+                height: 220px !important;
+                min-height: 220px;
+                font-family: monospace;
+                white-space: pre;
             }
         </style>
         <script type="text/javascript">
@@ -612,6 +635,7 @@
                             document.querySelector('#ExtrasEnabled').checked = getValue(config, 'ExtrasEnabled', false);
                             document.querySelector('#ExtrasLinkMode').value = normalizeExtrasLinkMode(getValue(config, 'ExtrasLinkMode', 0));
                             document.querySelector('#TagsEnabled').checked = getValue(config, 'TagsEnabled', true);
+                            document.querySelector('#SeasonThemeMappingsJson').value = formatSeasonMappings(getValue(config, 'SeasonThemeMappings', []));
 
                             // Initialize Toggle
                             document.querySelector('#TagsEnabled').addEventListener('change', toggleTagOptions);
@@ -709,7 +733,7 @@
             document.querySelector('#RunOnDemandButton').addEventListener('click', function () {
                 var itemId = (document.querySelector('#OnDemandItemId').value || '').trim();
                 if (!itemId) {
-                    Dashboard.alert({ message: 'Enter a Series or Movie Item ID.', title: 'Item ID Required' });
+                    Dashboard.alert({ message: 'Enter a Series, Season, or Movie Item ID.', title: 'Item ID Required' });
                     return;
                 }
 
@@ -772,6 +796,7 @@
                 config.ExtrasEnabled = document.querySelector('#ExtrasEnabled').checked;
                 config.ExtrasLinkMode = parseInt(document.querySelector('#ExtrasLinkMode').value) || 0;
                 config.TagsEnabled = document.querySelector('#TagsEnabled').checked;
+                config.SeasonThemeMappings = parseSeasonMappings();
                 config.TagFormat = document.querySelector('#TagFormat').value;
                 config.TagSeasonSpring = document.querySelector('#TagSeasonSpring').value;
                 config.TagSeasonSummer = document.querySelector('#TagSeasonSummer').value;
@@ -816,6 +841,35 @@
                 if (value === 'CopyOnly') return '2';
                 if (value === 'HardLinkWithCopyFallback') return '0';
                 return String(value || 0);
+            }
+
+            function formatSeasonMappings(value) {
+                if (!Array.isArray(value) || value.length === 0) {
+                    return '[]';
+                }
+
+                return JSON.stringify(value, null, 2);
+            }
+
+            function parseSeasonMappings() {
+                var textarea = document.querySelector('#SeasonThemeMappingsJson');
+                var raw = textarea ? textarea.value.trim() : '';
+                if (!raw) {
+                    return [];
+                }
+
+                var parsed;
+                try {
+                    parsed = JSON.parse(raw);
+                } catch (err) {
+                    throw new Error('Season Mappings JSON is invalid: ' + err.message);
+                }
+
+                if (!Array.isArray(parsed)) {
+                    throw new Error('Season Mappings JSON must be an array.');
+                }
+
+                return parsed;
             }
         </script>
     </div>

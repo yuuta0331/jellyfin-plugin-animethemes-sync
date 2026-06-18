@@ -31,7 +31,7 @@ AnimeThemes Sync adds AnimeThemes.moe integration to your media server:
 - Metadata matching via AniList / MyAnimeList IDs
 - AnimeThemes external links on items
 - Scheduled OP/ED theme downloading (video/audio)
-- Series and movie support
+- Series, season, and movie support
 
 ## Installation
 
@@ -69,6 +69,7 @@ AnimeThemes Sync adds AnimeThemes.moe integration to your media server:
 - Open Scheduled Tasks.
 - Run `Download Anime Themes`.
 - Theme files will be created in media folders (`backdrops` / `theme-music`).
+- Series output remains under the series folder; season-specific mappings write to each season folder.
 
 ## Manual Linking
 
@@ -78,6 +79,31 @@ If automatic matching fails, set external IDs manually:
 - `AnimeThemes ID`
 
 Example: `https://animethemes.moe/anime/blackrock_shooter_tv` -> slug is `blackrock_shooter_tv`.
+
+### Season mappings
+
+When multiple anime seasons are grouped into one Jellyfin/Emby series, the scheduled task follows AniList relations from the series AniList ID and tries to assign normal seasons to separate AnimeThemes anime automatically.
+To override automatic assignment, use `SeasonThemeMappings` in the plugin configuration JSON to map a media-server season to a different AnimeThemes anime.
+
+```json
+{
+  "SeasonThemeMappings": [
+    {
+      "Enabled": true,
+      "SeriesPath": "D:\\Anime\\Example Series",
+      "SeasonNumber": 2,
+      "AnimeThemesSlug": "example_series_second_season",
+      "Locked": true
+    },
+    {
+      "SeasonPath": "D:\\Anime\\Example Series\\Season 03",
+      "AniListId": 12345
+    }
+  ]
+}
+```
+
+The series-level `theme-music` / `backdrops` folders are kept. If a season resolves to the same AnimeThemes anime as the series, duplicate season output is skipped.
 
 ## License
 

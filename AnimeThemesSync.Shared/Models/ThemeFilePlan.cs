@@ -25,6 +25,17 @@ public sealed record ThemeFilePlan(
 public sealed record ThemeExtraPlan(string SourcePath, string TargetPath);
 
 /// <summary>
+/// Describes one local directory cleanup pass for plugin-owned theme files.
+/// </summary>
+/// <param name="Directory">The local directory to clean.</param>
+/// <param name="DesiredFiles">The files that should remain in the directory.</param>
+/// <param name="Themes">The AnimeThemes themes used to identify plugin-owned legacy files.</param>
+public sealed record ThemeCleanupPlan(
+    string Directory,
+    HashSet<string> DesiredFiles,
+    List<AnimeThemesTheme> Themes);
+
+/// <summary>
 /// Describes all file-system outputs for one library item.
 /// </summary>
 /// <param name="MediaFiles">Theme media files for backdrops/theme-music.</param>
@@ -33,4 +44,10 @@ public sealed record ThemeExtraPlan(string SourcePath, string TargetPath);
 public sealed record ThemeOutputPlan(
     List<ThemeFilePlan> MediaFiles,
     List<ThemeExtraPlan> ExtraFiles,
-    List<AnimeThemesTheme> Themes);
+    List<AnimeThemesTheme> Themes)
+{
+    /// <summary>
+    /// Gets cleanup passes that correspond to the planned output directories.
+    /// </summary>
+    public List<ThemeCleanupPlan> CleanupPlans { get; init; } = [];
+}
