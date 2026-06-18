@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -39,6 +41,7 @@ jobs:
       - name: Generate Release Notes
         run: |
           set -euo pipefail
+          git fetch --force --tags
           TAG_MESSAGE="$(git for-each-ref "refs/tags/${GITHUB_REF_NAME}" --format='%(contents)' | sed '/^[[:space:]]*$/d' || true)"
 
           if [ -n "${TAG_MESSAGE}" ]; then
