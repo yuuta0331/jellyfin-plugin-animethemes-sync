@@ -32,6 +32,7 @@ AnimeThemes Sync adds AnimeThemes.moe integration to your media server:
 - AnimeThemes external links on items
 - Scheduled OP/ED theme downloading (video/audio)
 - Series, season, and movie support
+- Season Finder UI for unmatched season mappings
 
 ## Installation
 
@@ -70,6 +71,7 @@ AnimeThemes Sync adds AnimeThemes.moe integration to your media server:
 - Run `Download Anime Themes`.
 - Theme files will be created in media folders (`backdrops` / `theme-music`).
 - Series output remains under the series folder; season-specific mappings write to each season folder.
+- Open `AnimeThemes Browser` -> `Season Finder` to review unmatched seasons, search AnimeThemes, preview OP/ED entries, and save season mappings without editing JSON.
 
 ## Manual Linking
 
@@ -80,10 +82,16 @@ If automatic matching fails, set external IDs manually:
 
 Example: `https://animethemes.moe/anime/blackrock_shooter_tv` -> slug is `blackrock_shooter_tv`.
 
-### Season mappings
+### Season Finder and season mappings
 
 When multiple anime seasons are grouped into one Jellyfin/Emby series, the scheduled task follows AniList relations from the series AniList ID and tries to assign normal seasons to separate AnimeThemes anime automatically.
-To override automatic assignment, use `SeasonThemeMappings` in the plugin configuration JSON to map a media-server season to a different AnimeThemes anime.
+If a season is unmatched or mapped incorrectly, open `AnimeThemes Browser` -> `Season Finder`:
+
+1. Select a season from `Unmatched`, `Manual`, `Auto`, or `All`.
+2. Search AnimeThemes by title and optional year.
+3. Select a candidate, preview the OP/ED rows, then choose `Save mapping` or `Save & Download`.
+
+`Save & Download` stores the mapping and runs an on-demand download for that season item, writing to that season's `theme-music` / `backdrops` folders. The plugin still supports `SeasonThemeMappings` JSON in the configuration page as an advanced fallback.
 
 ```json
 {

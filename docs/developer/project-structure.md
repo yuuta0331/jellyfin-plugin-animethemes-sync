@@ -31,10 +31,12 @@
   - ダウンロードタスク
   - Series / Season / Movie のテーマ出力計画を作成
   - AniList relations と `SeasonThemeMappings` による Season 別 AnimeThemes 解決
+  - Season Finder API の状態一覧、検索、プレビュー、保存/削除処理
 - `ExternalIds/`
   - AnimeThemes 用外部 ID / URL プロバイダ
 - `Configuration/`
   - 設定モデル・設定 UI
+  - AnimeThemes Browser / Season Finder UI
 
 ## Emby Plugin
 
@@ -46,10 +48,12 @@
   - ダウンロードタスク
   - Series / Season / Movie のテーマ出力計画を作成
   - AniList relations と `SeasonThemeMappings` による Season 別 AnimeThemes 解決
+  - Season Finder API の状態一覧、検索、プレビュー、保存/削除処理
 - `Helpers/`
   - Emby ロガーアダプタ、HttpClientFactory
 - `Configuration/`
   - 設定モデル・設定 UI
+  - AnimeThemes Browser / Season Finder UI
 
 ## Shared
 
@@ -58,13 +62,14 @@
   - AniList relations から続編/前日譚チェーンを取得
 - `Services/AnimeThemesService.cs`
   - AnimeThemes API クライアント
+  - external-id / slug 解決とタイトル検索
 - `Services/ThemeScoringService.cs`
   - OP/ED 候補スコアリング
 - `Services/ThemeFilePlanner.cs`
   - `theme-music` / `backdrops` / `extras` の出力計画と cleanup plan を生成
   - 複数出力先の計画を統合
 - `Models/`
-  - AnimeThemes API DTO / スコアモデル
+  - AnimeThemes API DTO / スコアモデル / Theme Browser・Season Finder DTO
 - `Configuration/`
   - 音声/映像ごとのテーマ設定
   - Season ごとの AnimeThemes 手動マッピングモデル

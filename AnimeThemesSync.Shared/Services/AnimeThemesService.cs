@@ -76,6 +76,25 @@ public sealed class AnimeThemesService
         return await GetAnimeFromUrl(url, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Searches AnimeThemes by title.
+    /// </summary>
+    /// <param name="query">The title query.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Matching AnimeThemes anime candidates.</returns>
+    public async Task<IReadOnlyList<AnimeThemesAnime>> SearchAnimeByTitle(string query, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return [];
+        }
+
+        var escapedQuery = Uri.EscapeDataString(query.Trim());
+        var url = $"{Constants.AnimeThemesBaseUrl}/search/?q={escapedQuery}&fields[search]=anime";
+        var response = await SendRequestAsync<AnimeThemesSearchResponse>(url, cancellationToken).ConfigureAwait(false);
+        return response?.Search?.Anime ?? [];
+    }
+
     private async Task<T?> SendRequestAsync<T>(string url, CancellationToken cancellationToken)
         where T : class
     {

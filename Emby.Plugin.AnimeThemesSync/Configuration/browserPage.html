@@ -1,8 +1,8 @@
-<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-centerfocus="true" data-bindheader="true" data-controller="__plugin/animethemessyncbrowserjs20260618b" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-centerfocus="true" data-bindheader="true" data-controller="__plugin/animethemessyncbrowserjs20260618c" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.06.18-b.</div>
+                <div class="fieldDescription">UI version: 2026.06.18-c.</div>
 
                 <div class="verticalSection ats-browser-toolbar">
                     <div class="inputContainer ats-search">
@@ -47,6 +47,63 @@
                         <button is="emby-button" type="button" class="emby-button ats-button-secondary" data-delete-scope="all">
                             <span>Delete All</span>
                         </button>
+                    </div>
+                </div>
+
+                <div class="verticalSection ats-tabs" id="AnimeThemesBrowserTabs">
+                    <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-tab active" id="AnimeThemesBrowserLibraryTab" data-ats-tab="library">
+                        <span>Library Browser</span>
+                    </button>
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-tab" id="AnimeThemesBrowserFinderTab" data-ats-tab="finder">
+                        <span>Season Finder</span>
+                    </button>
+                </div>
+
+                <div class="verticalSection ats-season-finder" id="AnimeThemesSeasonFinderView" style="display: none;">
+                    <div class="ats-library-header">
+                        <h2 class="sectionTitle">Season Finder</h2>
+                        <div id="AnimeThemesFinderState" class="fieldDescription">Select an unmatched season, search AnimeThemes, then save a mapping.</div>
+                    </div>
+                    <div class="ats-finder-layout">
+                        <div class="ats-finder-panel">
+                            <div class="ats-panel-head">
+                                <h3>1. Seasons</h3>
+                                <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AnimeThemesSeasonRefresh">
+                                    <span>Refresh</span>
+                                </button>
+                            </div>
+                            <div class="selectContainer">
+                                <label class="selectLabel" for="AnimeThemesSeasonFilter">Status</label>
+                                <select is="emby-select" id="AnimeThemesSeasonFilter" class="emby-select-withcolor emby-select">
+                                    <option value="unmatched">Unmatched</option>
+                                    <option value="manual">Manual</option>
+                                    <option value="auto">Auto</option>
+                                    <option value="all">All</option>
+                                </select>
+                            </div>
+                            <div id="AnimeThemesSeasonList" class="ats-season-list"></div>
+                        </div>
+                        <div class="ats-finder-panel">
+                            <h3>2. Search AnimeThemes</h3>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="AnimeThemesFinderSearchInput">Title</label>
+                                <input id="AnimeThemesFinderSearchInput" type="text" is="emby-input" autocomplete="off" />
+                            </div>
+                            <div class="ats-finder-search-row">
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="AnimeThemesFinderYear">Year</label>
+                                    <input id="AnimeThemesFinderYear" type="number" is="emby-input" min="1950" max="2100" />
+                                </div>
+                                <button is="emby-button" type="button" class="raised emby-button ats-action-button" id="AnimeThemesFinderSearch">
+                                    <span>Search</span>
+                                </button>
+                            </div>
+                            <div id="AnimeThemesFinderResults" class="ats-search-results"></div>
+                        </div>
+                        <div class="ats-finder-panel">
+                            <h3>3. Preview and Save</h3>
+                            <div id="AnimeThemesFinderPreview" class="ats-finder-preview fieldDescription">No AnimeThemes candidate selected.</div>
+                        </div>
                     </div>
                 </div>
 
@@ -159,6 +216,7 @@
 
             #AnimeThemesBrowserPage .ats-toolbar-actions,
             #AnimeThemesBrowserPage .ats-actions,
+            #AnimeThemesBrowserPage .ats-tabs,
             #AnimeThemesBrowserPage .ats-status-list {
                 display: flex;
                 gap: .5rem;
@@ -234,7 +292,10 @@
             }
 
             #AnimeThemesBrowserPage .ats-item-card:hover,
-            #AnimeThemesBrowserPage .ats-view-mode.active {
+            #AnimeThemesBrowserPage .ats-view-mode.active,
+            #AnimeThemesBrowserPage .ats-tab.active,
+            #AnimeThemesBrowserPage .ats-season-card.selected,
+            #AnimeThemesBrowserPage .ats-search-card.selected {
                 border-color: currentColor !important;
                 background: rgba(127, 127, 127, .14);
             }
@@ -431,6 +492,83 @@
                 background: rgba(244, 67, 54, .1);
             }
 
+            #AnimeThemesBrowserPage .ats-finder-layout {
+                display: grid;
+                grid-template-columns: minmax(14rem, .9fr) minmax(16rem, 1fr) minmax(18rem, 1.2fr);
+                gap: .85rem;
+                align-items: start;
+            }
+
+            #AnimeThemesBrowserPage .ats-finder-panel {
+                border: 1px solid rgba(127, 127, 127, .28);
+                border-radius: 8px;
+                padding: .85rem;
+                background: rgba(127, 127, 127, .06);
+                min-width: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-finder-panel h3,
+            #AnimeThemesBrowserPage .ats-panel-head h3 {
+                margin: 0 0 .75rem;
+                font-size: 1.05rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-panel-head {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: .5rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-season-list,
+            #AnimeThemesBrowserPage .ats-search-results,
+            #AnimeThemesBrowserPage .ats-finder-preview-list {
+                display: grid;
+                gap: .55rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-season-card,
+            #AnimeThemesBrowserPage .ats-search-card {
+                display: grid;
+                gap: .35rem;
+                width: 100%;
+                border: 1px solid rgba(127, 127, 127, .28);
+                border-radius: 8px;
+                padding: .65rem;
+                background: rgba(127, 127, 127, .05);
+                color: inherit;
+                text-align: left;
+            }
+
+            #AnimeThemesBrowserPage .ats-search-card {
+                grid-template-columns: 3.5rem minmax(0, 1fr);
+                align-items: center;
+            }
+
+            #AnimeThemesBrowserPage .ats-candidate-poster {
+                display: grid;
+                place-items: center;
+                width: 3.5rem;
+                aspect-ratio: 2 / 3;
+                border: 1px solid rgba(127, 127, 127, .28);
+                border-radius: 6px;
+                background: rgba(127, 127, 127, .12);
+                font-weight: 700;
+            }
+
+            #AnimeThemesBrowserPage .ats-finder-search-row {
+                display: grid;
+                grid-template-columns: minmax(6rem, .5fr) auto;
+                gap: .75rem;
+                align-items: end;
+            }
+
+            #AnimeThemesBrowserPage .ats-finder-preview-head {
+                display: grid;
+                gap: .35rem;
+                margin-bottom: .75rem;
+            }
+
             #AnimeThemesBrowserPage .ats-player {
                 display: none;
                 position: fixed;
@@ -507,7 +645,8 @@
             @media (max-width: 760px) {
                 #AnimeThemesBrowserPage .ats-browser-toolbar,
                 #AnimeThemesBrowserPage .ats-filters,
-                #AnimeThemesBrowserPage .ats-theme-card {
+                #AnimeThemesBrowserPage .ats-theme-card,
+                #AnimeThemesBrowserPage .ats-finder-layout {
                     grid-template-columns: 1fr;
                 }
 

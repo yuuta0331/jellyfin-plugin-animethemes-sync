@@ -32,6 +32,7 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 - アイテム画面への AnimeThemes 外部リンク追加
 - OP/ED テーマの定期ダウンロード（動画/音声）
 - シリーズ・Season・映画の対応
+- 未一致Seasonを検索・保存できるSeason Finder UI
 
 ## Installation
 
@@ -70,6 +71,7 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 - `Download Anime Themes` を実行
 - メディアフォルダ内にテーマファイルが作成されます（`backdrops` / `theme-music`）
 - シリーズにはシリーズ直下、Seasonに別マッピングがある場合は各Seasonフォルダ直下へ作成されます
+- `AnimeThemes Browser` -> `Season Finder` を開くと、未一致Seasonの確認、AnimeThemes検索、OP/EDプレビュー、Seasonマッピング保存をJSON編集なしで実行できます
 
 ## Manual Linking
 
@@ -80,10 +82,16 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 
 例: `https://animethemes.moe/anime/blackrock_shooter_tv` の slug は `blackrock_shooter_tv`
 
-### Seasonごとの手動マッピング
+### Season Finder とSeasonごとの手動マッピング
 
 複数期が1つのJellyfin/Embyシリーズにまとまっている場合、スケジュールタスクはシリーズのAniList IDからAniList relationsを辿り、通常SeasonをAnimeThemesの別作品へ自動割り当てします。
-自動割り当てを上書きしたい場合は、設定画面の `SeasonThemeMappings` JSONでSeasonフォルダをAnimeThemesの別作品へ割り当てられます。
+未一致または誤一致のSeasonがある場合は、`AnimeThemes Browser` -> `Season Finder` を使用します。
+
+1. `Unmatched` / `Manual` / `Auto` / `All` からSeasonを選択
+2. タイトルと任意の年でAnimeThemesを検索
+3. 候補を選択してOP/EDをプレビューし、`Save mapping` または `Save & Download` を実行
+
+`Save & Download` はマッピング保存後にそのSeason itemのオンデマンドダウンロードを実行し、対象Seasonの `theme-music` / `backdrops` に出力します。設定画面の `SeasonThemeMappings` JSONはAdvanced用途のフォールバックとして引き続き利用できます。
 
 ```json
 {

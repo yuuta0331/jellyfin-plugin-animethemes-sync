@@ -137,6 +137,45 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             // Assert
             Assert.Null(result);
         }
+
+        [Fact]
+        public async Task SearchAnimeByTitle_ReturnsAnimeCandidates()
+        {
+            // Arrange
+            var jsonResponse = @"{
+                ""search"": {
+                    ""anime"": [
+                        {
+                            ""id"": 456,
+                            ""name"": ""K-On!!"",
+                            ""slug"": ""k_on_2010"",
+                            ""year"": 2010,
+                            ""season"": ""Spring"",
+                            ""resources"": [
+                                { ""site"": ""anilist"", ""external_id"": 7791 },
+                                { ""site"": ""myanimelist"", ""external_id"": 7791 }
+                            ]
+                        }
+                    ]
+                }
+            }";
+
+            _mockHttp.When("https://api.animethemes.moe/search/*")
+                .Respond("application/json", jsonResponse);
+
+            // Act
+            var result = await _service.SearchAnimeByTitle("K-On", CancellationToken.None);
+
+            // Assert
+            var anime = Assert.Single(result);
+            Assert.Equal(456, anime.Id);
+            Assert.Equal("K-On!!", anime.Name);
+            Assert.Equal("k_on_2010", anime.Slug);
+            Assert.Equal(2010, anime.Year);
+            Assert.Equal("Spring", anime.Season);
+            Assert.NotNull(anime.Resources);
+            Assert.Equal(2, anime.Resources!.Count);
+        }
     }
 }
 

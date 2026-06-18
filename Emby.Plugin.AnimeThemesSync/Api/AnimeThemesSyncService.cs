@@ -65,6 +65,45 @@ public class GetAnimeThemesBrowserSummary : IReturn<ThemeBrowserSummary>
 {
 }
 
+[Route("/AnimeThemesSync/SeasonMappings", "GET", Summary = "Gets AnimeThemes season mapping status.")]
+public class GetAnimeThemesSeasonMappings : IReturn<IReadOnlyList<SeasonThemeMappingRow>>
+{
+}
+
+[Route("/AnimeThemesSync/Search", "GET", Summary = "Searches AnimeThemes anime candidates.")]
+public class SearchAnimeThemesAnime : IReturn<IReadOnlyList<ThemeFinderSearchResult>>
+{
+    public string Query { get; set; } = string.Empty;
+
+    public int? Year { get; set; }
+}
+
+[Route("/AnimeThemesSync/Anime/{Slug}/Themes", "GET", Summary = "Gets AnimeThemes rows for a candidate anime.")]
+public class GetAnimeThemesAnimePreview : IReturn<ThemeBrowserItemResult>
+{
+    public string Slug { get; set; } = string.Empty;
+}
+
+[Route("/AnimeThemesSync/SeasonMappings", "POST", Summary = "Saves an AnimeThemes season mapping.")]
+public class SaveAnimeThemesSeasonMapping : IReturn<SeasonThemeMappingRow>
+{
+    public Guid SeasonItemId { get; set; }
+
+    public string? AnimeThemesSlug { get; set; }
+
+    public int? AniListId { get; set; }
+
+    public int? MyAnimeListId { get; set; }
+
+    public bool Locked { get; set; }
+}
+
+[Route("/AnimeThemesSync/SeasonMappings/{SeasonItemId}", "DELETE", Summary = "Deletes an AnimeThemes season mapping.")]
+public class DeleteAnimeThemesSeasonMapping : IReturn<SeasonThemeMappingRow>
+{
+    public Guid SeasonItemId { get; set; }
+}
+
 [Route("/AnimeThemesSync/ThemeFiles/Delete", "POST", Summary = "Deletes local AnimeThemes files.")]
 public class DeleteAnimeThemesFiles : IReturn<ThemeDeleteResult>
 {
@@ -165,6 +204,80 @@ public class AnimeThemesSyncService : IService
     public object Get(GetAnimeThemesBrowserSummary request)
     {
         return _themeDownloader.GetBrowserSummary();
+    }
+
+    public object Get(GetAnimeThemesSeasonMappings request)
+    {
+        return _themeDownloader.GetSeasonThemeMappingsAsync(CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    public object Get(SearchAnimeThemesAnime request)
+    {
+        try
+        {
+            return _themeDownloader.SearchThemeFinderAnimeAsync(request.Query, request.Year, CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
+    }
+
+    public object Get(GetAnimeThemesAnimePreview request)
+    {
+        try
+        {
+            return _themeDownloader.GetAnimeThemePreviewAsync(request.Slug, CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
+    }
+
+    public object Post(SaveAnimeThemesSeasonMapping request)
+    {
+        try
+        {
+            return _themeDownloader.SaveSeasonThemeMappingAsync(
+                new SaveSeasonThemeMappingRequest
+                {
+                    SeasonItemId = request.SeasonItemId,
+                    AnimeThemesSlug = request.AnimeThemesSlug,
+                    AniListId = request.AniListId,
+                    MyAnimeListId = request.MyAnimeListId,
+                    Locked = request.Locked,
+                },
+                CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
+    }
+
+    public object Delete(DeleteAnimeThemesSeasonMapping request)
+    {
+        try
+        {
+            return _themeDownloader.DeleteSeasonThemeMappingAsync(request.SeasonItemId, CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
     }
 
     public object Post(DeleteAnimeThemesFiles request)

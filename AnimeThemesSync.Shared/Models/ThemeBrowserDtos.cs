@@ -72,3 +72,46 @@ public sealed record ThemeBrowserSummary(
 public sealed record ThemeDeleteResult(
     int FilesDeleted,
     long BytesDeleted);
+
+public sealed record SeasonThemeMappingRow(
+    Guid SeriesItemId,
+    string SeriesName,
+    string? SeriesPath,
+    Guid SeasonItemId,
+    string SeasonName,
+    string? SeasonPath,
+    int? SeasonNumber,
+    string Status,
+    string Source,
+    bool SameAsSeries,
+    string? AnimeName,
+    int? AnimeThemesId,
+    string? AnimeThemesSlug,
+    string? AnimeThemesUrl,
+    int? AniListId,
+    int? MyAnimeListId,
+    string? PrimaryImageUrl);
+
+public sealed record ThemeFinderSearchResult(
+    int AnimeThemesId,
+    string Name,
+    string? Slug,
+    int? Year,
+    string? Season,
+    int? AniListId,
+    int? MyAnimeListId,
+    string? AnimeThemesUrl,
+    int Score);
+
+public sealed class SaveSeasonThemeMappingRequest
+{
+    public Guid SeasonItemId { get; set; }
+
+    public string? AnimeThemesSlug { get; set; }
+
+    public int? AniListId { get; set; }
+
+    public int? MyAnimeListId { get; set; }
+
+    public bool Locked { get; set; }
+}

@@ -13,6 +13,7 @@
    - 作品ごとの desired files を計算
    - Series の AniList ID から AniList relations を辿り、通常 Season を別 AnimeThemes anime へ自動割り当て
    - `SeasonThemeMappings` がある場合は自動割り当てより優先
+   - Season Finder UI で保存された手動マッピングも同じ `SeasonThemeMappings` として扱う
    - 並列数制限付きでダウンロード
    - 必要に応じて ffmpeg で音量調整 / 変換
    - Series / Season / Movie ごとの出力ディレクトリ単位で不要ファイルをクリーンアップ
@@ -27,7 +28,21 @@
 - 自動 relations 解決では Movie / OVA / Special / Music 形式を通常 Season 候補から除外する。
 - Season が Series と同じ AnimeThemes anime に解決された場合は、重複回避のため Season 側には出力しない。
 - Season ごとに別 AnimeThemes anime が確定した場合は、`Season xx/theme-music` と `Season xx/backdrops` に出力する。
-- 自動割り当てが不正確な作品は `SeasonThemeMappings` で明示的に上書きする。
+- 自動割り当てが不正確な作品は、AnimeThemes Browser の Season Finder で検索・プレビューして `SeasonThemeMappings` へ保存する。
+- `Save & Download` は保存後に Season item のオンデマンドダウンロードジョブを起動する。
+
+## Theme Finder API
+
+- `GET /AnimeThemesSync/SeasonMappings`
+  - Series配下Seasonを列挙し、`Manual` / `Direct` / `Auto` / `Series` / `Unmatched` を返す。
+- `GET /AnimeThemesSync/Search?query=&year=`
+  - AnimeThemes search APIを使い、候補をスコア順に返す。
+- `GET /AnimeThemesSync/Anime/{slug}/Themes`
+  - 候補AnimeThemes作品のOP/EDプレビュー行を返す。
+- `POST /AnimeThemesSync/SeasonMappings`
+  - Season item id と AnimeThemes slug / AniList / MAL ID を `SeasonThemeMappings` に保存する。
+- `DELETE /AnimeThemesSync/SeasonMappings/{seasonItemId}`
+  - 対象Seasonの手動マッピングを削除する。
 
 ## Shared Services
 
@@ -38,6 +53,7 @@
 
 - `AnimeThemesService`
   - 外部 ID（AniList/MAL）または slug から取得
+  - AnimeThemes search API によるタイトル検索
   - `anime` が配列/単体の両パターンに対応
 
 - `ThemeScoringService`
@@ -70,6 +86,7 @@
   - `SeasonThemeMappings` は Season item id、Season path、または Series path + Season number で対象 Season を指定
   - 解決先は AnimeThemes slug、AniList ID、MyAnimeList ID のいずれか
   - `Locked` は手動割り当てを将来の自動推定より優先する意図を示す
+  - 通常操作は Season Finder UI から行い、JSON編集はAdvanced fallbackとして残す
 
 ## Error Handling
 

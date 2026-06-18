@@ -9,10 +9,23 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         view.setAttribute('data-ats-script-bound', 'true');
 
         var page = view;
-        var state = { items: [], filteredItems: [], currentItem: null, currentResult: null, viewMode: 'poster' };
+        var state = {
+            items: [],
+            filteredItems: [],
+            currentItem: null,
+            currentResult: null,
+            viewMode: 'poster',
+            activeTab: 'library',
+            seasonMappings: [],
+            selectedSeason: null,
+            selectedAnime: null,
+            finderPreview: null
+        };
+        var browserToolbar = page.querySelector('.ats-browser-toolbar');
         var itemSelect = page.querySelector('#AnimeThemesBrowserItemSelect');
         var libraryView = page.querySelector('#AnimeThemesBrowserLibraryView');
         var detailView = page.querySelector('#AnimeThemesBrowserDetailView');
+        var finderView = page.querySelector('#AnimeThemesSeasonFinderView');
         var itemGrid = page.querySelector('#AnimeThemesBrowserItemGrid');
         var libraryCount = page.querySelector('#AnimeThemesBrowserLibraryCount');
         var rowsContainer = page.querySelector('#AnimeThemesBrowserRows');
@@ -38,6 +51,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         var summarySongs = page.querySelector('#AnimeThemesSummarySongs');
         var summaryExtras = page.querySelector('#AnimeThemesSummaryExtras');
         var summaryBytes = page.querySelector('#AnimeThemesSummaryBytes');
+        var seasonFilter = page.querySelector('#AnimeThemesSeasonFilter');
+        var seasonList = page.querySelector('#AnimeThemesSeasonList');
+        var finderSearchInput = page.querySelector('#AnimeThemesFinderSearchInput');
+        var finderYear = page.querySelector('#AnimeThemesFinderYear');
+        var finderResults = page.querySelector('#AnimeThemesFinderResults');
+        var finderPreview = page.querySelector('#AnimeThemesFinderPreview');
+        var finderState = page.querySelector('#AnimeThemesFinderState');
 
         function value(obj, pascal, camel) {
             return obj ? obj[pascal] !== undefined ? obj[pascal] : obj[camel] : null;
@@ -53,6 +73,20 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
 
         function apiPost(path) {
             return ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl(path), dataType: 'json' });
+        }
+
+        function apiPostJson(path, data) {
+            return ApiClient.ajax({
+                type: 'POST',
+                url: ApiClient.getUrl(path),
+                dataType: 'json',
+                contentType: 'application/json',
+                data: JSON.stringify(data || {})
+            });
+        }
+
+        function apiDelete(path) {
+            return ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl(path), dataType: 'json' });
         }
 
         function apiUrl(path, authenticated) {
@@ -229,9 +263,30 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             renderItemGrid();
         }
 
+        function setActiveTab(tab) {
+            state.activeTab = tab === 'finder' ? 'finder' : 'library';
+            page.querySelectorAll('.ats-tab').forEach(function (button) {
+                button.classList.toggle('active', button.getAttribute('data-ats-tab') === state.activeTab);
+            });
+            var libraryActive = state.activeTab === 'library';
+            browserToolbar.style.display = libraryActive ? '' : 'none';
+            page.querySelector('.ats-filters').style.display = libraryActive ? '' : 'none';
+            finderView.style.display = libraryActive ? 'none' : '';
+            if (libraryActive) {
+                detailView.style.display = state.currentResult ? '' : 'none';
+                libraryView.style.display = state.currentResult ? 'none' : '';
+            } else {
+                libraryView.style.display = 'none';
+                detailView.style.display = 'none';
+                if (!state.seasonMappings.length) {
+                    loadSeasonMappings();
+                }
+            }
+        }
+
         function openLibraryView() {
             detailView.style.display = 'none';
-            libraryView.style.display = '';
+            libraryView.style.display = state.activeTab === 'library' ? '' : 'none';
             state.currentItem = null;
             state.currentResult = null;
             itemSelect.value = '';
@@ -239,6 +294,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
 
         function openItemDetail(itemId) {
             if (!itemId) return;
+            setActiveTab('library');
             itemSelect.value = itemId;
             libraryView.style.display = 'none';
             detailView.style.display = '';
@@ -257,6 +313,271 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             }).catch(function (err) {
                 Dashboard.hideLoadingMsg();
                 Dashboard.alert({ title: 'Browser Error', message: 'Failed to load items: ' + err });
+            });
+        }
+
+        function loadSeasonMappings() {
+            finderState.textContent = 'Loading season mappings...';
+            apiGet('AnimeThemesSync/SeasonMappings').then(function (rows) {
+                state.seasonMappings = rows || [];
+                renderSeasonMappings();
+                finderState.textContent = state.seasonMappings.length + ' seasons loaded.';
+            }).catch(function (err) {
+                finderState.textContent = 'Failed to load season mappings.';
+                Dashboard.alert({ title: 'Season Finder Error', message: getErrorMessage(err) });
+            });
+        }
+
+        function renderSeasonMappings() {
+            var filter = seasonFilter.value || 'unmatched';
+            var rows = state.seasonMappings.filter(function (row) {
+                var status = String(value(row, 'Status', 'status') || '').toLowerCase();
+                if (filter === 'all') return true;
+                if (filter === 'auto') return status === 'auto' || status === 'direct' || status === 'series';
+                return status === filter;
+            });
+            seasonList.innerHTML = '';
+            if (!rows.length) {
+                appendDiv(seasonList, 'fieldDescription', 'No seasons match the current filter.');
+                return;
+            }
+
+            rows.forEach(function (row) {
+                seasonList.appendChild(createSeasonCard(row));
+            });
+        }
+
+        function createSeasonCard(row) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'ats-season-card';
+            button.classList.toggle('selected', state.selectedSeason && value(state.selectedSeason, 'SeasonItemId', 'seasonItemId') === value(row, 'SeasonItemId', 'seasonItemId'));
+            appendDiv(button, 'ats-item-title', text(value(row, 'SeriesName', 'seriesName')) + ' / ' + text(value(row, 'SeasonName', 'seasonName')));
+            appendDiv(button, 'ats-item-meta', [
+                'Season ' + text(value(row, 'SeasonNumber', 'seasonNumber')),
+                text(value(row, 'Status', 'status')),
+                text(value(row, 'AnimeName', 'animeName') || value(row, 'AnimeThemesSlug', 'animeThemesSlug'))
+            ].join(' | '));
+            var chips = document.createElement('div');
+            chips.className = 'ats-status-list';
+            addChip(chips, text(value(row, 'Source', 'source')), '');
+            if (value(row, 'SameAsSeries', 'sameAsSeries')) addChip(chips, 'Series-level', 'ok');
+            if (!value(row, 'AnimeThemesSlug', 'animeThemesSlug')) addChip(chips, 'Needs match', 'missing');
+            button.appendChild(chips);
+            button.addEventListener('click', function () {
+                selectSeason(row);
+            });
+            return button;
+        }
+
+        function selectSeason(row) {
+            state.selectedSeason = row;
+            state.selectedAnime = null;
+            state.finderPreview = null;
+            finderSearchInput.value = value(row, 'SeriesName', 'seriesName') || '';
+            finderYear.value = '';
+            finderResults.innerHTML = '';
+            finderPreview.className = 'ats-finder-preview fieldDescription';
+            finderPreview.textContent = 'Search AnimeThemes and select a candidate for ' + text(value(row, 'SeasonName', 'seasonName')) + '.';
+            renderSeasonMappings();
+        }
+
+        function searchAnimeThemes() {
+            var query = finderSearchInput.value.trim();
+            if (!query) {
+                Dashboard.alert({ title: 'Season Finder', message: 'Enter a title to search.' });
+                return;
+            }
+
+            var year = finderYear.value ? parseInt(finderYear.value, 10) : null;
+            finderState.textContent = 'Searching AnimeThemes...';
+            finderResults.innerHTML = '';
+            apiGet('AnimeThemesSync/Search?query=' + encodeURIComponent(query) + (year ? '&year=' + encodeURIComponent(year) : '')).then(function (results) {
+                renderSearchResults(results || []);
+                finderState.textContent = (results || []).length + ' candidates found.';
+            }).catch(function (err) {
+                finderState.textContent = 'Search failed.';
+                Dashboard.alert({ title: 'Season Finder Error', message: getErrorMessage(err) });
+            });
+        }
+
+        function renderSearchResults(results) {
+            finderResults.innerHTML = '';
+            if (!results.length) {
+                appendDiv(finderResults, 'fieldDescription', 'No candidates found.');
+                return;
+            }
+
+            results.forEach(function (result) {
+                finderResults.appendChild(createSearchCard(result));
+            });
+        }
+
+        function createSearchCard(result) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'ats-search-card';
+            button.classList.toggle('selected', state.selectedAnime && value(state.selectedAnime, 'Slug', 'slug') === value(result, 'Slug', 'slug'));
+            var posterBox = document.createElement('div');
+            posterBox.className = 'ats-candidate-poster';
+            posterBox.textContent = String(value(result, 'Name', 'name') || 'AT').trim().slice(0, 2).toUpperCase();
+            button.appendChild(posterBox);
+            var body = document.createElement('div');
+            appendDiv(body, 'ats-item-title', text(value(result, 'Name', 'name')));
+            appendDiv(body, 'ats-item-meta', [
+                value(result, 'Year', 'year'),
+                value(result, 'Season', 'season'),
+                value(result, 'Slug', 'slug'),
+                'score ' + text(value(result, 'Score', 'score'))
+            ].filter(Boolean).join(' | '));
+            button.appendChild(body);
+            button.addEventListener('click', function () {
+                selectAnimeCandidate(result);
+            });
+            return button;
+        }
+
+        function selectAnimeCandidate(result) {
+            var slug = value(result, 'Slug', 'slug');
+            if (!slug) return;
+            state.selectedAnime = result;
+            state.finderPreview = null;
+            finderState.textContent = 'Loading themes for ' + text(value(result, 'Name', 'name')) + '...';
+            apiGet('AnimeThemesSync/Anime/' + encodeURIComponent(slug) + '/Themes').then(function (preview) {
+                state.finderPreview = preview || {};
+                renderFinderPreview();
+                finderState.textContent = 'Preview loaded.';
+            }).catch(function (err) {
+                finderState.textContent = 'Failed to load preview.';
+                Dashboard.alert({ title: 'Season Finder Error', message: getErrorMessage(err) });
+            });
+            searchAnimeThemesHighlight();
+        }
+
+        function searchAnimeThemesHighlight() {
+            Array.prototype.forEach.call(finderResults.children, function (node) {
+                if (!state.selectedAnime) return;
+                node.classList.toggle('selected', node.querySelector('.ats-item-meta') && node.textContent.indexOf(value(state.selectedAnime, 'Slug', 'slug')) !== -1);
+            });
+        }
+
+        function renderFinderPreview() {
+            var preview = state.finderPreview || {};
+            var anime = state.selectedAnime || {};
+            var rows = value(preview, 'Themes', 'themes') || [];
+            finderPreview.className = 'ats-finder-preview';
+            finderPreview.innerHTML = '';
+            var head = document.createElement('div');
+            head.className = 'ats-finder-preview-head';
+            appendDiv(head, 'ats-item-title', text(value(anime, 'Name', 'name')));
+            appendDiv(head, 'ats-item-meta', [
+                value(anime, 'Year', 'year'),
+                value(anime, 'Season', 'season'),
+                value(anime, 'Slug', 'slug'),
+                rows.length + ' themes'
+            ].filter(Boolean).join(' | '));
+            var actions = document.createElement('div');
+            actions.className = 'ats-actions';
+            addFinderAction(actions, 'Save mapping', false, function () { saveSeasonMapping(false); });
+            addFinderAction(actions, 'Save & Download', false, function () { saveSeasonMapping(true); });
+            addFinderAction(actions, 'Clear mapping', true, clearSeasonMapping);
+            addOpenButton(actions, 'AnimeThemes', value(anime, 'AnimeThemesUrl', 'animeThemesUrl'));
+            head.appendChild(actions);
+            finderPreview.appendChild(head);
+
+            var list = document.createElement('div');
+            list.className = 'ats-finder-preview-list';
+            if (!rows.length) {
+                appendDiv(list, 'fieldDescription', 'No themes found for this candidate.');
+            } else {
+                rows.slice(0, 12).forEach(function (row) {
+                    list.appendChild(createPreviewThemeRow(row));
+                });
+            }
+            finderPreview.appendChild(list);
+        }
+
+        function createPreviewThemeRow(row) {
+            var card = document.createElement('div');
+            card.className = 'ats-theme-card';
+            var main = document.createElement('div');
+            main.className = 'ats-theme-main';
+            appendDiv(main, 'ats-theme-key', padOrder(value(row, 'Order', 'order')) + ' - ' + text(value(row, 'ThemeKey', 'themeKey')));
+            appendDiv(main, 'ats-song', text(value(row, 'SongTitle', 'songTitle')));
+            appendDiv(main, 'ats-artist fieldDescription', text(value(row, 'Artists', 'artists')));
+            card.appendChild(main);
+            var detail = document.createElement('div');
+            detail.className = 'ats-detail';
+            appendDiv(detail, 'fieldDescription', 'Episodes: ' + text(value(row, 'Episodes', 'episodes')));
+            appendDiv(detail, 'fieldDescription', 'Quality: ' + text(value(row, 'Quality', 'quality')));
+            card.appendChild(detail);
+            var actions = document.createElement('div');
+            actions.className = 'ats-actions';
+            addRemotePreviewButton(actions, row, 'video');
+            addRemotePreviewButton(actions, row, 'audio');
+            addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'));
+            card.appendChild(actions);
+            return card;
+        }
+
+        function addFinderAction(container, label, secondary, handler) {
+            var button = createButton(label, secondary);
+            button.disabled = !state.selectedSeason || !state.selectedAnime;
+            if (label === 'Clear mapping') {
+                button.disabled = !state.selectedSeason;
+            }
+            button.addEventListener('click', handler);
+            container.appendChild(button);
+        }
+
+        function addRemotePreviewButton(container, row, target) {
+            var url = target === 'audio' ? value(row, 'AudioUrl', 'audioUrl') : value(row, 'VideoUrl', 'videoUrl');
+            var button = createButton(target === 'audio' ? 'Preview Audio' : 'Preview Video', true);
+            button.disabled = !url;
+            button.addEventListener('click', function () {
+                if (url) openRemotePlayer(row, target, url);
+            });
+            container.appendChild(button);
+        }
+
+        function saveSeasonMapping(downloadAfterSave) {
+            if (!state.selectedSeason || !state.selectedAnime) return;
+            var payload = {
+                SeasonItemId: value(state.selectedSeason, 'SeasonItemId', 'seasonItemId'),
+                AnimeThemesSlug: value(state.selectedAnime, 'Slug', 'slug'),
+                AniListId: value(state.selectedAnime, 'AniListId', 'aniListId'),
+                MyAnimeListId: value(state.selectedAnime, 'MyAnimeListId', 'myAnimeListId'),
+                Locked: true
+            };
+            finderState.textContent = 'Saving mapping...';
+            apiPostJson('AnimeThemesSync/SeasonMappings', payload).then(function (row) {
+                state.selectedSeason = row || state.selectedSeason;
+                loadSeasonMappings();
+                if (downloadAfterSave) {
+                    startDownloadJob('AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(payload.SeasonItemId) + '&Force=false');
+                } else {
+                    finderState.textContent = 'Mapping saved.';
+                }
+            }).catch(function (err) {
+                finderState.textContent = 'Save failed.';
+                Dashboard.alert({ title: 'Season Finder Error', message: getErrorMessage(err) });
+            });
+        }
+
+        function clearSeasonMapping() {
+            if (!state.selectedSeason) return;
+            var seasonId = value(state.selectedSeason, 'SeasonItemId', 'seasonItemId');
+            finderState.textContent = 'Clearing mapping...';
+            apiDelete('AnimeThemesSync/SeasonMappings/' + encodeURIComponent(seasonId)).then(function (row) {
+                state.selectedSeason = row || null;
+                state.selectedAnime = null;
+                state.finderPreview = null;
+                finderPreview.className = 'ats-finder-preview fieldDescription';
+                finderPreview.textContent = 'Mapping cleared.';
+                loadSeasonMappings();
+            }).catch(function (err) {
+                finderState.textContent = 'Clear failed.';
+                Dashboard.alert({ title: 'Season Finder Error', message: getErrorMessage(err) });
             });
         }
 
@@ -517,7 +838,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
                 var message = value(job, 'Message', 'message') || status || 'Running';
                 setProgress(true, message, progress);
                 if (status === 'Completed') {
-                    loadThemes();
+                    if (state.activeTab === 'finder') {
+                        loadSeasonMappings();
+                    } else {
+                        loadThemes();
+                    }
                     setTimeout(function () { setProgress(false, '', 0); }, 1600);
                     return;
                 }
@@ -574,6 +899,19 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             player.setAttribute('aria-hidden', 'false');
         }
 
+        function openRemotePlayer(row, target, src) {
+            state.lastFocus = document.activeElement;
+            playerTitle.textContent = text(value(row, 'ThemeKey', 'themeKey')) + ' - preview ' + target;
+            playerBody.innerHTML = '';
+            var element = document.createElement(target === 'audio' ? 'audio' : 'video');
+            element.controls = true;
+            element.autoplay = true;
+            element.src = src;
+            playerBody.appendChild(element);
+            player.classList.add('open');
+            player.setAttribute('aria-hidden', 'false');
+        }
+
         function closePlayer() {
             if (player.contains(document.activeElement)) {
                 document.activeElement.blur();
@@ -587,6 +925,20 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             }
         }
 
+        page.querySelectorAll('.ats-tab').forEach(function (button) {
+            button.addEventListener('click', function () {
+                setActiveTab(button.getAttribute('data-ats-tab') || 'library');
+            });
+        });
+        page.querySelector('#AnimeThemesSeasonRefresh').addEventListener('click', loadSeasonMappings);
+        seasonFilter.addEventListener('change', renderSeasonMappings);
+        page.querySelector('#AnimeThemesFinderSearch').addEventListener('click', searchAnimeThemes);
+        finderSearchInput.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                searchAnimeThemes();
+            }
+        });
         searchInput.addEventListener('input', function () {
             renderItemOptions();
             if (state.currentResult) renderThemes();
@@ -616,6 +968,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         });
         page.addEventListener('pageshow', function () {
             setViewMode(state.viewMode);
+            setActiveTab(state.activeTab);
             loadItems();
         });
     }

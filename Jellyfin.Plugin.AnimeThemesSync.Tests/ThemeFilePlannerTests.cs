@@ -299,17 +299,27 @@ public class ThemeFilePlannerTests
             Assert.Contains("data-delete-scope=\"audio\"", content, StringComparison.Ordinal);
             Assert.Contains("data-delete-scope=\"video\"", content, StringComparison.Ordinal);
             Assert.Contains("data-delete-scope=\"all\"", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesSeasonFinderView", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesFinderSearchInput", content, StringComparison.Ordinal);
         }
 
         var jellyfinPage = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
         Assert.Contains("AnimeThemesSync/Summary", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("AnimeThemesSync/ThemeFiles/Delete", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("AnimeThemesSync/SeasonMappings", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("AnimeThemesSync/Search?query=", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("setViewMode", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("saveSeasonMapping", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("Save & Download", jellyfinPage, StringComparison.Ordinal);
 
         var embyController = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js"));
         Assert.Contains("AnimeThemesSync/Summary", embyController, StringComparison.Ordinal);
         Assert.Contains("AnimeThemesSync/ThemeFiles/Delete", embyController, StringComparison.Ordinal);
+        Assert.Contains("AnimeThemesSync/SeasonMappings", embyController, StringComparison.Ordinal);
+        Assert.Contains("AnimeThemesSync/Search?query=", embyController, StringComparison.Ordinal);
         Assert.Contains("setViewMode", embyController, StringComparison.Ordinal);
+        Assert.Contains("saveSeasonMapping", embyController, StringComparison.Ordinal);
+        Assert.Contains("Save & Download", embyController, StringComparison.Ordinal);
     }
 
     [Fact]

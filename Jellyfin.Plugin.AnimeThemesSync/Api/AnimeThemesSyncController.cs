@@ -50,6 +50,91 @@ public sealed class AnimeThemesSyncController : ControllerBase
         return Ok(_themeDownloader.GetBrowserSummary());
     }
 
+    [HttpGet("SeasonMappings")]
+    [ProducesResponseType(typeof(IReadOnlyList<SeasonThemeMappingRow>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<SeasonThemeMappingRow>>> GetSeasonMappings(CancellationToken cancellationToken)
+    {
+        return Ok(await _themeDownloader.GetSeasonThemeMappingsAsync(cancellationToken).ConfigureAwait(false));
+    }
+
+    [HttpGet("Search")]
+    [ProducesResponseType(typeof(IReadOnlyList<ThemeFinderSearchResult>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IReadOnlyList<ThemeFinderSearchResult>>> SearchAnime(
+        [FromQuery] string query,
+        [FromQuery] int? year,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return BadRequest(new { error = "Search query is required." });
+        }
+
+        return Ok(await _themeDownloader.SearchThemeFinderAnimeAsync(query, year, cancellationToken).ConfigureAwait(false));
+    }
+
+    [HttpGet("Anime/{slug}/Themes")]
+    [ProducesResponseType(typeof(ThemeBrowserItemResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ThemeBrowserItemResult>> GetAnimeThemes(string slug, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _themeDownloader.GetAnimeThemePreviewAsync(slug, cancellationToken).ConfigureAwait(false));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("SeasonMappings")]
+    [ProducesResponseType(typeof(SeasonThemeMappingRow), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SeasonThemeMappingRow>> SaveSeasonMapping(
+        [FromBody] SaveSeasonThemeMappingRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _themeDownloader.SaveSeasonThemeMappingAsync(request, cancellationToken).ConfigureAwait(false));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpDelete("SeasonMappings/{seasonItemId:guid}")]
+    [ProducesResponseType(typeof(SeasonThemeMappingRow), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SeasonThemeMappingRow>> DeleteSeasonMapping(Guid seasonItemId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _themeDownloader.DeleteSeasonThemeMappingAsync(seasonItemId, cancellationToken).ConfigureAwait(false));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpPost("ThemeFiles/Delete")]
     [ProducesResponseType(typeof(ThemeDeleteResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

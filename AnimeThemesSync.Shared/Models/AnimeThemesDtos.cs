@@ -28,6 +28,30 @@ public sealed class AnimeThemesResponse
     public List<AnimeThemesAnime>? Anime { get; set; }
 }
 
+/// <summary>
+/// Response wrapper for AnimeThemes search endpoint.
+/// </summary>
+public sealed class AnimeThemesSearchResponse
+{
+    /// <summary>
+    /// Gets or sets the search payload.
+    /// </summary>
+    [JsonPropertyName("search")]
+    public AnimeThemesSearchPayload? Search { get; set; }
+}
+
+/// <summary>
+/// AnimeThemes search result payload.
+/// </summary>
+public sealed class AnimeThemesSearchPayload
+{
+    /// <summary>
+    /// Gets or sets anime search hits.
+    /// </summary>
+    [JsonPropertyName("anime")]
+    public List<AnimeThemesAnime>? Anime { get; set; }
+}
+
 public sealed class AnimeThemesAnime
 {
     [JsonPropertyName("id")]
