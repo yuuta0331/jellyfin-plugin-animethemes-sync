@@ -29,27 +29,36 @@ public sealed class AnimeThemesResponse
 }
 
 /// <summary>
-/// Response wrapper for AnimeThemes search endpoint.
+/// Response wrapper for AnimeThemes anime index endpoint.
 /// </summary>
-public sealed class AnimeThemesSearchResponse
+public sealed class AnimeThemesAnimeIndexResponse
 {
-    /// <summary>
-    /// Gets or sets the search payload.
-    /// </summary>
-    [JsonPropertyName("search")]
-    public AnimeThemesSearchPayload? Search { get; set; }
-}
-
-/// <summary>
-/// AnimeThemes search result payload.
-/// </summary>
-public sealed class AnimeThemesSearchPayload
-{
-    /// <summary>
-    /// Gets or sets anime search hits.
-    /// </summary>
     [JsonPropertyName("anime")]
     public List<AnimeThemesAnime>? Anime { get; set; }
+
+    [JsonPropertyName("links")]
+    public AnimeThemesIndexLinks? Links { get; set; }
+
+    [JsonPropertyName("meta")]
+    public AnimeThemesIndexMeta? Meta { get; set; }
+}
+
+public sealed class AnimeThemesIndexLinks
+{
+    [JsonPropertyName("next")]
+    public string? Next { get; set; }
+}
+
+public sealed class AnimeThemesIndexMeta
+{
+    [JsonPropertyName("current_page")]
+    public int? CurrentPage { get; set; }
+
+    [JsonPropertyName("per_page")]
+    public int? PerPage { get; set; }
+
+    [JsonPropertyName("total")]
+    public int? Total { get; set; }
 }
 
 public sealed class AnimeThemesAnime
@@ -69,11 +78,47 @@ public sealed class AnimeThemesAnime
     [JsonPropertyName("season")]
     public string? Season { get; set; }
 
+    [JsonPropertyName("media_format")]
+    public string? MediaFormat { get; set; }
+
+    [JsonPropertyName("synonyms")]
+    public List<AnimeThemesSynonym>? Synonyms { get; set; }
+
     [JsonPropertyName("resources")]
     public List<AnimeThemesResource>? Resources { get; set; }
 
+    [JsonPropertyName("images")]
+    public List<AnimeThemesImage>? Images { get; set; }
+
     [JsonPropertyName("animethemes")]
     public List<AnimeThemesTheme>? AnimeThemes { get; set; }
+}
+
+public sealed class AnimeThemesSynonym
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("text")]
+    public string? Text { get; set; }
+
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+}
+
+public sealed class AnimeThemesImage
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("facet")]
+    public string? Facet { get; set; }
+
+    [JsonPropertyName("path")]
+    public string? Path { get; set; }
+
+    [JsonPropertyName("link")]
+    public string? Link { get; set; }
 }
 
 public sealed class AnimeThemesResource

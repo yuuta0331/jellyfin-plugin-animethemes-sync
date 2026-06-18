@@ -143,28 +143,35 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
         {
             // Arrange
             var jsonResponse = @"{
-                ""search"": {
-                    ""anime"": [
-                        {
-                            ""id"": 456,
-                            ""name"": ""K-On!!"",
-                            ""slug"": ""k_on_2010"",
-                            ""year"": 2010,
-                            ""season"": ""Spring"",
-                            ""resources"": [
-                                { ""site"": ""anilist"", ""external_id"": 7791 },
-                                { ""site"": ""myanimelist"", ""external_id"": 7791 }
-                            ]
-                        }
-                    ]
-                }
+                ""anime"": [
+                    {
+                        ""id"": 456,
+                        ""name"": ""K-On!!"",
+                        ""slug"": ""k_on_2010"",
+                        ""year"": 2010,
+                        ""season"": ""Spring"",
+                        ""media_format"": ""TV"",
+                        ""synonyms"": [
+                            { ""id"": 1, ""text"": ""けいおん!!"", ""type"": ""Native"" }
+                        ],
+                        ""images"": [
+                            { ""id"": 2, ""facet"": ""Small Cover"", ""link"": ""https://example.test/k-on.avif"" }
+                        ],
+                        ""resources"": [
+                            { ""site"": ""AniList"", ""external_id"": 7791 },
+                            { ""site"": ""MyAnimeList"", ""external_id"": 7791 }
+                        ]
+                    }
+                ],
+                ""links"": { ""next"": null },
+                ""meta"": { ""current_page"": 1, ""per_page"": 15, ""total"": 1 }
             }";
 
-            _mockHttp.When("https://api.animethemes.moe/search/*")
+            _mockHttp.When("https://api.animethemes.moe/anime*")
                 .Respond("application/json", jsonResponse);
 
             // Act
-            var result = await _service.SearchAnimeByTitle("K-On", CancellationToken.None);
+            var result = await _service.SearchAnimeByTitle("K-On", 2010, CancellationToken.None);
 
             // Assert
             var anime = Assert.Single(result);
@@ -173,8 +180,16 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             Assert.Equal("k_on_2010", anime.Slug);
             Assert.Equal(2010, anime.Year);
             Assert.Equal("Spring", anime.Season);
+            Assert.Equal("TV", anime.MediaFormat);
             Assert.NotNull(anime.Resources);
             Assert.Equal(2, anime.Resources!.Count);
+            Assert.NotNull(anime.Images);
+            Assert.Single(anime.Images);
+            Assert.NotNull(anime.Synonyms);
+            var synonym = Assert.Single(anime.Synonyms);
+            Assert.Equal("けいおん!!", synonym.Text);
+            Assert.Equal("Native", synonym.Type);
+            _mockHttp.VerifyNoOutstandingExpectation();
         }
     }
 }

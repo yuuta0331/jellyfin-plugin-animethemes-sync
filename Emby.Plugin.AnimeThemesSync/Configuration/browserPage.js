@@ -15,21 +15,28 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             currentItem: null,
             currentResult: null,
             viewMode: 'poster',
+            viewSize: 'medium',
             activeTab: 'library',
             seasonMappings: [],
             selectedSeason: null,
             selectedAnime: null,
-            finderPreview: null
+            finderPreview: null,
+            finderSearchTimer: null,
+            finderSearchToken: 0,
+            finderAutoSearched: {}
         };
         var browserToolbar = page.querySelector('.ats-browser-toolbar');
         var itemSelect = page.querySelector('#AnimeThemesBrowserItemSelect');
         var libraryView = page.querySelector('#AnimeThemesBrowserLibraryView');
         var detailView = page.querySelector('#AnimeThemesBrowserDetailView');
-        var finderView = page.querySelector('#AnimeThemesSeasonFinderView');
+        var manageView = page.querySelector('#AnimeThemesBrowserManageView');
         var itemGrid = page.querySelector('#AnimeThemesBrowserItemGrid');
         var libraryCount = page.querySelector('#AnimeThemesBrowserLibraryCount');
         var rowsContainer = page.querySelector('#AnimeThemesBrowserRows');
         var searchInput = page.querySelector('#AnimeThemesBrowserSearch');
+        var themeSearchInput = page.querySelector('#AnimeThemesBrowserThemeSearch');
+        var filtersPanel = page.querySelector('.ats-filters');
+        var gridSizeSelect = page.querySelector('#AnimeThemesBrowserGridSize');
         var typeFilter = page.querySelector('#AnimeThemesBrowserTypeFilter');
         var statusFilter = page.querySelector('#AnimeThemesBrowserStatusFilter');
         var flagFilter = page.querySelector('#AnimeThemesBrowserFlagFilter');
@@ -90,6 +97,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         }
 
         function apiUrl(path, authenticated) {
+            if (!path) {
+                return '';
+            }
+
+            if (/^(https?:)?\/\//i.test(path) || /^(data|blob):/i.test(path)) {
+                return path;
+            }
+
             var url = ApiClient.getUrl(path);
             if (!authenticated) {
                 return url;
@@ -204,7 +219,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         }
 
         function renderItemGrid() {
-            itemGrid.className = 'ats-item-grid ' + state.viewMode;
+            itemGrid.className = 'ats-item-grid ' + state.viewMode + ' size-' + state.viewSize;
             itemGrid.innerHTML = '';
             libraryCount.textContent = state.filteredItems.length + ' / ' + state.items.length + ' items';
             if (!state.filteredItems.length) {
@@ -225,6 +240,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             button.type = 'button';
             button.className = 'ats-item-card';
             var name = value(item, 'Name', 'name') || 'Unknown';
+            button.setAttribute('aria-label', name);
+            button.title = name;
 
             var imageWrap = document.createElement('div');
             imageWrap.className = 'ats-item-image';
@@ -237,13 +254,15 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             imageWrap.appendChild(fallback);
             button.appendChild(imageWrap);
 
-            var textWrap = document.createElement('div');
-            appendDiv(textWrap, 'ats-item-title', name);
-            appendDiv(textWrap, 'ats-item-meta', [
-                value(item, 'Type', 'type'),
-                value(item, 'AnimeThemesSlug', 'animeThemesSlug') || value(item, 'AniListId', 'aniListId') || value(item, 'MyAnimeListId', 'myAnimeListId')
-            ].filter(Boolean).join(' | '));
-            button.appendChild(textWrap);
+            if (state.viewMode === 'list') {
+                var textWrap = document.createElement('div');
+                appendDiv(textWrap, 'ats-item-title', name);
+                appendDiv(textWrap, 'ats-item-meta', [
+                    value(item, 'Type', 'type'),
+                    value(item, 'AnimeThemesSlug', 'animeThemesSlug') || value(item, 'AniListId', 'aniListId') || value(item, 'MyAnimeListId', 'myAnimeListId')
+                ].filter(Boolean).join(' | '));
+                button.appendChild(textWrap);
+            }
 
             var imagePath = state.viewMode === 'poster'
                 ? value(item, 'PrimaryImageUrl', 'primaryImageUrl')
@@ -256,31 +275,42 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         }
 
         function setViewMode(mode) {
-            state.viewMode = mode;
+            state.viewMode = mode === 'list' || mode === 'thumb' ? mode : 'poster';
             page.querySelectorAll('.ats-view-mode').forEach(function (button) {
-                button.classList.toggle('active', button.getAttribute('data-view-mode') === mode);
+                button.classList.toggle('active', button.getAttribute('data-view-mode') === state.viewMode);
             });
             renderItemGrid();
         }
 
+        function setViewSize(size) {
+            state.viewSize = size === 'compact' || size === 'large' ? size : 'medium';
+            if (gridSizeSelect.value !== state.viewSize) {
+                gridSizeSelect.value = state.viewSize;
+            }
+            renderItemGrid();
+        }
+
         function setActiveTab(tab) {
-            state.activeTab = tab === 'finder' ? 'finder' : 'library';
+            state.activeTab = tab === 'manage' ? 'manage' : 'library';
+            syncLayout();
+        }
+
+        function syncLayout() {
             page.querySelectorAll('.ats-tab').forEach(function (button) {
                 button.classList.toggle('active', button.getAttribute('data-ats-tab') === state.activeTab);
             });
             var libraryActive = state.activeTab === 'library';
-            browserToolbar.style.display = libraryActive ? '' : 'none';
-            page.querySelector('.ats-filters').style.display = libraryActive ? '' : 'none';
-            finderView.style.display = libraryActive ? 'none' : '';
+            var detailActive = libraryActive && !!state.currentResult;
+            browserToolbar.style.display = libraryActive && !detailActive ? '' : 'none';
+            filtersPanel.style.display = detailActive ? '' : 'none';
+            manageView.style.display = libraryActive ? 'none' : '';
             if (libraryActive) {
-                detailView.style.display = state.currentResult ? '' : 'none';
-                libraryView.style.display = state.currentResult ? 'none' : '';
+                detailView.style.display = detailActive ? '' : 'none';
+                libraryView.style.display = detailActive ? 'none' : '';
             } else {
                 libraryView.style.display = 'none';
                 detailView.style.display = 'none';
-                if (!state.seasonMappings.length) {
-                    loadSeasonMappings();
-                }
+                loadSeasonMappings();
             }
         }
 
@@ -290,14 +320,15 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             state.currentItem = null;
             state.currentResult = null;
             itemSelect.value = '';
+            syncLayout();
         }
 
         function openItemDetail(itemId) {
             if (!itemId) return;
-            setActiveTab('library');
             itemSelect.value = itemId;
-            libraryView.style.display = 'none';
-            detailView.style.display = '';
+            state.currentItem = selectedItem();
+            state.currentResult = {};
+            setActiveTab('library');
             loadThemes();
         }
 
@@ -316,10 +347,39 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             });
         }
 
+        function seasonRowId(row) {
+            return value(row, 'SeasonItemId', 'seasonItemId');
+        }
+
+        function upsertSeasonMappingRow(row) {
+            if (!row) return;
+            var rowId = seasonRowId(row);
+            var replaced = false;
+            state.seasonMappings = state.seasonMappings.map(function (existing) {
+                if (String(seasonRowId(existing)) === String(rowId)) {
+                    replaced = true;
+                    return row;
+                }
+
+                return existing;
+            });
+            if (!replaced) {
+                state.seasonMappings.push(row);
+            }
+            state.selectedSeason = row;
+            renderSeasonMappings();
+        }
+
         function loadSeasonMappings() {
+            var selectedId = state.selectedSeason ? seasonRowId(state.selectedSeason) : null;
             finderState.textContent = 'Loading season mappings...';
             apiGet('AnimeThemesSync/SeasonMappings').then(function (rows) {
                 state.seasonMappings = rows || [];
+                if (selectedId) {
+                    state.selectedSeason = state.seasonMappings.find(function (row) {
+                        return String(seasonRowId(row)) === String(selectedId);
+                    }) || state.selectedSeason;
+                }
                 renderSeasonMappings();
                 finderState.textContent = state.seasonMappings.length + ' seasons loaded.';
             }).catch(function (err) {
@@ -380,22 +440,45 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             finderPreview.className = 'ats-finder-preview fieldDescription';
             finderPreview.textContent = 'Search AnimeThemes and select a candidate for ' + text(value(row, 'SeasonName', 'seasonName')) + '.';
             renderSeasonMappings();
+            var seasonId = value(row, 'SeasonItemId', 'seasonItemId');
+            if (!state.finderAutoSearched[seasonId]) {
+                state.finderAutoSearched[seasonId] = true;
+                scheduleAnimeThemesSearch(250);
+            } else {
+                finderState.textContent = 'Ready. Use Search to refresh candidates.';
+            }
         }
 
-        function searchAnimeThemes() {
+        function scheduleAnimeThemesSearch(delay) {
+            if (state.finderSearchTimer) {
+                clearTimeout(state.finderSearchTimer);
+            }
+
+            state.finderSearchTimer = setTimeout(function () {
+                searchAnimeThemes(true);
+            }, delay || 350);
+        }
+
+        function searchAnimeThemes(silent) {
             var query = finderSearchInput.value.trim();
             if (!query) {
-                Dashboard.alert({ title: 'Season Finder', message: 'Enter a title to search.' });
+                finderResults.innerHTML = '';
+                if (!silent) {
+                    Dashboard.alert({ title: 'Season Finder', message: 'Enter a title to search.' });
+                }
                 return;
             }
 
             var year = finderYear.value ? parseInt(finderYear.value, 10) : null;
+            var token = ++state.finderSearchToken;
             finderState.textContent = 'Searching AnimeThemes...';
             finderResults.innerHTML = '';
             apiGet('AnimeThemesSync/Search?query=' + encodeURIComponent(query) + (year ? '&year=' + encodeURIComponent(year) : '')).then(function (results) {
+                if (token !== state.finderSearchToken) return;
                 renderSearchResults(results || []);
                 finderState.textContent = (results || []).length + ' candidates found.';
             }).catch(function (err) {
+                if (token !== state.finderSearchToken) return;
                 finderState.textContent = 'Search failed.';
                 Dashboard.alert({ title: 'Season Finder Error', message: getErrorMessage(err) });
             });
@@ -420,13 +503,25 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             button.classList.toggle('selected', state.selectedAnime && value(state.selectedAnime, 'Slug', 'slug') === value(result, 'Slug', 'slug'));
             var posterBox = document.createElement('div');
             posterBox.className = 'ats-candidate-poster';
-            posterBox.textContent = String(value(result, 'Name', 'name') || 'AT').trim().slice(0, 2).toUpperCase();
+            var posterImage = document.createElement('img');
+            posterImage.alt = '';
+            var posterFallback = document.createElement('span');
+            posterFallback.textContent = String(value(result, 'Name', 'name') || 'AT').trim().slice(0, 2).toUpperCase();
+            posterBox.appendChild(posterImage);
+            posterBox.appendChild(posterFallback);
+            setImage(posterImage, value(result, 'PrimaryImageUrl', 'primaryImageUrl'), posterFallback);
             button.appendChild(posterBox);
             var body = document.createElement('div');
             appendDiv(body, 'ats-item-title', text(value(result, 'Name', 'name')));
+            var matchedTitle = value(result, 'MatchedTitle', 'matchedTitle');
+            if (matchedTitle) {
+                var matchedType = value(result, 'MatchedTitleType', 'matchedTitleType');
+                appendDiv(body, 'ats-item-meta', 'Matched' + (matchedType ? ' (' + text(matchedType) + ')' : '') + ': ' + text(matchedTitle));
+            }
             appendDiv(body, 'ats-item-meta', [
                 value(result, 'Year', 'year'),
                 value(result, 'Season', 'season'),
+                value(result, 'MediaFormat', 'mediaFormat'),
                 value(result, 'Slug', 'slug'),
                 'score ' + text(value(result, 'Score', 'score'))
             ].filter(Boolean).join(' | '));
@@ -480,7 +575,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             actions.className = 'ats-actions';
             addFinderAction(actions, 'Save mapping', false, function () { saveSeasonMapping(false); });
             addFinderAction(actions, 'Save & Download', false, function () { saveSeasonMapping(true); });
-            addFinderAction(actions, 'Clear mapping', true, clearSeasonMapping);
+            addFinderAction(actions, 'Clear mapping', true, clearSeasonMapping, 'danger');
             addOpenButton(actions, 'AnimeThemes', value(anime, 'AnimeThemesUrl', 'animeThemesUrl'));
             head.appendChild(actions);
             finderPreview.appendChild(head);
@@ -520,8 +615,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             return card;
         }
 
-        function addFinderAction(container, label, secondary, handler) {
-            var button = createButton(label, secondary);
+        function addFinderAction(container, label, secondary, handler, tone) {
+            var button = createButton(label, secondary, tone);
             button.disabled = !state.selectedSeason || !state.selectedAnime;
             if (label === 'Clear mapping') {
                 button.disabled = !state.selectedSeason;
@@ -532,7 +627,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
 
         function addRemotePreviewButton(container, row, target) {
             var url = target === 'audio' ? value(row, 'AudioUrl', 'audioUrl') : value(row, 'VideoUrl', 'videoUrl');
-            var button = createButton(target === 'audio' ? 'Preview Audio' : 'Preview Video', true);
+            var button = createButton(target === 'audio' ? 'Preview Audio' : 'Preview Video', true, 'play');
             button.disabled = !url;
             button.addEventListener('click', function () {
                 if (url) openRemotePlayer(row, target, url);
@@ -552,9 +647,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             finderState.textContent = 'Saving mapping...';
             apiPostJson('AnimeThemesSync/SeasonMappings', payload).then(function (row) {
                 state.selectedSeason = row || state.selectedSeason;
-                loadSeasonMappings();
+                if (row) {
+                    seasonFilter.value = 'manual';
+                    upsertSeasonMappingRow(row);
+                }
                 if (downloadAfterSave) {
-                    startDownloadJob('AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(payload.SeasonItemId) + '&Force=false');
+                    var targetItemId = value(state.selectedSeason, 'SeriesItemId', 'seriesItemId') || payload.SeasonItemId;
+                    startDownloadJob('AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(targetItemId) + '&Force=false');
                 } else {
                     finderState.textContent = 'Mapping saved.';
                 }
@@ -574,7 +673,12 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
                 state.finderPreview = null;
                 finderPreview.className = 'ats-finder-preview fieldDescription';
                 finderPreview.textContent = 'Mapping cleared.';
-                loadSeasonMappings();
+                if (row) {
+                    seasonFilter.value = 'unmatched';
+                    upsertSeasonMappingRow(row);
+                } else {
+                    loadSeasonMappings();
+                }
             }).catch(function (err) {
                 finderState.textContent = 'Clear failed.';
                 Dashboard.alert({ title: 'Season Finder Error', message: getErrorMessage(err) });
@@ -599,6 +703,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
                 state.currentResult = result || {};
                 renderHero();
                 renderThemes();
+                syncLayout();
             }).catch(function (err) {
                 Dashboard.hideLoadingMsg();
                 Dashboard.alert({ title: 'Browser Error', message: 'Failed to load themes: ' + err });
@@ -623,8 +728,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             var url = value(result, 'AnimeThemesUrl', 'animeThemesUrl');
             if (url) {
                 var link = document.createElement('a');
-                link.setAttribute('is', 'emby-linkbutton');
-                link.className = 'button-link';
+                link.className = 'button-link ats-inline-link';
                 link.target = '_blank';
                 link.rel = 'noopener';
                 link.href = url;
@@ -635,7 +739,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         }
 
         function rowMatches(row) {
-            var query = searchInput.value.trim().toLowerCase();
+            var query = themeSearchInput.value.trim().toLowerCase();
             if (query) {
                 var haystack = [
                     value(row, 'ThemeKey', 'themeKey'),
@@ -700,6 +804,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             card.appendChild(detail);
 
             var side = document.createElement('div');
+            side.className = 'ats-theme-side';
             var status = document.createElement('div');
             status.className = 'ats-status-list';
             addStatus(status, 'Video', value(row, 'BackdropExists', 'backdropExists'), value(row, 'BackdropPath', 'backdropPath'));
@@ -752,11 +857,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             return span;
         }
 
-        function createButton(label, secondary) {
+        function createButton(label, secondary, tone) {
             var button = document.createElement('button');
             button.setAttribute('is', 'emby-button');
             button.type = 'button';
             button.className = secondary ? 'emby-button ats-button-secondary' : 'raised emby-button ats-action-button';
+            if (tone) {
+                button.className += ' ats-button-' + tone;
+            }
             var labelSpan = document.createElement('span');
             labelSpan.textContent = label;
             button.appendChild(labelSpan);
@@ -764,7 +872,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         }
 
         function addDownloadButton(container, row) {
-            var button = createButton('Download', false);
+            var button = createButton('Download', false, 'download');
             button.addEventListener('click', function () {
                 downloadTheme(row);
             });
@@ -774,7 +882,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         function addLocalVideoButton(container, row) {
             var hasExtra = !!value(row, 'SavedExtraPlayable', 'savedExtraPlayable');
             var hasVideo = !!value(row, 'SavedVideoPlayable', 'savedVideoPlayable');
-            var button = createButton('Play Video', true);
+            var button = createButton('Play Video', true, 'play');
             button.disabled = !hasExtra && !hasVideo;
             button.title = hasExtra ? 'Plays the browseable extras file.' : hasVideo ? 'Plays the local theme video file.' : 'No local video has been saved.';
             button.addEventListener('click', function () {
@@ -784,7 +892,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         }
 
         function addPlayButton(container, row, target, label, playable) {
-            var button = createButton(label, true);
+            var button = createButton(label, true, 'play');
             button.disabled = !playable;
             button.addEventListener('click', function () {
                 if (!button.disabled) openPlayer(row, target);
@@ -794,7 +902,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
 
         function addOpenButton(container, label, url) {
             if (!url) return;
-            var button = createButton(label, true);
+            var button = createButton(label, true, 'link');
             button.addEventListener('click', function () {
                 window.open(url, '_blank', 'noopener');
             });
@@ -838,7 +946,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
                 var message = value(job, 'Message', 'message') || status || 'Running';
                 setProgress(true, message, progress);
                 if (status === 'Completed') {
-                    if (state.activeTab === 'finder') {
+                    if (state.activeTab === 'manage') {
                         loadSeasonMappings();
                     } else {
                         loadThemes();
@@ -931,21 +1039,32 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             });
         });
         page.querySelector('#AnimeThemesSeasonRefresh').addEventListener('click', loadSeasonMappings);
-        seasonFilter.addEventListener('change', renderSeasonMappings);
-        page.querySelector('#AnimeThemesFinderSearch').addEventListener('click', searchAnimeThemes);
+        seasonFilter.addEventListener('change', loadSeasonMappings);
+        page.querySelector('#AnimeThemesFinderSearch').addEventListener('click', function () {
+            searchAnimeThemes(false);
+        });
         finderSearchInput.addEventListener('keydown', function (event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
-                searchAnimeThemes();
+                searchAnimeThemes(false);
             }
+        });
+        finderSearchInput.addEventListener('input', function () {
+            finderState.textContent = 'Ready. Use Search to refresh candidates.';
+        });
+        finderYear.addEventListener('input', function () {
+            finderState.textContent = 'Ready. Use Search to refresh candidates.';
         });
         searchInput.addEventListener('input', function () {
             renderItemOptions();
-            if (state.currentResult) renderThemes();
         });
+        themeSearchInput.addEventListener('input', renderThemes);
         typeFilter.addEventListener('change', renderThemes);
         statusFilter.addEventListener('change', renderThemes);
         flagFilter.addEventListener('change', renderThemes);
+        gridSizeSelect.addEventListener('change', function () {
+            setViewSize(gridSizeSelect.value);
+        });
         itemSelect.addEventListener('change', function () {
             if (itemSelect.value) openItemDetail(itemSelect.value);
         });
@@ -968,6 +1087,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         });
         page.addEventListener('pageshow', function () {
             setViewMode(state.viewMode);
+            setViewSize(state.viewSize);
             setActiveTab(state.activeTab);
             loadItems();
         });

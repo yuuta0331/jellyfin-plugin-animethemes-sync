@@ -311,6 +311,8 @@ public class ThemeFilePlannerTests
         Assert.Contains("setViewMode", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("saveSeasonMapping", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("Save & Download", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("MatchedTitle", jellyfinPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("scheduleAnimeThemesSearch(350)", jellyfinPage, StringComparison.Ordinal);
 
         var embyController = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js"));
         Assert.Contains("AnimeThemesSync/Summary", embyController, StringComparison.Ordinal);
@@ -320,6 +322,35 @@ public class ThemeFilePlannerTests
         Assert.Contains("setViewMode", embyController, StringComparison.Ordinal);
         Assert.Contains("saveSeasonMapping", embyController, StringComparison.Ordinal);
         Assert.Contains("Save & Download", embyController, StringComparison.Ordinal);
+        Assert.Contains("MatchedTitle", embyController, StringComparison.Ordinal);
+        Assert.DoesNotContain("scheduleAnimeThemesSearch(350)", embyController, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ThemeFinderSearch_UsesAnimeThemesAnimeIndexWithoutAniListFallback()
+    {
+        var root = FindRepositoryRoot();
+        var files = new[]
+        {
+            Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs")
+        };
+
+        foreach (var file in files)
+        {
+            var content = File.ReadAllText(file);
+            var start = content.IndexOf("public async Task<IReadOnlyList<ThemeFinderSearchResult>> SearchThemeFinderAnimeAsync", StringComparison.Ordinal);
+            var end = content.IndexOf("public async Task<ThemeBrowserItemResult> GetAnimeThemePreviewAsync", StringComparison.Ordinal);
+            Assert.True(start >= 0 && end > start);
+
+            var method = content[start..end];
+            Assert.Contains("SearchAnimeByTitle(query, year", method, StringComparison.Ordinal);
+            Assert.Contains("Take(15)", method, StringComparison.Ordinal);
+            Assert.Contains("GetAnimePrimaryImageUrl", method, StringComparison.Ordinal);
+            Assert.DoesNotContain("_aniListService.SearchAnime", method, StringComparison.Ordinal);
+            Assert.DoesNotContain("ResolveAnimePrimaryImageUrlAsync", method, StringComparison.Ordinal);
+            Assert.DoesNotContain("OrderByDescending", method, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

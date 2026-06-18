@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
@@ -15,7 +17,12 @@ namespace AnimeThemesSync.Shared.Services;
 /// </summary>
 public sealed class AnimeThemesService
 {
+    private const int SearchCacheLimit = 100;
     private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private static readonly ConcurrentDictionary<string, AnimeThemesAnime> _animeCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly object _searchCacheLock = new();
+    private static readonly Dictionary<string, SearchCacheEntry> _searchCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan SearchCacheTtl = TimeSpan.FromMinutes(10);
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AnimeThemesService> _logger;
     private readonly RateLimiter _rateLimiter;
@@ -42,6 +49,12 @@ public sealed class AnimeThemesService
     /// <returns>The found anime or null.</returns>
     public async Task<AnimeThemesAnime?> GetAnimeByExternalId(string site, int externalId, CancellationToken cancellationToken)
     {
+        var cacheKey = $"resource:{site}:{externalId}";
+        if (_animeCache.TryGetValue(cacheKey, out var cached))
+        {
+            return cached;
+        }
+
         var url = $"{Constants.AnimeThemesBaseUrl}/resource?filter[site]={site}&filter[external_id]={externalId}&include=anime";
 
         var resourceResponse = await GetResourceFromUrl(url, cancellationToken).ConfigureAwait(false);
@@ -60,7 +73,13 @@ public sealed class AnimeThemesService
             return null;
         }
 
-        return await GetAnimeBySlug(partialAnime.Slug, cancellationToken).ConfigureAwait(false);
+        var anime = await GetAnimeBySlug(partialAnime.Slug, cancellationToken).ConfigureAwait(false);
+        if (anime != null)
+        {
+            _animeCache[cacheKey] = anime;
+        }
+
+        return anime;
     }
 
     /// <summary>
@@ -71,9 +90,25 @@ public sealed class AnimeThemesService
     /// <returns>The found anime or null.</returns>
     public async Task<AnimeThemesAnime?> GetAnimeBySlug(string slug, CancellationToken cancellationToken)
     {
+        var cacheKey = $"slug:{slug.Trim()}";
+        if (_animeCache.TryGetValue(cacheKey, out var cached))
+        {
+            return cached;
+        }
+
         const string Include = "images,resources,animethemes.animethemeentries.videos.audio,animethemes.group,animethemes.song,animethemes.song.artists,animethemes.song.performances.artist";
         var url = $"{Constants.AnimeThemesBaseUrl}/anime/{slug}?include={Include}";
-        return await GetAnimeFromUrl(url, cancellationToken).ConfigureAwait(false);
+        var anime = await GetAnimeFromUrl(url, cancellationToken).ConfigureAwait(false);
+        if (anime != null)
+        {
+            _animeCache[cacheKey] = anime;
+            if (!string.IsNullOrWhiteSpace(anime.Slug))
+            {
+                _animeCache[$"slug:{anime.Slug}"] = anime;
+            }
+        }
+
+        return anime;
     }
 
     /// <summary>
@@ -84,15 +119,83 @@ public sealed class AnimeThemesService
     /// <returns>Matching AnimeThemes anime candidates.</returns>
     public async Task<IReadOnlyList<AnimeThemesAnime>> SearchAnimeByTitle(string query, CancellationToken cancellationToken)
     {
+        return await SearchAnimeByTitle(query, null, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<AnimeThemesAnime>> SearchAnimeByTitle(string query, int? year, CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(query))
         {
             return [];
         }
 
+        var cacheKey = BuildSearchCacheKey(query, year);
+        if (TryGetCachedSearch(cacheKey, out var cached))
+        {
+            return cached;
+        }
+
         var escapedQuery = Uri.EscapeDataString(query.Trim());
-        var url = $"{Constants.AnimeThemesBaseUrl}/search/?q={escapedQuery}&fields[search]=anime";
-        var response = await SendRequestAsync<AnimeThemesSearchResponse>(url, cancellationToken).ConfigureAwait(false);
-        return response?.Search?.Anime ?? [];
+        var url = $"{Constants.AnimeThemesBaseUrl}/anime?q={escapedQuery}" +
+                  "&page%5Bsize%5D=15&page%5Bnumber%5D=1" +
+                  "&include=synonyms,images,resources" +
+                  "&fields%5Banime%5D=id,name,slug,year,season,media_format" +
+                  "&fields%5Bsynonym%5D=id,text,type" +
+                  "&fields%5Bimage%5D=id,facet,link" +
+                  "&fields%5Bresource%5D=id,site,external_id";
+        if (year.HasValue)
+        {
+            url += $"&filter%5Byear%5D={year.Value}";
+        }
+
+        var response = await SendRequestAsync<AnimeThemesAnimeIndexResponse>(url, cancellationToken).ConfigureAwait(false);
+        var results = (IReadOnlyList<AnimeThemesAnime>)(response?.Anime ?? []);
+        SetCachedSearch(cacheKey, results);
+        return results;
+    }
+
+    private static string BuildSearchCacheKey(string query, int? year)
+    {
+        return string.Join("|", query.Trim().ToLowerInvariant(), year?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
+    }
+
+    private static bool TryGetCachedSearch(string key, out IReadOnlyList<AnimeThemesAnime> results)
+    {
+        lock (_searchCacheLock)
+        {
+            if (_searchCache.TryGetValue(key, out var entry) &&
+                DateTimeOffset.UtcNow - entry.CreatedAt < SearchCacheTtl)
+            {
+                results = entry.Results;
+                return true;
+            }
+
+            _searchCache.Remove(key);
+        }
+
+        results = [];
+        return false;
+    }
+
+    private static void SetCachedSearch(string key, IReadOnlyList<AnimeThemesAnime> results)
+    {
+        lock (_searchCacheLock)
+        {
+            _searchCache[key] = new SearchCacheEntry(DateTimeOffset.UtcNow, results);
+            if (_searchCache.Count <= SearchCacheLimit)
+            {
+                return;
+            }
+
+            foreach (var staleKey in _searchCache
+                         .OrderBy(pair => pair.Value.CreatedAt)
+                         .Take(_searchCache.Count - SearchCacheLimit)
+                         .Select(pair => pair.Key)
+                         .ToList())
+            {
+                _searchCache.Remove(staleKey);
+            }
+        }
     }
 
     private async Task<T?> SendRequestAsync<T>(string url, CancellationToken cancellationToken)
@@ -181,4 +284,6 @@ public sealed class AnimeThemesService
             return null;
         }
     }
+
+    private sealed record SearchCacheEntry(DateTimeOffset CreatedAt, IReadOnlyList<AnimeThemesAnime> Results);
 }

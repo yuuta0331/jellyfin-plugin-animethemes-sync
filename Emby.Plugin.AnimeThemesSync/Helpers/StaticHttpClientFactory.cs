@@ -9,18 +9,35 @@ namespace Emby.Plugin.AnimeThemesSync.Helpers;
 /// </summary>
 public sealed class StaticHttpClientFactory : IHttpClientFactory
 {
+    private static readonly HttpClient AniListClient = CreateConfiguredClient(Constants.AniListBaseUrl);
+    private static readonly HttpClient AnimeThemesClient = CreateConfiguredClient(Constants.AnimeThemesBaseUrl);
+
     /// <inheritdoc />
     public HttpClient CreateClient(string name)
     {
-        var client = new HttpClient();
-
         if (string.Equals(name, Constants.AniListHttpClientName, StringComparison.OrdinalIgnoreCase))
         {
-            client.BaseAddress = new Uri(Constants.AniListBaseUrl);
+            return AniListClient;
         }
-        else if (string.Equals(name, Constants.AnimeThemesHttpClientName, StringComparison.OrdinalIgnoreCase))
+
+        if (string.Equals(name, Constants.AnimeThemesHttpClientName, StringComparison.OrdinalIgnoreCase))
         {
-            client.BaseAddress = new Uri(Constants.AnimeThemesBaseUrl);
+            return AnimeThemesClient;
+        }
+
+        return CreateConfiguredClient(null);
+    }
+
+    private static HttpClient CreateConfiguredClient(string? baseUrl)
+    {
+        var client = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(20),
+        };
+
+        if (!string.IsNullOrWhiteSpace(baseUrl))
+        {
+            client.BaseAddress = new Uri(baseUrl);
         }
 
         if (!client.DefaultRequestHeaders.Contains("User-Agent"))

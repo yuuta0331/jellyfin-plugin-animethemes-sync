@@ -127,49 +127,61 @@ public sealed class AniListService
         var queue = new Queue<(int Id, int Depth, string RelationType)>();
         queue.Enqueue((aniListId, 0, "SELF"));
 
-        while (queue.Count > 0)
+        try
         {
-            var current = queue.Dequeue();
-            if (!visited.Add(current.Id))
+            while (queue.Count > 0)
             {
-                continue;
-            }
-
-            var media = await ExecuteMediaWithRelations(current.Id, cancellationToken).ConfigureAwait(false);
-            if (media == null)
-            {
-                continue;
-            }
-
-            results.Add(ToRelatedAnime(media, current.RelationType, current.Depth));
-
-            if (current.Depth >= maxDepth)
-            {
-                continue;
-            }
-
-            foreach (var edge in media.Relations?.Edges ?? [])
-            {
-                if (edge.Node == null ||
-                    !string.Equals(edge.Node.Type, "ANIME", StringComparison.OrdinalIgnoreCase) ||
-                    !IsSeasonChainRelation(edge.RelationType))
+                var current = queue.Dequeue();
+                if (!visited.Add(current.Id))
                 {
                     continue;
                 }
 
-                queue.Enqueue((edge.Node.Id, current.Depth + 1, edge.RelationType ?? string.Empty));
+                var media = await ExecuteMediaWithRelations(current.Id, cancellationToken).ConfigureAwait(false);
+                if (media == null)
+                {
+                    continue;
+                }
+
+                results.Add(ToRelatedAnime(media, current.RelationType, current.Depth));
+
+                if (current.Depth >= maxDepth)
+                {
+                    continue;
+                }
+
+                foreach (var edge in media.Relations?.Edges ?? [])
+                {
+                    if (edge.Node == null ||
+                        !string.Equals(edge.Node.Type, "ANIME", StringComparison.OrdinalIgnoreCase) ||
+                        !IsSeasonChainRelation(edge.RelationType))
+                    {
+                        continue;
+                    }
+
+                    queue.Enqueue((edge.Node.Id, current.Depth + 1, edge.RelationType ?? string.Empty));
+                }
             }
         }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "AniList relation lookup timed out or was interrupted for AniListId={AniListId}.", aniListId);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "AniList relation lookup failed for AniListId={AniListId}.", aniListId);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "AniList relation lookup returned invalid JSON for AniListId={AniListId}.", aniListId);
+        }
 
-        return results
-            .GroupBy(r => r.AniListId)
-            .Select(g => g.OrderBy(r => r.Depth).First())
-            .OrderBy(r => r.StartYear ?? r.SeasonYear ?? int.MaxValue)
-            .ThenBy(r => r.StartMonth ?? 13)
-            .ThenBy(r => r.StartDay ?? 32)
-            .ThenBy(r => r.Depth)
-            .ThenBy(r => r.AniListId)
-            .ToList();
+        return SortRelatedAnime(results);
+    }
+
+    private static bool IsNonUserCancellation(CancellationToken cancellationToken)
+    {
+        return !cancellationToken.IsCancellationRequested;
     }
 
     /// <summary>
@@ -207,18 +219,36 @@ public sealed class AniListService
         _logger.LogDebug("AniList request body: {Json}", json);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        await _rateLimiter.WaitIfNeededAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _rateLimiter.WaitIfNeededAsync(cancellationToken).ConfigureAwait(false);
 
-        var response = await client.PostAsync(new Uri(Constants.AniListBaseUrl), content, cancellationToken).ConfigureAwait(false);
+            var response = await client.PostAsync(new Uri(Constants.AniListBaseUrl), content, cancellationToken).ConfigureAwait(false);
 
-        _rateLimiter.UpdateState(response.Headers);
+            _rateLimiter.UpdateState(response.Headers);
 
-        response.EnsureSuccessStatusCode();
+            response.EnsureSuccessStatusCode();
 
-        var responseStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-        var result = await JsonSerializer.DeserializeAsync<AniListResponse>(responseStream, _jsonOptions, cancellationToken).ConfigureAwait(false);
+            var responseStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            var result = await JsonSerializer.DeserializeAsync<AniListResponse>(responseStream, _jsonOptions, cancellationToken).ConfigureAwait(false);
 
-        return result?.Data?.Page?.Media;
+            return result?.Data?.Page?.Media;
+        }
+        catch (OperationCanceledException ex) when (IsNonUserCancellation(cancellationToken))
+        {
+            _logger.LogWarning(ex, "AniList search timed out or was interrupted for '{Name}'.", name);
+            return null;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "AniList search request failed for '{Name}'.", name);
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "AniList search returned invalid JSON for '{Name}'.", name);
+            return null;
+        }
     }
 
     private async Task<AniListMedia?> ExecuteMediaWithRelations(int id, CancellationToken cancellationToken)
@@ -264,18 +294,49 @@ public sealed class AniListService
         var json = JsonSerializer.Serialize(requestBody);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        await _rateLimiter.WaitIfNeededAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _rateLimiter.WaitIfNeededAsync(cancellationToken).ConfigureAwait(false);
 
-        var response = await client.PostAsync(new Uri(Constants.AniListBaseUrl), content, cancellationToken).ConfigureAwait(false);
+            var response = await client.PostAsync(new Uri(Constants.AniListBaseUrl), content, cancellationToken).ConfigureAwait(false);
 
-        _rateLimiter.UpdateState(response.Headers);
+            _rateLimiter.UpdateState(response.Headers);
 
-        response.EnsureSuccessStatusCode();
+            response.EnsureSuccessStatusCode();
 
-        var responseStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-        var result = await JsonSerializer.DeserializeAsync<AniListMediaResponse>(responseStream, _jsonOptions, cancellationToken).ConfigureAwait(false);
+            var responseStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            var result = await JsonSerializer.DeserializeAsync<AniListMediaResponse>(responseStream, _jsonOptions, cancellationToken).ConfigureAwait(false);
 
-        return result?.Data?.Media;
+            return result?.Data?.Media;
+        }
+        catch (OperationCanceledException ex) when (IsNonUserCancellation(cancellationToken))
+        {
+            _logger.LogWarning(ex, "AniList relation request timed out or was interrupted for AniListId={AniListId}.", id);
+            return null;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "AniList relation request failed for AniListId={AniListId}.", id);
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "AniList relation request returned invalid JSON for AniListId={AniListId}.", id);
+            return null;
+        }
+    }
+
+    private static List<AniListRelatedAnime> SortRelatedAnime(IEnumerable<AniListRelatedAnime> rows)
+    {
+        return rows
+            .GroupBy(r => r.AniListId)
+            .Select(g => g.OrderBy(r => r.Depth).First())
+            .OrderBy(r => r.StartYear ?? r.SeasonYear ?? int.MaxValue)
+            .ThenBy(r => r.StartMonth ?? 13)
+            .ThenBy(r => r.StartDay ?? 32)
+            .ThenBy(r => r.Depth)
+            .ThenBy(r => r.AniListId)
+            .ToList();
     }
 
     /// <summary>

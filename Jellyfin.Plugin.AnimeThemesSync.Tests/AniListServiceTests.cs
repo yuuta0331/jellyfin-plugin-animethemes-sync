@@ -149,6 +149,29 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             Assert.Null(result.MalId);
         }
 
+        [Fact]
+        public async Task GetRelatedAnimeChainAsync_TaskCanceled_ReturnsEmptyList()
+        {
+            // Arrange
+            var httpClientFactory = new Mock<IHttpClientFactory>();
+            var client = new HttpClient(new ThrowingHandler(new TaskCanceledException("timeout")))
+            {
+                BaseAddress = new Uri("https://graphql.anilist.co"),
+            };
+
+            httpClientFactory.Setup(x => x.CreateClient("AniList")).Returns(client);
+
+            var rateLimiterLogger = new Mock<ILogger<RateLimiter>>();
+            var rateLimiter = new RateLimiter(rateLimiterLogger.Object, "AniList", 90);
+            var service = new AniListService(httpClientFactory.Object, _mockLogger.Object, rateLimiter);
+
+            // Act
+            var result = await service.GetRelatedAnimeChainAsync(123, 1, CancellationToken.None);
+
+            // Assert
+            Assert.Empty(result);
+        }
+
         // =====================================================
         //  New: Title scoring & year composite matching tests
         // =====================================================
@@ -379,6 +402,21 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             var best = AniListService.SelectBestMatch(candidates, "Correct Title", 2020);
             Assert.Equal(2, best.Media.Id);
             Assert.Equal(0, best.Score);
+        }
+
+        private sealed class ThrowingHandler : HttpMessageHandler
+        {
+            private readonly Exception _exception;
+
+            public ThrowingHandler(Exception exception)
+            {
+                _exception = exception;
+            }
+
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                return Task.FromException<HttpResponseMessage>(_exception);
+            }
         }
     }
 }

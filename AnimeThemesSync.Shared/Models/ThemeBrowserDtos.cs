@@ -101,7 +101,11 @@ public sealed record ThemeFinderSearchResult(
     int? AniListId,
     int? MyAnimeListId,
     string? AnimeThemesUrl,
-    int Score);
+    int Score,
+    string? PrimaryImageUrl,
+    string? MediaFormat,
+    string? MatchedTitle,
+    string? MatchedTitleType);
 
 public sealed class SaveSeasonThemeMappingRequest
 {
