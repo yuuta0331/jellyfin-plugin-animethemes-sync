@@ -15,9 +15,10 @@
                 <div class="fieldDescription">UI version: 2026.06.18-g.</div>
 
                 <div class="verticalSection ats-browser-toolbar">
-                    <div class="inputContainer ats-search">
+                    <div class="inputContainer ats-search ats-clearable">
                         <label class="inputLabel inputLabelUnfocused" for="AnimeThemesBrowserSearch">Search Library</label>
                         <input id="AnimeThemesBrowserSearch" type="text" is="emby-input" autocomplete="off" />
+                        <button type="button" class="ats-clear-input" data-clear-target="AnimeThemesBrowserSearch" aria-label="Clear library search">x</button>
                     </div>
                     <div class="selectContainer ats-item-select" style="display: none;">
                         <label class="selectLabel" for="AnimeThemesBrowserItemSelect">Library Item</label>
@@ -34,9 +35,22 @@
                     <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-tab active" id="AnimeThemesBrowserLibraryTab" data-ats-tab="library">
                         <span>Library Browser</span>
                     </button>
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-tab" id="AnimeThemesBrowserFinderTab" data-ats-tab="finder">
+                        <span>Season Finder</span>
+                    </button>
                     <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-tab" id="AnimeThemesBrowserManageTab" data-ats-tab="manage">
                         <span>Manage</span>
                     </button>
+                </div>
+
+                <div class="verticalSection ats-progress" id="AnimeThemesBrowserProgress" style="display: none;">
+                    <div class="ats-progress-header">
+                        <span id="AnimeThemesBrowserProgressText">Preparing...</span>
+                        <span id="AnimeThemesBrowserProgressPercent">0%</span>
+                    </div>
+                    <div class="ats-progress-track">
+                        <div class="ats-progress-bar" id="AnimeThemesBrowserProgressBar"></div>
+                    </div>
                 </div>
 
                 <div class="verticalSection" id="AnimeThemesBrowserLibraryView">
@@ -91,11 +105,15 @@
                         </button>
                     </div>
                 </div>
+                </div>
 
-                <div class="ats-season-finder" id="AnimeThemesSeasonFinderView">
-                    <div class="ats-library-header">
-                        <h2 class="sectionTitle">Season Finder</h2>
-                        <div id="AnimeThemesFinderState" class="fieldDescription">Select an unmatched season, search AnimeThemes, then save a mapping.</div>
+                <div class="verticalSection ats-season-finder" id="AnimeThemesSeasonFinderView" style="display: none;">
+                    <div class="ats-finder-topbar">
+                        <div>
+                            <h2 class="sectionTitle">Season Finder</h2>
+                            <div class="fieldDescription">Select a season, choose an AnimeThemes match, then save a mapping.</div>
+                        </div>
+                        <div id="AnimeThemesFinderState" class="ats-finder-state">Ready.</div>
                     </div>
                     <div class="ats-finder-layout">
                         <div class="ats-finder-panel">
@@ -105,7 +123,7 @@
                                     <span>Refresh</span>
                                 </button>
                             </div>
-                            <div class="selectContainer">
+                            <div class="selectContainer ats-season-filter-select">
                                 <label class="selectLabel" for="AnimeThemesSeasonFilter">Status</label>
                                 <select is="emby-select" id="AnimeThemesSeasonFilter" class="emby-select-withcolor emby-select">
                                     <option value="unmatched">Unmatched</option>
@@ -114,13 +132,20 @@
                                     <option value="all">All</option>
                                 </select>
                             </div>
+                            <div class="ats-status-segments" id="AnimeThemesSeasonFilterSegments" aria-label="Season status filter">
+                                <button type="button" data-season-filter="unmatched" class="active">Unmatched</button>
+                                <button type="button" data-season-filter="manual">Manual</button>
+                                <button type="button" data-season-filter="auto">Auto</button>
+                                <button type="button" data-season-filter="all">All</button>
+                            </div>
                             <div id="AnimeThemesSeasonList" class="ats-season-list"></div>
                         </div>
                         <div class="ats-finder-panel">
                             <h3>2. Search AnimeThemes</h3>
-                            <div class="inputContainer">
+                            <div class="inputContainer ats-clearable">
                                 <label class="inputLabel inputLabelUnfocused" for="AnimeThemesFinderSearchInput">Title</label>
                                 <input id="AnimeThemesFinderSearchInput" type="text" is="emby-input" autocomplete="off" />
+                                <button type="button" class="ats-clear-input" data-clear-target="AnimeThemesFinderSearchInput" aria-label="Clear AnimeThemes search">x</button>
                             </div>
                             <div class="ats-finder-search-row">
                                 <div class="inputContainer">
@@ -139,12 +164,12 @@
                         </div>
                     </div>
                 </div>
-                </div>
 
                 <div class="verticalSection ats-filters">
-                    <div class="inputContainer">
+                    <div class="inputContainer ats-clearable">
                         <label class="inputLabel inputLabelUnfocused" for="AnimeThemesBrowserThemeSearch">Search Themes</label>
                         <input id="AnimeThemesBrowserThemeSearch" type="text" is="emby-input" autocomplete="off" />
+                        <button type="button" class="ats-clear-input" data-clear-target="AnimeThemesBrowserThemeSearch" aria-label="Clear theme search">x</button>
                     </div>
                     <div class="selectContainer">
                         <label class="selectLabel" for="AnimeThemesBrowserTypeFilter">Type</label>
@@ -173,16 +198,6 @@
                     </div>
                 </div>
 
-                <div class="verticalSection ats-progress" id="AnimeThemesBrowserProgress" style="display: none;">
-                    <div class="ats-progress-header">
-                        <span id="AnimeThemesBrowserProgressText">Preparing...</span>
-                        <span id="AnimeThemesBrowserProgressPercent">0%</span>
-                    </div>
-                    <div class="ats-progress-track">
-                        <div class="ats-progress-bar" id="AnimeThemesBrowserProgressBar"></div>
-                    </div>
-                </div>
-
                 <div id="AnimeThemesBrowserDetailView" style="display: none;">
                 <div class="verticalSection ats-detail-actions">
                     <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AnimeThemesBrowserBack">
@@ -191,13 +206,14 @@
                     <button is="emby-button" type="button" class="raised emby-button ats-action-button" id="AnimeThemesBrowserDownload">
                         <span>Download Item</span>
                     </button>
-                    <label class="emby-checkbox-label ats-force">
+                    <label class="emby-checkbox-label ats-force" title="Redownload and replace existing saved theme files.">
                         <input id="AnimeThemesBrowserForce" type="checkbox" is="emby-checkbox" />
-                        <span>Force</span>
+                        <span>Overwrite existing files</span>
                     </label>
+                    <div class="fieldDescription ats-force-help">Replaces saved theme files instead of skipping them.</div>
                 </div>
 
-                <div class="verticalSection ats-hero" id="AnimeThemesBrowserHero">
+                <div class="verticalSection ats-hero ats-hero-immersive" id="AnimeThemesBrowserHero">
                     <div class="ats-backdrop" id="AnimeThemesBrowserBackdrop"></div>
                     <div class="ats-hero-content">
                         <div class="ats-poster-wrap">
@@ -211,6 +227,8 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="verticalSection ats-season-switcher" id="AnimeThemesBrowserSeasonGroups" style="display: none;"></div>
 
                 <div class="verticalSection">
                     <div id="AnimeThemesBrowserRows" class="ats-theme-list"></div>
@@ -254,12 +272,133 @@
                 box-sizing: border-box;
             }
 
+            #AnimeThemesBrowserPage .ats-fade-in {
+                animation: atsFadeIn .18s ease-out both;
+            }
+
+            #AnimeThemesBrowserPage .ats-skeleton {
+                position: relative;
+                overflow: hidden;
+                border-radius: var(--ats-radius-sm);
+                background: rgba(127, 127, 127, .16);
+            }
+
+            #AnimeThemesBrowserPage .ats-skeleton::after {
+                content: "";
+                position: absolute;
+                inset: 0;
+                transform: translateX(-100%);
+                background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .12), transparent);
+                animation: atsShimmer 1.15s ease-in-out infinite;
+            }
+
+            #AnimeThemesBrowserPage .ats-skeleton-media {
+                width: 100%;
+                aspect-ratio: 2 / 3;
+            }
+
+            #AnimeThemesBrowserPage .ats-item-grid.thumb .ats-skeleton-media,
+            #AnimeThemesBrowserPage .ats-item-grid.list .ats-skeleton-media {
+                aspect-ratio: 16 / 9;
+            }
+
+            #AnimeThemesBrowserPage .ats-skeleton-line {
+                width: 72%;
+                height: .9rem;
+                margin: .25rem 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-skeleton-line.wide {
+                width: 100%;
+            }
+
+            #AnimeThemesBrowserPage .ats-skeleton-line.short {
+                width: 42%;
+            }
+
+            #AnimeThemesBrowserPage .ats-skeleton-text {
+                display: inline-block;
+                width: 4.5rem;
+                height: 1.2rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-placeholder-card {
+                pointer-events: none;
+            }
+
+            #AnimeThemesBrowserPage .ats-empty-state {
+                display: grid;
+                gap: .25rem;
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius);
+                padding: .9rem;
+                background: var(--ats-surface);
+                min-width: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-empty-title {
+                font-weight: 700;
+            }
+
+            #AnimeThemesBrowserPage .ats-empty-detail {
+                opacity: .72;
+                overflow-wrap: anywhere;
+            }
+
+            @keyframes atsFadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(.25rem);
+                }
+
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            @keyframes atsShimmer {
+                to {
+                    transform: translateX(100%);
+                }
+            }
+
             #AnimeThemesBrowserPage .ats-browser-toolbar,
             #AnimeThemesBrowserPage .ats-filters {
                 display: grid;
                 grid-template-columns: minmax(14rem, 1fr) minmax(16rem, 2fr) auto;
                 gap: 1rem;
                 align-items: end;
+            }
+
+            #AnimeThemesBrowserPage .ats-clearable {
+                position: relative;
+            }
+
+            #AnimeThemesBrowserPage .ats-clearable input {
+                padding-right: 2.5rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-clear-input {
+                display: none;
+                place-items: center;
+                position: absolute;
+                right: .45rem;
+                bottom: .36rem;
+                width: 1.9rem;
+                height: 1.9rem;
+                border: 0;
+                border-radius: 50%;
+                background: rgba(127, 127, 127, .22);
+                color: inherit;
+                cursor: pointer;
+                font-size: 1rem;
+                font-weight: 700;
+                line-height: 1;
+            }
+
+            #AnimeThemesBrowserPage .ats-clear-input:hover {
+                background: rgba(127, 127, 127, .34);
             }
 
             #AnimeThemesBrowserPage .ats-filters {
@@ -406,27 +545,28 @@
             #AnimeThemesBrowserPage .ats-item-card {
                 position: relative;
                 display: grid;
-                gap: .55rem;
-                border: 1px solid rgba(127, 127, 127, .28);
+                gap: .45rem;
+                border: 1px solid transparent;
                 border-radius: var(--ats-radius);
-                padding: .65rem;
-                background: var(--ats-surface);
+                padding: .12rem;
+                background: transparent;
                 color: inherit;
                 text-align: left;
                 cursor: pointer;
                 min-width: 0;
-                transition: border-color .16s ease, background-color .16s ease, transform .16s ease;
+                transition: border-color .16s ease, background-color .16s ease, transform .16s ease, box-shadow .16s ease;
             }
 
             #AnimeThemesBrowserPage .ats-item-card:hover,
             #AnimeThemesBrowserPage .ats-season-card.selected,
             #AnimeThemesBrowserPage .ats-search-card.selected {
                 border-color: var(--ats-accent) !important;
-                background: var(--ats-surface-hover);
+                background: rgba(127, 127, 127, .08);
             }
 
             #AnimeThemesBrowserPage .ats-item-card:hover {
                 transform: translateY(-1px);
+                box-shadow: 0 10px 30px rgba(0, 0, 0, .28);
             }
 
             #AnimeThemesBrowserPage .ats-view-mode.active {
@@ -438,14 +578,15 @@
                 position: relative;
                 overflow: hidden;
                 border-radius: var(--ats-radius-sm);
-                border: 1px solid rgba(127, 127, 127, .28);
-                background: rgba(127, 127, 127, .16);
+                border: 0;
+                background: rgba(127, 127, 127, .12);
                 aspect-ratio: 2 / 3;
             }
 
             #AnimeThemesBrowserPage .ats-item-grid.list .ats-item-card {
                 grid-template-columns: var(--ats-list-thumb) minmax(0, 1fr);
                 align-items: center;
+                padding: .35rem;
             }
 
             #AnimeThemesBrowserPage .ats-item-grid.thumb .ats-item-image,
@@ -484,6 +625,17 @@
                 flex-wrap: wrap;
                 gap: .75rem;
                 align-items: center;
+            }
+
+            #AnimeThemesBrowserPage .ats-force {
+                margin: 0;
+                min-height: 2.6rem;
+                align-items: center;
+            }
+
+            #AnimeThemesBrowserPage .ats-force-help {
+                flex-basis: 100%;
+                margin-top: -.45rem;
             }
 
             #AnimeThemesBrowserPage .ats-action-button,
@@ -537,11 +689,15 @@
 
             #AnimeThemesBrowserPage .ats-hero {
                 position: relative;
-                min-height: 13rem;
+                min-height: clamp(22rem, 42vh, 34rem);
                 overflow: hidden;
-                border: 1px solid rgba(127, 127, 127, .26);
+                border: 0;
                 border-radius: var(--ats-radius);
-                background: var(--ats-surface);
+                background: rgba(0, 0, 0, .28);
+            }
+
+            #AnimeThemesBrowserPage .ats-detail-loading .ats-hero {
+                background: rgba(127, 127, 127, .12);
             }
 
             #AnimeThemesBrowserPage .ats-backdrop {
@@ -549,28 +705,31 @@
                 inset: 0;
                 background-position: center;
                 background-size: cover;
-                opacity: .34;
+                opacity: .66;
             }
 
             #AnimeThemesBrowserPage .ats-hero-content {
                 position: relative;
                 display: grid;
-                grid-template-columns: 8rem minmax(0, 1fr);
-                gap: 1rem;
+                grid-template-columns: 11rem minmax(0, 1fr);
+                gap: 1.25rem;
                 align-items: end;
-                min-height: 13rem;
-                padding: 1rem;
-                background: linear-gradient(90deg, rgba(0, 0, 0, .48), rgba(0, 0, 0, .12));
+                min-height: clamp(22rem, 42vh, 34rem);
+                padding: 1.5rem;
+                background:
+                    linear-gradient(0deg, rgba(0, 0, 0, .74), rgba(0, 0, 0, .10) 58%),
+                    linear-gradient(90deg, rgba(0, 0, 0, .55), rgba(0, 0, 0, .10));
             }
 
             #AnimeThemesBrowserPage .ats-poster-wrap {
                 position: relative;
-                width: 8rem;
+                width: 11rem;
                 aspect-ratio: 2 / 3;
                 border-radius: var(--ats-radius-sm);
                 overflow: hidden;
-                border: 1px solid rgba(127, 127, 127, .4);
+                border: 1px solid rgba(255, 255, 255, .18);
                 background: rgba(127, 127, 127, .16);
+                box-shadow: 0 14px 34px rgba(0, 0, 0, .38);
             }
 
             #AnimeThemesBrowserPage .ats-poster,
@@ -579,6 +738,12 @@
                 width: 100%;
                 height: 100%;
                 object-fit: cover;
+                opacity: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-poster.ats-fade-in,
+            #AnimeThemesBrowserPage .ats-logo.ats-fade-in {
+                opacity: 1;
             }
 
             #AnimeThemesBrowserPage .ats-logo {
@@ -599,9 +764,89 @@
                 font-weight: 700;
             }
 
+            #AnimeThemesBrowserPage .ats-title-block,
+            #AnimeThemesBrowserPage .ats-title-block .sectionTitle {
+                color: #fff;
+                text-shadow: 0 2px 12px rgba(0, 0, 0, .72);
+            }
+
+            #AnimeThemesBrowserPage .ats-hero-meta {
+                display: flex;
+                gap: .45rem;
+                flex-wrap: wrap;
+                align-items: center;
+                margin-top: .45rem;
+                color: #fff;
+                text-shadow: 0 1px 8px rgba(0, 0, 0, .7);
+            }
+
+            #AnimeThemesBrowserPage .ats-hero-meta-chip,
+            #AnimeThemesBrowserPage .ats-hero-meta-link {
+                display: inline-flex;
+                align-items: center;
+                min-height: 1.8rem;
+                padding: .18rem .55rem;
+                border: 1px solid rgba(255, 255, 255, .26);
+                border-radius: 999px;
+                background: rgba(0, 0, 0, .34);
+                color: #fff !important;
+                font-weight: 700;
+                line-height: 1.2;
+                text-decoration: none;
+                backdrop-filter: blur(8px);
+            }
+
+            #AnimeThemesBrowserPage .ats-hero-meta-link {
+                border-color: rgba(255, 255, 255, .38);
+                background: rgba(255, 255, 255, .16);
+            }
+
+            #AnimeThemesBrowserPage .ats-hero-meta-link:hover {
+                background: rgba(255, 255, 255, .24);
+            }
+
             #AnimeThemesBrowserPage .ats-theme-list {
                 display: grid;
                 gap: .75rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-season-switcher {
+                display: flex;
+                gap: .6rem;
+                overflow-x: auto;
+                padding-bottom: .15rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-season-pill {
+                flex: 0 0 auto;
+                display: grid;
+                gap: .12rem;
+                min-width: 9rem;
+                max-width: 16rem;
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius);
+                padding: .55rem .7rem;
+                background: var(--ats-surface);
+                color: inherit;
+                text-align: left;
+                cursor: pointer;
+            }
+
+            #AnimeThemesBrowserPage .ats-season-pill.active {
+                border-color: var(--ats-accent);
+                background: var(--ats-surface-hover);
+            }
+
+            #AnimeThemesBrowserPage .ats-season-pill-title {
+                font-weight: 700;
+                white-space: nowrap;
+            }
+
+            #AnimeThemesBrowserPage .ats-season-pill-meta {
+                opacity: .74;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
 
             #AnimeThemesBrowserPage .ats-theme-card {
@@ -662,9 +907,27 @@
 
             #AnimeThemesBrowserPage .ats-finder-layout {
                 display: grid;
-                grid-template-columns: minmax(14rem, .9fr) minmax(16rem, 1fr) minmax(18rem, 1.2fr);
+                grid-template-columns: minmax(17rem, .85fr) minmax(17rem, 1fr) minmax(22rem, 1.35fr);
                 gap: .85rem;
                 align-items: start;
+            }
+
+            #AnimeThemesBrowserPage .ats-finder-topbar {
+                display: flex;
+                gap: 1rem;
+                justify-content: space-between;
+                align-items: start;
+                margin-bottom: .85rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-finder-state {
+                min-width: min(18rem, 100%);
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius);
+                padding: .65rem .8rem;
+                background: var(--ats-surface);
+                font-weight: 600;
+                text-align: left;
             }
 
             #AnimeThemesBrowserPage .ats-finder-panel {
@@ -695,6 +958,19 @@
                 gap: .55rem;
             }
 
+            #AnimeThemesBrowserPage .ats-season-list {
+                max-height: min(34rem, 58vh);
+                overflow: auto;
+                padding-right: .2rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-search-results,
+            #AnimeThemesBrowserPage .ats-finder-preview-list {
+                max-height: min(34rem, 58vh);
+                overflow: auto;
+                padding-right: .2rem;
+            }
+
             #AnimeThemesBrowserPage .ats-season-card,
             #AnimeThemesBrowserPage .ats-search-card {
                 display: grid;
@@ -706,6 +982,55 @@
                 background: var(--ats-surface);
                 color: inherit;
                 text-align: left;
+            }
+
+            #AnimeThemesBrowserPage .ats-season-card-title {
+                display: grid;
+                gap: .1rem;
+                min-width: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-season-series {
+                font-weight: 700;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            #AnimeThemesBrowserPage .ats-season-name {
+                opacity: .82;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            #AnimeThemesBrowserPage .ats-season-filter-select {
+                display: none;
+            }
+
+            #AnimeThemesBrowserPage .ats-status-segments {
+                display: grid;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                gap: .25rem;
+                margin-bottom: .7rem;
+                padding: .25rem;
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius);
+                background: rgba(127, 127, 127, .08);
+            }
+
+            #AnimeThemesBrowserPage .ats-status-segments button {
+                min-height: 2.25rem;
+                border: 0;
+                border-radius: var(--ats-radius-sm);
+                background: transparent;
+                color: inherit;
+                cursor: pointer;
+                font-weight: 600;
+            }
+
+            #AnimeThemesBrowserPage .ats-status-segments button.active {
+                background: var(--ats-surface-hover);
             }
 
             #AnimeThemesBrowserPage .ats-search-card {
@@ -747,7 +1072,7 @@
 
             #AnimeThemesBrowserPage .ats-finder-search-row {
                 display: grid;
-                grid-template-columns: minmax(6rem, .5fr) auto;
+                grid-template-columns: minmax(6rem, .5fr) minmax(7rem, auto);
                 gap: .75rem;
                 align-items: end;
             }
@@ -844,6 +1169,16 @@
                 transition: width .18s ease;
             }
 
+            @media (max-width: 1100px) {
+                #AnimeThemesBrowserPage .ats-finder-layout {
+                    grid-template-columns: minmax(16rem, .9fr) minmax(0, 1.1fr);
+                }
+
+                #AnimeThemesBrowserPage .ats-finder-panel:last-child {
+                    grid-column: 1 / -1;
+                }
+            }
+
             @media (max-width: 760px) {
                 #AnimeThemesBrowserPage .ats-browser-toolbar,
                 #AnimeThemesBrowserPage .ats-filters,
@@ -852,21 +1187,41 @@
                     grid-template-columns: 1fr;
                 }
 
+                #AnimeThemesBrowserPage .ats-finder-topbar {
+                    display: grid;
+                    grid-template-columns: 1fr;
+                }
+
+                #AnimeThemesBrowserPage .ats-finder-state {
+                    min-width: 0;
+                }
+
                 #AnimeThemesBrowserPage .ats-summary-grid {
                     grid-template-columns: repeat(2, minmax(0, 1fr));
                 }
 
                 #AnimeThemesBrowserPage .ats-hero-content {
-                    grid-template-columns: 5rem minmax(0, 1fr);
-                    min-height: 11rem;
+                    grid-template-columns: 1fr;
+                    min-height: 24rem;
+                    padding: 1rem;
+                    align-items: end;
                 }
 
                 #AnimeThemesBrowserPage .ats-poster-wrap {
-                    width: 5rem;
+                    width: min(8rem, 42vw);
                 }
 
                 #AnimeThemesBrowserPage .ats-logo {
                     max-height: 3.5rem;
+                }
+
+                #AnimeThemesBrowserPage .ats-title-block {
+                    min-width: 0;
+                }
+
+                #AnimeThemesBrowserPage .ats-detail-actions .ats-action-button,
+                #AnimeThemesBrowserPage .ats-detail-actions .ats-button-secondary {
+                    flex: 1 1 11rem;
                 }
 
                 #AnimeThemesBrowserPage .ats-item-grid.poster {
@@ -881,16 +1236,36 @@
                     grid-template-columns: 1fr;
                 }
             }
+
+            @media (prefers-reduced-motion: reduce) {
+                #AnimeThemesBrowserPage .ats-fade-in,
+                #AnimeThemesBrowserPage .ats-skeleton::after,
+                #AnimeThemesBrowserPage .ats-item-card,
+                #AnimeThemesBrowserPage .ats-progress-bar {
+                    animation: none !important;
+                    transition: none !important;
+                }
+            }
         </style>
 
         <script>
             (function () {
-                var page = document.querySelector('#AnimeThemesBrowserPage');
+                        var page = document.querySelector('#AnimeThemesBrowserPage');
+                        if (!page) {
+                            return;
+                        }
                 var state = {
                     items: [],
                     filteredItems: [],
                     currentItem: null,
                     currentResult: null,
+                    activeGroupId: null,
+                    itemsLoading: false,
+                    detailLoading: false,
+                    detailError: null,
+                    detailToken: 0,
+                    finderLoading: false,
+                    summaryLoading: false,
                     viewMode: 'poster',
                     viewSize: 'medium',
                     activeTab: 'library',
@@ -907,9 +1282,11 @@
                 var libraryView = page.querySelector('#AnimeThemesBrowserLibraryView');
                 var detailView = page.querySelector('#AnimeThemesBrowserDetailView');
                 var manageView = page.querySelector('#AnimeThemesBrowserManageView');
+                var finderView = page.querySelector('#AnimeThemesSeasonFinderView');
                 var itemGrid = page.querySelector('#AnimeThemesBrowserItemGrid');
                 var libraryCount = page.querySelector('#AnimeThemesBrowserLibraryCount');
                 var rowsContainer = page.querySelector('#AnimeThemesBrowserRows');
+                var seasonGroups = page.querySelector('#AnimeThemesBrowserSeasonGroups');
                 var searchInput = page.querySelector('#AnimeThemesBrowserSearch');
                 var themeSearchInput = page.querySelector('#AnimeThemesBrowserThemeSearch');
                 var filtersPanel = page.querySelector('.ats-filters');
@@ -942,6 +1319,7 @@
                 var finderResults = page.querySelector('#AnimeThemesFinderResults');
                 var finderPreview = page.querySelector('#AnimeThemesFinderPreview');
                 var finderState = page.querySelector('#AnimeThemesFinderState');
+                var downloadItemButton = page.querySelector('#AnimeThemesBrowserDownload');
 
                 function value(obj, pascal, camel) {
                     return obj ? obj[pascal] !== undefined ? obj[pascal] : obj[camel] : null;
@@ -1044,12 +1422,14 @@
                 }
 
                 function setImage(img, path, fallback) {
+                    img.classList.remove('ats-fade-in');
                     img.style.display = 'none';
                     img.removeAttribute('src');
                     if (fallback) fallback.style.display = '';
                     if (!path) return;
                     img.onload = function () {
                         img.style.display = 'block';
+                        img.classList.add('ats-fade-in');
                         if (fallback) fallback.style.display = 'none';
                     };
                     img.onerror = function () {
@@ -1066,6 +1446,75 @@
                 function selectedItem() {
                     var id = itemSelect.value;
                     return state.items.find(function (item) { return String(value(item, 'Id', 'id')) === id; }) || null;
+                }
+
+                function groupId(group) {
+                    return String(value(group, 'ItemId', 'itemId') || '') + ':' + String(value(group, 'Type', 'type') || '');
+                }
+
+                function getGroups() {
+                    var groups = (value(state.currentResult, 'Groups', 'groups') || []).filter(function (group) {
+                        return !isSpecialGroup(group) || groupHasContent(group);
+                    });
+                    return groups.sort(function (left, right) {
+                        var leftSpecial = isSpecialGroup(left);
+                        var rightSpecial = isSpecialGroup(right);
+                        if (leftSpecial !== rightSpecial) return leftSpecial ? 1 : -1;
+                        var leftNumber = value(left, 'SeasonNumber', 'seasonNumber');
+                        var rightNumber = value(right, 'SeasonNumber', 'seasonNumber');
+                        if (leftNumber === null || leftNumber === undefined) leftNumber = 9999;
+                        if (rightNumber === null || rightNumber === undefined) rightNumber = 9999;
+                        return leftNumber - rightNumber;
+                    });
+                }
+
+                function isSpecialGroup(group) {
+                    var seasonNumber = value(group, 'SeasonNumber', 'seasonNumber');
+                    var name = String(value(group, 'Name', 'name') || '').toLowerCase();
+                    return seasonNumber === 0 || name.indexOf('special') !== -1;
+                }
+
+                function groupHasContent(group) {
+                    return (value(group, 'Themes', 'themes') || []).length > 0 ||
+                        !!value(group, 'AnimeThemesSlug', 'animeThemesSlug') ||
+                        !!value(group, 'AnimeName', 'animeName');
+                }
+
+                function selectDefaultGroup(groups) {
+                    if (!groups.length) return null;
+                    var seasonOne = groups.find(function (group) {
+                        return value(group, 'Type', 'type') === 'Season' && value(group, 'SeasonNumber', 'seasonNumber') === 1;
+                    });
+                    if (seasonOne) return groupId(seasonOne);
+                    var normalWithThemes = groups.find(function (group) {
+                        return value(group, 'Type', 'type') === 'Season' &&
+                            !isSpecialGroup(group) &&
+                            (value(group, 'Themes', 'themes') || []).length > 0;
+                    });
+                    if (normalWithThemes) return groupId(normalWithThemes);
+                    var normalSeason = groups.find(function (group) {
+                        return value(group, 'Type', 'type') === 'Season' && !isSpecialGroup(group);
+                    });
+                    return groupId(normalSeason || groups[0]);
+                }
+
+                function activeGroup() {
+                    var groups = getGroups();
+                    if (groups.length) {
+                        return groups.find(function (group) { return groupId(group) === state.activeGroupId; }) || groups[0];
+                    }
+
+                    return state.currentResult || null;
+                }
+
+                function activeGroupItemId() {
+                    var group = activeGroup();
+                    return value(group, 'ItemId', 'itemId') || itemSelect.value;
+                }
+
+                function activeRows() {
+                    var group = activeGroup();
+                    return value(group, 'Themes', 'themes') || value(state.currentResult, 'Themes', 'themes') || [];
                 }
 
                 function itemMatchesSearch(item) {
@@ -1095,15 +1544,71 @@
                     renderItemGrid();
                 }
 
+                function createSkeleton(className) {
+                    var div = document.createElement('div');
+                    div.className = 'ats-skeleton' + (className ? ' ' + className : '');
+                    return div;
+                }
+
+                function appendEmptyState(container, titleText, detailText) {
+                    var empty = document.createElement('div');
+                    empty.className = 'ats-empty-state ats-fade-in';
+                    appendDiv(empty, 'ats-empty-title', titleText);
+                    if (detailText) {
+                        appendDiv(empty, 'ats-empty-detail', detailText);
+                    }
+                    container.appendChild(empty);
+                    return empty;
+                }
+
+                function renderLibrarySkeleton() {
+                    itemGrid.className = 'ats-item-grid ' + state.viewMode + ' size-' + state.viewSize;
+                    itemGrid.innerHTML = '';
+                    libraryCount.textContent = 'Loading library...';
+                    for (var i = 0; i < 12; i++) {
+                        var card = document.createElement('div');
+                        card.className = 'ats-item-card ats-placeholder-card';
+                        card.appendChild(createSkeleton('ats-skeleton-media'));
+                        if (state.viewMode === 'list') {
+                            var body = document.createElement('div');
+                            body.appendChild(createSkeleton('ats-skeleton-line wide'));
+                            body.appendChild(createSkeleton('ats-skeleton-line'));
+                            card.appendChild(body);
+                        }
+                        itemGrid.appendChild(card);
+                    }
+                }
+
+                function renderSummarySkeleton() {
+                    [summaryItems, summaryVideos, summarySongs, summaryExtras, summaryBytes].forEach(function (node) {
+                        node.innerHTML = '<span class="ats-skeleton ats-skeleton-text"></span>';
+                    });
+                }
+
+                function renderFinderSkeleton(target) {
+                    var container = target || seasonList;
+                    container.innerHTML = '';
+                    for (var i = 0; i < 5; i++) {
+                        var card = document.createElement('div');
+                        card.className = 'ats-season-card ats-placeholder-card';
+                        card.appendChild(createSkeleton('ats-skeleton-line wide'));
+                        card.appendChild(createSkeleton('ats-skeleton-line'));
+                        card.appendChild(createSkeleton('ats-skeleton-line short'));
+                        container.appendChild(card);
+                    }
+                }
+
                 function renderItemGrid() {
+                    if (state.itemsLoading) {
+                        renderLibrarySkeleton();
+                        return;
+                    }
+
                     itemGrid.className = 'ats-item-grid ' + state.viewMode + ' size-' + state.viewSize;
                     itemGrid.innerHTML = '';
                     libraryCount.textContent = state.filteredItems.length + ' / ' + state.items.length + ' items';
                     if (!state.filteredItems.length) {
-                        var empty = document.createElement('div');
-                        empty.className = 'fieldDescription';
-                        empty.textContent = 'No library items match the current search.';
-                        itemGrid.appendChild(empty);
+                        appendEmptyState(itemGrid, 'No library items found', 'Try a different search or refresh the library list.');
                         return;
                     }
 
@@ -1115,7 +1620,7 @@
                 function createItemCard(item) {
                     var button = document.createElement('button');
                     button.type = 'button';
-                    button.className = 'ats-item-card';
+                    button.className = 'ats-item-card ats-fade-in';
                     var name = value(item, 'Name', 'name') || 'Unknown';
                     button.setAttribute('aria-label', name);
                     button.title = name;
@@ -1168,7 +1673,7 @@
                 }
 
                 function setActiveTab(tab) {
-                    state.activeTab = tab === 'manage' ? 'manage' : 'library';
+                    state.activeTab = tab === 'manage' || tab === 'finder' ? tab : 'library';
                     syncLayout();
                 }
 
@@ -1177,17 +1682,23 @@
                         button.classList.toggle('active', button.getAttribute('data-ats-tab') === state.activeTab);
                     });
                     var libraryActive = state.activeTab === 'library';
-                    var detailActive = libraryActive && !!state.currentResult;
+                    var finderActive = state.activeTab === 'finder';
+                    var manageActive = state.activeTab === 'manage';
+                    var detailActive = libraryActive && (state.detailLoading || state.detailError || !!state.currentResult);
                     browserToolbar.style.display = libraryActive && !detailActive ? '' : 'none';
                     filtersPanel.style.display = detailActive ? '' : 'none';
-                    manageView.style.display = libraryActive ? 'none' : '';
+                    manageView.style.display = manageActive ? '' : 'none';
+                    finderView.style.display = finderActive ? '' : 'none';
                     if (libraryActive) {
                         detailView.style.display = detailActive ? '' : 'none';
                         libraryView.style.display = detailActive ? 'none' : '';
-                    } else {
+                    } else if (finderActive) {
                         libraryView.style.display = 'none';
                         detailView.style.display = 'none';
                         loadSeasonMappings();
+                    } else {
+                        libraryView.style.display = 'none';
+                        detailView.style.display = 'none';
                     }
                 }
 
@@ -1196,6 +1707,10 @@
                     libraryView.style.display = state.activeTab === 'library' ? '' : 'none';
                     state.currentItem = null;
                     state.currentResult = null;
+                    state.activeGroupId = null;
+                    state.detailLoading = false;
+                    state.detailError = null;
+                    detailView.classList.remove('ats-detail-loading');
                     itemSelect.value = '';
                     syncLayout();
                 }
@@ -1204,21 +1719,37 @@
                     if (!itemId) return;
                     itemSelect.value = itemId;
                     state.currentItem = selectedItem();
-                    state.currentResult = {};
+                    state.currentResult = null;
+                    state.activeGroupId = null;
+                    state.detailLoading = true;
+                    state.detailError = null;
+                    state.detailToken++;
                     setActiveTab('library');
-                    loadThemes();
+                    renderDetailLoading();
+                    syncLayout();
+                    loadThemes(state.detailToken);
                 }
 
                 function loadItems() {
+                    state.itemsLoading = true;
+                    state.summaryLoading = true;
+                    renderLibrarySkeleton();
+                    renderSummarySkeleton();
                     Dashboard.showLoadingMsg();
                     Promise.all([apiGet('AnimeThemesSync/Items'), apiGet('AnimeThemesSync/Summary')]).then(function (results) {
                         var items = results[0];
                         var summary = results[1] || {};
                         state.items = items || [];
+                        state.itemsLoading = false;
+                        state.summaryLoading = false;
                         renderItemOptions();
                         renderSummary(summary);
                         Dashboard.hideLoadingMsg();
                     }).catch(function (err) {
+                        state.itemsLoading = false;
+                        state.summaryLoading = false;
+                        itemGrid.innerHTML = '';
+                        appendEmptyState(itemGrid, 'Library failed to load', getErrorMessage(err));
                         Dashboard.hideLoadingMsg();
                         Dashboard.alert({ title: 'Browser Error', message: 'Failed to load items: ' + err });
                     });
@@ -1249,8 +1780,11 @@
 
                 function loadSeasonMappings() {
                     var selectedId = state.selectedSeason ? seasonRowId(state.selectedSeason) : null;
+                    state.finderLoading = true;
                     finderState.textContent = 'Loading season mappings...';
+                    renderFinderSkeleton(seasonList);
                     apiGet('AnimeThemesSync/SeasonMappings').then(function (rows) {
+                        state.finderLoading = false;
                         state.seasonMappings = rows || [];
                         if (selectedId) {
                             state.selectedSeason = state.seasonMappings.find(function (row) {
@@ -1260,13 +1794,22 @@
                         renderSeasonMappings();
                         finderState.textContent = state.seasonMappings.length + ' seasons loaded.';
                     }).catch(function (err) {
+                        state.finderLoading = false;
+                        seasonList.innerHTML = '';
+                        appendEmptyState(seasonList, 'Season mappings failed to load', getErrorMessage(err));
                         finderState.textContent = 'Failed to load season mappings.';
                         Dashboard.alert({ title: 'Season Finder Error', message: getErrorMessage(err) });
                     });
                 }
 
                 function renderSeasonMappings() {
+                    if (state.finderLoading) {
+                        renderFinderSkeleton(seasonList);
+                        return;
+                    }
+
                     var filter = seasonFilter.value || 'unmatched';
+                    syncSeasonFilterButtons();
                     var rows = state.seasonMappings.filter(function (row) {
                         var status = String(value(row, 'Status', 'status') || '').toLowerCase();
                         if (filter === 'all') return true;
@@ -1275,7 +1818,7 @@
                     });
                     seasonList.innerHTML = '';
                     if (!rows.length) {
-                        appendDiv(seasonList, 'fieldDescription', 'No seasons match the current filter.');
+                        appendEmptyState(seasonList, 'No seasons match this filter', 'Switch filters or refresh season mappings.');
                         return;
                     }
 
@@ -1287,16 +1830,20 @@
                 function createSeasonCard(row) {
                     var button = document.createElement('button');
                     button.type = 'button';
-                    button.className = 'ats-season-card';
+                    button.className = 'ats-season-card ats-fade-in';
                     button.classList.toggle('selected', state.selectedSeason && value(state.selectedSeason, 'SeasonItemId', 'seasonItemId') === value(row, 'SeasonItemId', 'seasonItemId'));
-                    appendDiv(button, 'ats-item-title', text(value(row, 'SeriesName', 'seriesName')) + ' / ' + text(value(row, 'SeasonName', 'seasonName')));
+                    var titleLine = document.createElement('div');
+                    titleLine.className = 'ats-season-card-title';
+                    appendDiv(titleLine, 'ats-season-series', text(value(row, 'SeriesName', 'seriesName')));
+                    appendDiv(titleLine, 'ats-season-name', text(value(row, 'SeasonName', 'seasonName')));
+                    button.appendChild(titleLine);
                     appendDiv(button, 'ats-item-meta', [
                         'Season ' + text(value(row, 'SeasonNumber', 'seasonNumber')),
-                        text(value(row, 'Status', 'status')),
-                        text(value(row, 'AnimeName', 'animeName') || value(row, 'AnimeThemesSlug', 'animeThemesSlug'))
+                        text(value(row, 'AnimeName', 'animeName') || value(row, 'AnimeThemesSlug', 'animeThemesSlug') || 'Needs match')
                     ].join(' | '));
                     var chips = document.createElement('div');
                     chips.className = 'ats-status-list';
+                    addChip(chips, text(value(row, 'Status', 'status')), value(row, 'AnimeThemesSlug', 'animeThemesSlug') ? 'ok' : 'missing');
                     addChip(chips, text(value(row, 'Source', 'source')), '');
                     if (value(row, 'SameAsSeries', 'sameAsSeries')) addChip(chips, 'Series-level', 'ok');
                     if (!value(row, 'AnimeThemesSlug', 'animeThemesSlug')) addChip(chips, 'Needs match', 'missing');
@@ -1349,13 +1896,15 @@
                     var year = finderYear.value ? parseInt(finderYear.value, 10) : null;
                     var token = ++state.finderSearchToken;
                     finderState.textContent = 'Searching AnimeThemes...';
-                    finderResults.innerHTML = '';
+                    renderFinderSkeleton(finderResults);
                     apiGet('AnimeThemesSync/Search?query=' + encodeURIComponent(query) + (year ? '&year=' + encodeURIComponent(year) : '')).then(function (results) {
                         if (token !== state.finderSearchToken) return;
                         renderSearchResults(results || []);
                         finderState.textContent = (results || []).length + ' candidates found.';
                     }).catch(function (err) {
                         if (token !== state.finderSearchToken) return;
+                        finderResults.innerHTML = '';
+                        appendEmptyState(finderResults, 'Search failed', getErrorMessage(err));
                         finderState.textContent = 'Search failed.';
                         Dashboard.alert({ title: 'Season Finder Error', message: getErrorMessage(err) });
                     });
@@ -1364,7 +1913,7 @@
                 function renderSearchResults(results) {
                     finderResults.innerHTML = '';
                     if (!results.length) {
-                        appendDiv(finderResults, 'fieldDescription', 'No candidates found.');
+                        appendEmptyState(finderResults, 'No candidates found', 'Try the main series title or remove the year filter.');
                         return;
                     }
 
@@ -1376,7 +1925,7 @@
                 function createSearchCard(result) {
                     var button = document.createElement('button');
                     button.type = 'button';
-                    button.className = 'ats-search-card';
+                    button.className = 'ats-search-card ats-fade-in';
                     button.classList.toggle('selected', state.selectedAnime && value(state.selectedAnime, 'Slug', 'slug') === value(result, 'Slug', 'slug'));
                     var posterBox = document.createElement('div');
                     posterBox.className = 'ats-candidate-poster';
@@ -1415,11 +1964,15 @@
                     state.selectedAnime = result;
                     state.finderPreview = null;
                     finderState.textContent = 'Loading themes for ' + text(value(result, 'Name', 'name')) + '...';
+                    finderPreview.className = 'ats-finder-preview';
+                    renderFinderSkeleton(finderPreview);
                     apiGet('AnimeThemesSync/Anime/' + encodeURIComponent(slug) + '/Themes').then(function (preview) {
                         state.finderPreview = preview || {};
                         renderFinderPreview();
                         finderState.textContent = 'Preview loaded.';
                     }).catch(function (err) {
+                        finderPreview.innerHTML = '';
+                        appendEmptyState(finderPreview, 'Preview failed to load', getErrorMessage(err));
                         finderState.textContent = 'Failed to load preview.';
                         Dashboard.alert({ title: 'Season Finder Error', message: getErrorMessage(err) });
                     });
@@ -1460,7 +2013,7 @@
                     var list = document.createElement('div');
                     list.className = 'ats-finder-preview-list';
                     if (!rows.length) {
-                        appendDiv(list, 'fieldDescription', 'No themes found for this candidate.');
+                        appendEmptyState(list, 'No themes found', 'This candidate has no previewable themes.');
                     } else {
                         rows.slice(0, 12).forEach(function (row) {
                             list.appendChild(createPreviewThemeRow(row));
@@ -1471,7 +2024,7 @@
 
                 function createPreviewThemeRow(row) {
                     var card = document.createElement('div');
-                    card.className = 'ats-theme-card';
+                    card.className = 'ats-theme-card ats-fade-in';
                     var main = document.createElement('div');
                     main.className = 'ats-theme-main';
                     appendDiv(main, 'ats-theme-key', padOrder(value(row, 'Order', 'order')) + ' - ' + text(value(row, 'ThemeKey', 'themeKey')));
@@ -1529,8 +2082,7 @@
                             upsertSeasonMappingRow(row);
                         }
                         if (downloadAfterSave) {
-                            var targetItemId = value(state.selectedSeason, 'SeriesItemId', 'seriesItemId') || payload.SeasonItemId;
-                            startDownloadJob('AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(targetItemId) + '&Force=false');
+                            startDownloadJob('AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(payload.SeasonItemId) + '&Force=false');
                         } else {
                             finderState.textContent = 'Mapping saved.';
                         }
@@ -1570,19 +2122,79 @@
                     summaryBytes.textContent = formatBytes(value(summary, 'TotalBytes', 'totalBytes'));
                 }
 
-                function loadThemes() {
+                function renderDetailLoading() {
+                    detailView.classList.add('ats-detail-loading');
+                    downloadItemButton.disabled = true;
+                    setBackdrop(null);
+                    poster.style.display = 'none';
+                    logo.style.display = 'none';
+                    posterFallback.style.display = 'none';
+                    title.textContent = 'Loading item...';
+                    meta.innerHTML = '';
+                    meta.appendChild(createSkeleton('ats-skeleton-line'));
+                    seasonGroups.style.display = '';
+                    seasonGroups.innerHTML = '';
+                    for (var i = 0; i < 4; i++) {
+                        var pill = document.createElement('div');
+                        pill.className = 'ats-season-pill ats-placeholder-card';
+                        pill.appendChild(createSkeleton('ats-skeleton-line wide'));
+                        pill.appendChild(createSkeleton('ats-skeleton-line'));
+                        seasonGroups.appendChild(pill);
+                    }
+                    rowsContainer.innerHTML = '';
+                    for (var row = 0; row < 4; row++) {
+                        var card = document.createElement('div');
+                        card.className = 'ats-theme-card ats-placeholder-card';
+                        card.appendChild(createSkeleton('ats-skeleton-line wide'));
+                        card.appendChild(createSkeleton('ats-skeleton-line'));
+                        card.appendChild(createSkeleton('ats-skeleton-line short'));
+                        rowsContainer.appendChild(card);
+                    }
+                }
+
+                function renderDetailError(message) {
+                    detailView.classList.remove('ats-detail-loading');
+                    downloadItemButton.disabled = true;
+                    setBackdrop(null);
+                    poster.style.display = 'none';
+                    logo.style.display = 'none';
+                    posterFallback.style.display = '';
+                    posterFallback.textContent = '!';
+                    title.textContent = 'Unable to load item';
+                    meta.textContent = message || 'The selected item could not be loaded.';
+                    seasonGroups.innerHTML = '';
+                    seasonGroups.style.display = 'none';
+                    rowsContainer.innerHTML = '';
+                    appendEmptyState(rowsContainer, 'Themes could not be loaded', message || 'Go back to the library and try again.');
+                }
+
+                function loadThemes(token) {
                     var itemId = itemSelect.value;
                     if (!itemId) return;
                     state.currentItem = selectedItem();
-                    Dashboard.showLoadingMsg();
+                    var previousGroupId = state.activeGroupId;
                     apiGet('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes').then(function (result) {
-                        Dashboard.hideLoadingMsg();
+                        if (token && token !== state.detailToken) return;
+                        state.detailLoading = false;
+                        state.detailError = null;
+                        detailView.classList.remove('ats-detail-loading');
+                        downloadItemButton.disabled = false;
                         state.currentResult = result || {};
+                        var groups = getGroups();
+                        state.activeGroupId = groups.some(function (group) { return groupId(group) === previousGroupId; })
+                            ? previousGroupId
+                            : selectDefaultGroup(groups);
                         renderHero();
+                        renderSeasonGroups();
                         renderThemes();
                         syncLayout();
                     }).catch(function (err) {
-                        Dashboard.hideLoadingMsg();
+                        if (token && token !== state.detailToken) return;
+                        state.detailLoading = false;
+                        state.currentResult = null;
+                        state.detailError = getErrorMessage(err);
+                        renderDetailError(state.detailError);
+                        syncLayout();
                         Dashboard.alert({ title: 'Browser Error', message: 'Failed to load themes: ' + err });
                     });
                 }
@@ -1590,29 +2202,74 @@
                 function renderHero() {
                     var item = state.currentItem || {};
                     var result = state.currentResult || {};
-                    title.textContent = text(value(result, 'Name', 'name')) + ' - Themes';
-                    var name = value(result, 'Name', 'name') || value(item, 'Name', 'name') || 'AT';
+                    var group = activeGroup() || {};
+                    title.textContent = text(value(group, 'Name', 'name') || value(result, 'Name', 'name'));
+                    var name = value(group, 'Name', 'name') || value(result, 'Name', 'name') || value(item, 'Name', 'name') || 'AT';
                     posterFallback.textContent = String(name).trim().slice(0, 2).toUpperCase();
-                    setImage(poster, value(item, 'PrimaryImageUrl', 'primaryImageUrl'), posterFallback);
+                    setImage(poster, value(group, 'PrimaryImageUrl', 'primaryImageUrl') || value(item, 'PrimaryImageUrl', 'primaryImageUrl'), posterFallback);
                     setImage(logo, value(item, 'LogoImageUrl', 'logoImageUrl'), null);
-                    setBackdrop(value(item, 'BackdropImageUrl', 'backdropImageUrl') || value(item, 'ThumbImageUrl', 'thumbImageUrl'));
+                    setBackdrop(
+                        value(group, 'BackdropImageUrl', 'backdropImageUrl') ||
+                        value(group, 'ThumbImageUrl', 'thumbImageUrl') ||
+                        value(item, 'BackdropImageUrl', 'backdropImageUrl') ||
+                        value(item, 'ThumbImageUrl', 'thumbImageUrl'));
 
                     meta.innerHTML = '';
-                    var count = (value(result, 'Themes', 'themes') || []).length;
-                    var countSpan = document.createElement('span');
-                    countSpan.textContent = count + ' themes';
-                    meta.appendChild(countSpan);
-                    var url = value(result, 'AnimeThemesUrl', 'animeThemesUrl');
+                    var count = activeRows().length;
+                    meta.className = 'ats-hero-meta';
+                    addHeroMetaChip(count + ' themes');
+                    var status = value(group, 'Status', 'status');
+                    if (status) {
+                        addHeroMetaChip(status);
+                    }
+                    var url = value(group, 'AnimeThemesUrl', 'animeThemesUrl') || value(result, 'AnimeThemesUrl', 'animeThemesUrl');
                     if (url) {
                         var link = document.createElement('a');
-                        link.className = 'button-link ats-inline-link';
+                        link.className = 'ats-hero-meta-link';
                         link.target = '_blank';
                         link.rel = 'noopener';
                         link.href = url;
                         link.textContent = 'Open AnimeThemes';
-                        meta.appendChild(document.createTextNode('  '));
                         meta.appendChild(link);
                     }
+                }
+
+                function addHeroMetaChip(label) {
+                    var chip = document.createElement('span');
+                    chip.className = 'ats-hero-meta-chip';
+                    chip.textContent = label;
+                    meta.appendChild(chip);
+                }
+
+                function renderSeasonGroups() {
+                    var groups = getGroups();
+                    seasonGroups.innerHTML = '';
+                    seasonGroups.style.display = groups.length > 1 ? '' : 'none';
+                    if (groups.length <= 1) {
+                        return;
+                    }
+
+                    groups.forEach(function (group) {
+                        var button = document.createElement('button');
+                        button.type = 'button';
+                        button.className = 'ats-season-pill';
+                        button.classList.toggle('active', groupId(group) === state.activeGroupId);
+                        var type = value(group, 'Type', 'type');
+                        var seasonNumber = value(group, 'SeasonNumber', 'seasonNumber');
+                        var label = type === 'Series' ? 'Series' : type === 'Season' && seasonNumber ? 'Season ' + seasonNumber : text(value(group, 'Name', 'name'));
+                        appendDiv(button, 'ats-season-pill-title', label);
+                        appendDiv(button, 'ats-season-pill-meta', [
+                            value(group, 'Status', 'status'),
+                            value(group, 'AnimeName', 'animeName') || value(group, 'AnimeThemesSlug', 'animeThemesSlug')
+                        ].filter(Boolean).join(' | '));
+                        button.addEventListener('click', function () {
+                            state.activeGroupId = groupId(group);
+                            renderSeasonGroups();
+                            renderHero();
+                            renderThemes();
+                        });
+                        seasonGroups.appendChild(button);
+                    });
                 }
 
                 function rowMatches(row) {
@@ -1644,13 +2301,21 @@
                 }
 
                 function renderThemes() {
-                    var rows = (value(state.currentResult, 'Themes', 'themes') || []).filter(rowMatches);
+                    if (state.detailLoading) {
+                        renderDetailLoading();
+                        return;
+                    }
+
+                    if (state.detailError) {
+                        renderDetailError(state.detailError);
+                        return;
+                    }
+
+                    var group = activeGroup() || {};
+                    var rows = activeRows().filter(rowMatches);
                     rowsContainer.innerHTML = '';
                     if (!rows.length) {
-                        var empty = document.createElement('div');
-                        empty.className = 'fieldDescription';
-                        empty.textContent = 'No themes match the current filters.';
-                        rowsContainer.appendChild(empty);
+                        appendEmptyState(rowsContainer, 'No themes to show', value(group, 'EmptyMessage', 'emptyMessage') || 'Adjust filters or choose another season.');
                         return;
                     }
 
@@ -1661,7 +2326,7 @@
 
                 function createThemeCard(row) {
                     var card = document.createElement('div');
-                    card.className = 'ats-theme-card';
+                    card.className = 'ats-theme-card ats-fade-in';
 
                     var main = document.createElement('div');
                     main.className = 'ats-theme-main';
@@ -1691,6 +2356,8 @@
 
                     var actions = document.createElement('div');
                     actions.className = 'ats-actions';
+                    addRemotePreviewButton(actions, row, 'video');
+                    addRemotePreviewButton(actions, row, 'audio');
                     addDownloadButton(actions, row);
                     addLocalVideoButton(actions, row);
                     addPlayButton(actions, row, 'audio', 'Play Audio', value(row, 'SavedAudioPlayable', 'savedAudioPlayable'));
@@ -1786,8 +2453,39 @@
                     container.appendChild(button);
                 }
 
+                function dispatchInput(input) {
+                    var event = document.createEvent('Event');
+                    event.initEvent('input', true, true);
+                    input.dispatchEvent(event);
+                }
+
+                function setupClearButtons() {
+                    page.querySelectorAll('.ats-clear-input').forEach(function (button) {
+                        var input = page.querySelector('#' + button.getAttribute('data-clear-target'));
+                        if (!input) return;
+                        var sync = function () {
+                            button.style.display = input.value ? 'grid' : 'none';
+                        };
+                        button.addEventListener('click', function () {
+                            input.value = '';
+                            sync();
+                            dispatchInput(input);
+                            input.focus();
+                        });
+                        input.addEventListener('input', sync);
+                        sync();
+                    });
+                }
+
+                function syncSeasonFilterButtons() {
+                    var current = seasonFilter.value || 'unmatched';
+                    page.querySelectorAll('[data-season-filter]').forEach(function (button) {
+                        button.classList.toggle('active', button.getAttribute('data-season-filter') === current);
+                    });
+                }
+
                 function downloadTheme(row) {
-                    var itemId = itemSelect.value;
+                    var itemId = activeGroupItemId();
                     var rowId = value(row, 'RowId', 'rowId');
                     if (!itemId || !rowId) return;
                     var force = page.querySelector('#AnimeThemesBrowserForce').checked;
@@ -1795,7 +2493,7 @@
                 }
 
                 function downloadItem() {
-                    var itemId = itemSelect.value;
+                    var itemId = activeGroupItemId();
                     if (!itemId) return;
                     var force = page.querySelector('#AnimeThemesBrowserForce').checked;
                     startDownloadJob('AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(itemId) + '&Force=' + force);
@@ -1823,7 +2521,7 @@
                         var message = value(job, 'Message', 'message') || status || 'Running';
                         setProgress(true, message, progress);
                         if (status === 'Completed') {
-                            if (state.activeTab === 'manage') {
+                            if (state.activeTab === 'finder') {
                                 loadSeasonMappings();
                             } else {
                                 loadThemes();
@@ -1870,7 +2568,7 @@
 
                 function openPlayer(row, target) {
                     var rowId = value(row, 'RowId', 'rowId');
-                    var itemId = itemSelect.value;
+                    var itemId = activeGroupItemId();
                     state.lastFocus = document.activeElement;
                     var src = apiUrl('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes/' + encodeURIComponent(rowId) + '/LocalMedia?target=' + encodeURIComponent(target) + '&_=' + Date.now(), true);
                     playerTitle.textContent = text(value(row, 'ThemeKey', 'themeKey')) + ' - ' + target;
@@ -1916,7 +2614,17 @@
                     });
                 });
                 page.querySelector('#AnimeThemesSeasonRefresh').addEventListener('click', loadSeasonMappings);
-                seasonFilter.addEventListener('change', loadSeasonMappings);
+                seasonFilter.addEventListener('change', function () {
+                    syncSeasonFilterButtons();
+                    loadSeasonMappings();
+                });
+                page.querySelectorAll('[data-season-filter]').forEach(function (button) {
+                    button.addEventListener('click', function () {
+                        seasonFilter.value = button.getAttribute('data-season-filter') || 'unmatched';
+                        syncSeasonFilterButtons();
+                        loadSeasonMappings();
+                    });
+                });
                 page.querySelector('#AnimeThemesFinderSearch').addEventListener('click', function () {
                     searchAnimeThemes(false);
                 });
@@ -1962,6 +2670,8 @@
                 player.addEventListener('click', function (event) {
                     if (event.target === player) closePlayer();
                 });
+                setupClearButtons();
+                syncSeasonFilterButtons();
                 page.addEventListener('pageshow', function () {
                     setViewMode(state.viewMode);
                     setViewSize(state.viewSize);

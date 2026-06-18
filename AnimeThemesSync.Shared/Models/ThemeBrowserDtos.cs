@@ -21,6 +21,24 @@ public sealed record ThemeBrowserItemResult(
     string Type,
     string? AnimeThemesSlug,
     string? AnimeThemesUrl,
+    List<ThemeBrowserThemeRow> Themes,
+    List<ThemeBrowserThemeGroup>? Groups = null);
+
+public sealed record ThemeBrowserThemeGroup(
+    Guid ItemId,
+    string Name,
+    string Type,
+    int? SeasonNumber,
+    string Status,
+    string Source,
+    bool SameAsSeries,
+    string? AnimeName,
+    string? AnimeThemesSlug,
+    string? AnimeThemesUrl,
+    string? PrimaryImageUrl,
+    string? BackdropImageUrl,
+    string? ThumbImageUrl,
+    string? EmptyMessage,
     List<ThemeBrowserThemeRow> Themes);
 
 public sealed record ThemeBrowserThemeRow(

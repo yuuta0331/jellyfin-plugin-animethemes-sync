@@ -301,6 +301,16 @@ public class ThemeFilePlannerTests
             Assert.Contains("data-delete-scope=\"all\"", content, StringComparison.Ordinal);
             Assert.Contains("AnimeThemesSeasonFinderView", content, StringComparison.Ordinal);
             Assert.Contains("AnimeThemesFinderSearchInput", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesBrowserSeasonGroups", content, StringComparison.Ordinal);
+            Assert.Contains("ats-clear-input", content, StringComparison.Ordinal);
+            Assert.Contains("data-season-filter=\"unmatched\"", content, StringComparison.Ordinal);
+            Assert.Contains("data-ats-tab=\"finder\"", content, StringComparison.Ordinal);
+            Assert.Contains("ats-finder-topbar", content, StringComparison.Ordinal);
+            Assert.Contains("ats-hero-immersive", content, StringComparison.Ordinal);
+            Assert.Contains("ats-hero-meta-chip", content, StringComparison.Ordinal);
+            Assert.Contains("ats-skeleton", content, StringComparison.Ordinal);
+            Assert.Contains("prefers-reduced-motion", content, StringComparison.Ordinal);
+            Assert.Contains("Overwrite existing files", content, StringComparison.Ordinal);
         }
 
         var jellyfinPage = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
@@ -312,6 +322,23 @@ public class ThemeFilePlannerTests
         Assert.Contains("saveSeasonMapping", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("Save & Download", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("MatchedTitle", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("renderSeasonGroups", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("renderDetailLoading", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("renderDetailError", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("renderLibrarySkeleton", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("renderFinderSkeleton", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("renderSummarySkeleton", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("selectDefaultGroup", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("isSpecialGroup", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("addHeroMetaChip", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("addRemotePreviewButton(actions, row, 'video')", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("addRemotePreviewButton(actions, row, 'audio')", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("detailToken", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("EmptyMessage", jellyfinPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("+ ' - Themes'", jellyfinPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("state.currentResult = {}", jellyfinPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("window.history", jellyfinPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("popstate", jellyfinPage, StringComparison.Ordinal);
         Assert.DoesNotContain("scheduleAnimeThemesSearch(350)", jellyfinPage, StringComparison.Ordinal);
 
         var embyController = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js"));
@@ -323,7 +350,33 @@ public class ThemeFilePlannerTests
         Assert.Contains("saveSeasonMapping", embyController, StringComparison.Ordinal);
         Assert.Contains("Save & Download", embyController, StringComparison.Ordinal);
         Assert.Contains("MatchedTitle", embyController, StringComparison.Ordinal);
+        Assert.Contains("renderSeasonGroups", embyController, StringComparison.Ordinal);
+        Assert.Contains("renderDetailLoading", embyController, StringComparison.Ordinal);
+        Assert.Contains("renderDetailError", embyController, StringComparison.Ordinal);
+        Assert.Contains("renderLibrarySkeleton", embyController, StringComparison.Ordinal);
+        Assert.Contains("renderFinderSkeleton", embyController, StringComparison.Ordinal);
+        Assert.Contains("renderSummarySkeleton", embyController, StringComparison.Ordinal);
+        Assert.Contains("selectDefaultGroup", embyController, StringComparison.Ordinal);
+        Assert.Contains("isSpecialGroup", embyController, StringComparison.Ordinal);
+        Assert.Contains("addHeroMetaChip", embyController, StringComparison.Ordinal);
+        Assert.Contains("addRemotePreviewButton(actions, row, 'video')", embyController, StringComparison.Ordinal);
+        Assert.Contains("addRemotePreviewButton(actions, row, 'audio')", embyController, StringComparison.Ordinal);
+        Assert.Contains("detailToken", embyController, StringComparison.Ordinal);
+        Assert.Contains("EmptyMessage", embyController, StringComparison.Ordinal);
+        Assert.DoesNotContain("+ ' - Themes'", embyController, StringComparison.Ordinal);
+        Assert.DoesNotContain("state.currentResult = {}", embyController, StringComparison.Ordinal);
+        Assert.DoesNotContain("window.history", embyController, StringComparison.Ordinal);
+        Assert.DoesNotContain("popstate", embyController, StringComparison.Ordinal);
         Assert.DoesNotContain("scheduleAnimeThemesSearch(350)", embyController, StringComparison.Ordinal);
+
+        var dtoFile = File.ReadAllText(Path.Combine(root, "AnimeThemesSync.Shared", "Models", "ThemeBrowserDtos.cs"));
+        Assert.Contains("ThemeBrowserThemeGroup", dtoFile, StringComparison.Ordinal);
+        Assert.Contains("List<ThemeBrowserThemeGroup>? Groups", dtoFile, StringComparison.Ordinal);
+
+        var jellyfinDownloader = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs"));
+        var embyDownloader = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs"));
+        Assert.Contains("Uses series-level themes", jellyfinDownloader, StringComparison.Ordinal);
+        Assert.Contains("Uses series-level themes", embyDownloader, StringComparison.Ordinal);
     }
 
     [Fact]

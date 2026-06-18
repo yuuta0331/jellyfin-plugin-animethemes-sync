@@ -598,7 +598,8 @@ public class ThemeDownloader : IScheduledTask
             throw new InvalidOperationException("Theme row id is required.");
         }
 
-        var anime = await ResolveAnime(item, cancellationToken).ConfigureAwait(false)
+        var resolution = await ResolveBrowserAnimeForItemAsync(item, cancellationToken).ConfigureAwait(false);
+        var anime = resolution.Anime
             ?? throw new InvalidOperationException("No AnimeThemes resource was found for this item.");
         if (anime.AnimeThemes == null)
         {
@@ -658,22 +659,197 @@ public class ThemeDownloader : IScheduledTask
             throw new InvalidOperationException("Only Series, Season, and Movie items are supported.");
         }
 
-        var anime = await ResolveAnime(item, cancellationToken).ConfigureAwait(false);
-        var animeThemesUrl = !string.IsNullOrWhiteSpace(anime?.Slug)
-            ? Constants.AnimeThemesWebUrl + "/anime/" + anime.Slug
-            : null;
-
-        var rows = anime?.AnimeThemes == null
-            ? new List<ThemeBrowserThemeRow>()
-            : BuildBrowserRows(item, anime, config);
+        var resolution = await ResolveBrowserAnimeForItemAsync(item, cancellationToken).ConfigureAwait(false);
+        var animeThemesUrl = BuildAnimeThemesUrl(resolution.Anime);
+        var rows = BuildBrowserRowsForResolution(item, resolution, config);
+        var groups = item is Series series
+            ? await BuildBrowserThemeGroupsAsync(series, resolution.Anime, rows, config, cancellationToken).ConfigureAwait(false)
+            : new List<ThemeBrowserThemeGroup>
+            {
+                BuildBrowserThemeGroup(
+                    item,
+                    item is Season ? "Season" : "Movie",
+                    item is Season ? item.IndexNumber : null,
+                    resolution,
+                    rows,
+                    null,
+                    null)
+            };
 
         return new ThemeBrowserItemResult(
             item.Id,
             item.Name ?? "Unknown",
             item is Season ? "Season" : item is Series ? "Series" : "Movie",
-            anime?.Slug,
+            resolution.Anime?.Slug,
             animeThemesUrl,
+            rows,
+            groups);
+    }
+
+    private async Task<List<ThemeBrowserThemeGroup>> BuildBrowserThemeGroupsAsync(
+        Series series,
+        AnimeThemesAnime? seriesAnime,
+        List<ThemeBrowserThemeRow> seriesRows,
+        PluginConfiguration config,
+        CancellationToken cancellationToken)
+    {
+        var groups = new List<ThemeBrowserThemeGroup>();
+        var seasons = GetSeasonItems(series);
+        var seasonsWithPath = seasons.Where(s => !string.IsNullOrWhiteSpace(s.Path)).ToList();
+        if (seasonsWithPath.Count == 0)
+        {
+            groups.Add(BuildBrowserThemeGroup(
+                series,
+                "Series",
+                null,
+                new BrowserAnimeResolution(seriesAnime, "Series", "SeriesLevel", false),
+                seriesRows,
+                null,
+                null));
+            return groups;
+        }
+
+        var automaticSeasonAnime = seriesAnime == null
+            ? new Dictionary<Guid, AnimeThemesAnime>()
+            : await BuildAutomaticSeasonAnimeMapAsync(series, seasons, seriesAnime, cancellationToken).ConfigureAwait(false);
+
+        foreach (var season in seasonsWithPath)
+        {
+            var resolution = await ResolveSeasonBrowserAnimeAsync(season, seriesAnime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false);
+            var rows = resolution.SameAsSeries ? seriesRows : BuildBrowserRowsForResolution(season, resolution, config);
+            groups.Add(BuildBrowserThemeGroup(
+                season,
+                "Season",
+                season.IndexNumber,
+                resolution,
+                rows,
+                rows.Count == 0 && resolution.SameAsSeries ? "Uses series-level themes, but no series-level themes are available." : null,
+                resolution.SameAsSeries ? series.Id : null));
+        }
+
+        return groups;
+    }
+
+    private ThemeBrowserThemeGroup BuildBrowserThemeGroup(
+        BaseItem item,
+        string type,
+        int? seasonNumber,
+        BrowserAnimeResolution resolution,
+        List<ThemeBrowserThemeRow> rows,
+        string? emptyMessage,
+        Guid? actionItemId)
+    {
+        return new ThemeBrowserThemeGroup(
+            actionItemId ?? item.Id,
+            item.Name ?? type,
+            type,
+            seasonNumber,
+            resolution.Status,
+            resolution.Source,
+            resolution.SameAsSeries,
+            resolution.Anime?.Name,
+            resolution.Anime?.Slug,
+            BuildAnimeThemesUrl(resolution.Anime),
+            BuildImageUrl(item, ImageType.Primary, "Primary"),
+            BuildImageUrl(item, ImageType.Backdrop, "Backdrop/0"),
+            BuildImageUrl(item, ImageType.Thumb, "Thumb"),
+            emptyMessage,
             rows);
+    }
+
+    private List<ThemeBrowserThemeRow> BuildBrowserRowsForResolution(
+        BaseItem item,
+        BrowserAnimeResolution resolution,
+        PluginConfiguration config)
+    {
+        if (resolution.SameAsSeries || resolution.Anime?.AnimeThemes == null)
+        {
+            return new List<ThemeBrowserThemeRow>();
+        }
+
+        return BuildBrowserRows(item, resolution.Anime, config);
+    }
+
+    private async Task<BrowserAnimeResolution> ResolveBrowserAnimeForItemAsync(
+        BaseItem item,
+        CancellationToken cancellationToken)
+    {
+        if (item is Season season)
+        {
+            var series = FindSeriesForSeason(season);
+            var seriesAnime = series == null
+                ? null
+                : await ResolveAnime(series, cancellationToken, logMissingIds: false).ConfigureAwait(false);
+            var automaticSeasonAnime = series == null || seriesAnime == null
+                ? new Dictionary<Guid, AnimeThemesAnime>()
+                : await BuildAutomaticSeasonAnimeMapAsync(series, GetSeasonItems(series), seriesAnime, cancellationToken).ConfigureAwait(false);
+            return await ResolveSeasonBrowserAnimeAsync(season, seriesAnime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false);
+        }
+
+        var anime = await ResolveAnime(item, cancellationToken).ConfigureAwait(false);
+        return new BrowserAnimeResolution(
+            anime,
+            item is Series ? "Series" : "Direct",
+            item is Series ? "SeriesLevel" : "ItemProviderIds",
+            false);
+    }
+
+    private async Task<BrowserAnimeResolution> ResolveSeasonBrowserAnimeAsync(
+        Season season,
+        AnimeThemesAnime? seriesAnime,
+        Dictionary<Guid, AnimeThemesAnime> automaticSeasonAnime,
+        CancellationToken cancellationToken)
+    {
+        var mapping = FindSeasonThemeMapping(season);
+        AnimeThemesAnime? anime = null;
+        var status = "Unmatched";
+        var source = "None";
+
+        if (mapping != null)
+        {
+            anime = await ResolveAnime(season, cancellationToken, logMissingIds: false).ConfigureAwait(false);
+            status = "Manual";
+            source = "SeasonThemeMappings";
+        }
+        else if (HasProviderIdentity(season))
+        {
+            anime = await ResolveAnime(season, cancellationToken, logMissingIds: false).ConfigureAwait(false);
+            if (anime != null)
+            {
+                status = "Direct";
+                source = "SeasonProviderIds";
+            }
+        }
+
+        if (anime == null && automaticSeasonAnime.TryGetValue(season.Id, out var automaticAnime))
+        {
+            anime = automaticAnime;
+            status = "Auto";
+            source = "AniListRelations";
+        }
+
+        var sameAsSeries = seriesAnime != null && anime != null && IsSameAnime(seriesAnime, anime);
+        if (anime == null && season.IndexNumber == 1 && seriesAnime != null)
+        {
+            anime = seriesAnime;
+            sameAsSeries = true;
+            status = "Series";
+            source = "SeriesLevel";
+        }
+        else if (sameAsSeries && status != "Manual")
+        {
+            status = "Series";
+            source = "SeriesLevel";
+        }
+
+        return new BrowserAnimeResolution(anime, status, source, sameAsSeries);
+    }
+
+    private static string? BuildAnimeThemesUrl(AnimeThemesAnime? anime)
+    {
+        return !string.IsNullOrWhiteSpace(anime?.Slug)
+            ? Constants.AnimeThemesWebUrl + "/anime/" + anime.Slug
+            : null;
     }
 
     private async Task<ThemeDownloadExecutionResult> ProcessItems(
@@ -1005,6 +1181,15 @@ public class ThemeDownloader : IScheduledTask
 
         var config = Plugin.Instance?.Configuration;
         var anime = await ResolveAnime(item, cancellationToken).ConfigureAwait(false);
+        if (anime == null && item is Season seasonItem)
+        {
+            var browserResolution = await ResolveBrowserAnimeForItemAsync(seasonItem, cancellationToken).ConfigureAwait(false);
+            if (!browserResolution.SameAsSeries)
+            {
+                anime = browserResolution.Anime;
+            }
+        }
+
         var plans = new List<ThemeOutputPlan>();
         if (anime?.AnimeThemes != null)
         {
@@ -1968,4 +2153,10 @@ public class ThemeDownloader : IScheduledTask
             }
         }
     }
+
+    private sealed record BrowserAnimeResolution(
+        AnimeThemesAnime? Anime,
+        string Status,
+        string Source,
+        bool SameAsSeries);
 }
