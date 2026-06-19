@@ -184,12 +184,21 @@ public class ThemeDownloader : IScheduledTask
         return new ThemeBrowserSummary(items.Count, videos, songs, extras, bytes);
     }
 
-    public Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync(CancellationToken cancellationToken)
     {
         var rows = new List<SeasonThemeMappingRow>();
         foreach (var series in GetEnabledLibraryItems().OfType<Series>().OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase))
         {
-            var seasons = GetSeasonItems(series);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var seasons = GetSeasonItems(series)
+                .Where(IsSeasonEligibleForThemeMatching)
+                .ToList();
+            var seriesAnime = await ResolveAnime(series, cancellationToken, logMissingIds: false).ConfigureAwait(false);
+            var automaticSeasonAnime = seriesAnime == null
+                ? new Dictionary<Guid, AnimeThemesAnime>()
+                : await BuildAutomaticSeasonAnimeMapAsync(series, seasons, seriesAnime, cancellationToken).ConfigureAwait(false);
+
             foreach (var season in seasons)
             {
                 if (string.IsNullOrWhiteSpace(season.Path))
@@ -197,11 +206,11 @@ public class ThemeDownloader : IScheduledTask
                     continue;
                 }
 
-                rows.Add(BuildSeasonMappingRow(series, season));
+                rows.Add(await BuildSeasonMappingRowAsync(series, season, seriesAnime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false));
             }
         }
 
-        return Task.FromResult<IReadOnlyList<SeasonThemeMappingRow>>(rows);
+        return rows;
     }
 
     public async Task<IReadOnlyList<ThemeFinderSearchResult>> SearchThemeFinderAnimeAsync(
@@ -287,7 +296,7 @@ public class ThemeDownloader : IScheduledTask
         });
         Plugin.Instance.UpdateConfiguration(config);
 
-        return await Task.FromResult(BuildSeasonMappingRow(series, season)).ConfigureAwait(false);
+        return await BuildResolvedSeasonMappingRowAsync(series, season, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<SeasonThemeMappingRow> DeleteSeasonThemeMappingAsync(Guid seasonItemId, CancellationToken cancellationToken)
@@ -302,7 +311,7 @@ public class ThemeDownloader : IScheduledTask
         RemoveSeasonMappings(config.SeasonThemeMappings, season);
         Plugin.Instance.UpdateConfiguration(config);
 
-        return await Task.FromResult(BuildSeasonMappingRow(series, season)).ConfigureAwait(false);
+        return await BuildResolvedSeasonMappingRowAsync(series, season, cancellationToken).ConfigureAwait(false);
     }
 
     private void AccumulateLocalThemeDirectories(string itemPath, ref int videos, ref int songs, ref int extras, ref long bytes)
@@ -721,7 +730,9 @@ public class ThemeDownloader : IScheduledTask
         CancellationToken cancellationToken)
     {
         var groups = new List<ThemeBrowserThemeGroup>();
-        var seasons = GetSeasonItems(series);
+        var seasons = GetSeasonItems(series)
+            .Where(IsSeasonEligibleForThemeMatching)
+            .ToList();
         var seasonsWithPath = seasons.Where(s => !string.IsNullOrWhiteSpace(s.Path)).ToList();
         if (!config.SeasonThemeDownloadsEnabled || seasonsWithPath.Count == 0)
         {
@@ -1303,73 +1314,6 @@ public class ThemeDownloader : IScheduledTask
         return mapping != null && (!season.IndexNumber.HasValue || season.IndexNumber.Value <= 1);
     }
 
-    private SeasonThemeMappingRow BuildSeasonMappingRow(Series series, Season season)
-    {
-        var mapping = FindSeasonThemeMapping(season);
-        var seasonIds = ExtractItemProviderIds(season);
-        var seriesIds = ExtractItemProviderIds(series);
-        var seasonSlug = GetItemAnimeThemesSlug(season);
-        var seriesSlug = GetItemAnimeThemesSlug(series);
-
-        var status = "Unmatched";
-        var source = "None";
-        var sameAsSeries = false;
-        string? animeName = null;
-        string? animeThemesSlug = null;
-        int? aniListId = seasonIds.AniListId;
-        int? myAnimeListId = seasonIds.MyAnimeListId;
-
-        if (mapping != null)
-        {
-            status = "Manual";
-            source = "SeasonThemeMappings";
-            animeThemesSlug = mapping.AnimeThemesSlug ?? seasonSlug;
-            aniListId = mapping.AniListId ?? seasonIds.AniListId;
-            myAnimeListId = mapping.MyAnimeListId ?? seasonIds.MyAnimeListId;
-            animeName = animeThemesSlug ?? season.Name;
-        }
-        else if (HasProviderIdentity(season))
-        {
-            status = "Direct";
-            source = "SeasonProviderIds";
-            animeThemesSlug = seasonSlug;
-            animeName = season.Name;
-        }
-        else if (season.IndexNumber == 1 && HasProviderIdentity(series))
-        {
-            status = "Series";
-            source = "SeriesLevel";
-            sameAsSeries = true;
-            animeThemesSlug = seriesSlug;
-            aniListId = seriesIds.AniListId;
-            myAnimeListId = seriesIds.MyAnimeListId;
-            animeName = series.Name;
-        }
-
-        var animeThemesUrl = !string.IsNullOrWhiteSpace(animeThemesSlug)
-            ? Constants.AnimeThemesWebUrl + "/anime/" + animeThemesSlug
-            : null;
-
-        return new SeasonThemeMappingRow(
-            series.Id,
-            series.Name ?? "Unknown",
-            series.Path,
-            season.Id,
-            season.Name ?? "Season",
-            season.Path,
-            season.IndexNumber,
-            status,
-            source,
-            sameAsSeries,
-            animeName,
-            null,
-            animeThemesSlug,
-            animeThemesUrl,
-            aniListId,
-            myAnimeListId,
-            BuildImageUrl(season, ImageType.Primary, "Primary") ?? BuildImageUrl(series, ImageType.Primary, "Primary"));
-    }
-
     private async Task<Dictionary<Guid, AnimeThemesAnime>> BuildAutomaticSeasonAnimeMapAsync(
         Series series,
         List<Season> seasons,
@@ -1378,7 +1322,7 @@ public class ThemeDownloader : IScheduledTask
     {
         var map = new Dictionary<Guid, AnimeThemesAnime>();
         var numberedSeasons = seasons
-            .Where(s => s.IndexNumber.HasValue && s.IndexNumber.Value > 1)
+            .Where(s => IsSeasonEligibleForThemeMatching(s) && s.IndexNumber.HasValue && s.IndexNumber.Value > 1)
             .OrderBy(s => s.IndexNumber!.Value)
             .ToList();
 
@@ -1428,6 +1372,22 @@ public class ThemeDownloader : IScheduledTask
         }
 
         return map;
+    }
+
+    private async Task<SeasonThemeMappingRow> BuildResolvedSeasonMappingRowAsync(
+        Series series,
+        Season season,
+        CancellationToken cancellationToken)
+    {
+        var seriesAnime = await ResolveAnime(series, cancellationToken, logMissingIds: false).ConfigureAwait(false);
+        var seasons = GetSeasonItems(series)
+            .Where(IsSeasonEligibleForThemeMatching)
+            .ToList();
+        var automaticSeasonAnime = seriesAnime == null || !IsSeasonEligibleForThemeMatching(season)
+            ? new Dictionary<Guid, AnimeThemesAnime>()
+            : await BuildAutomaticSeasonAnimeMapAsync(series, seasons, seriesAnime, cancellationToken).ConfigureAwait(false);
+
+        return await BuildSeasonMappingRowAsync(series, season, seriesAnime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<SeasonThemeMappingRow> BuildSeasonMappingRowAsync(
@@ -1813,6 +1773,17 @@ public class ThemeDownloader : IScheduledTask
                !string.Equals(candidate.Format, "OVA", StringComparison.OrdinalIgnoreCase) &&
                !string.Equals(candidate.Format, "SPECIAL", StringComparison.OrdinalIgnoreCase) &&
                !string.Equals(candidate.Format, "MUSIC", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSeasonEligibleForThemeMatching(Season season)
+    {
+        if (season.IndexNumber == 0)
+        {
+            return false;
+        }
+
+        return string.IsNullOrWhiteSpace(season.Name) ||
+               season.Name.IndexOf("special", StringComparison.OrdinalIgnoreCase) < 0;
     }
 
     private SeasonThemeMapping? FindSeasonThemeMapping(BaseItem season)

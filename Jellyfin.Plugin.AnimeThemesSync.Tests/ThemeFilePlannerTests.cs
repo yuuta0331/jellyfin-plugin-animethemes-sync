@@ -423,6 +423,59 @@ public class ThemeFilePlannerTests
     }
 
     [Fact]
+    public void SeasonFinderMappings_UseBrowserResolutionAndHideSpecialSeasons()
+    {
+        var root = FindRepositoryRoot();
+        var downloaderFiles = new[]
+        {
+            Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs")
+        };
+
+        foreach (var file in downloaderFiles)
+        {
+            var content = File.ReadAllText(file);
+            Assert.Contains("public async Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("private SeasonThemeMappingRow BuildSeasonMappingRow(", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("Task.FromResult(BuildSeasonMappingRow", content, StringComparison.Ordinal);
+
+            var start = content.IndexOf("public async Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync", StringComparison.Ordinal);
+            var end = content.IndexOf("public async Task<IReadOnlyList<ThemeFinderSearchResult>> SearchThemeFinderAnimeAsync", StringComparison.Ordinal);
+            Assert.True(start >= 0 && end > start);
+
+            var mappingsMethod = content[start..end];
+            Assert.Contains("ResolveAnime(series, cancellationToken, logMissingIds: false)", mappingsMethod, StringComparison.Ordinal);
+            Assert.Contains("BuildAutomaticSeasonAnimeMapAsync(series, seasons, seriesAnime, cancellationToken)", mappingsMethod, StringComparison.Ordinal);
+            Assert.Contains("BuildSeasonMappingRowAsync(series, season, seriesAnime, automaticSeasonAnime, cancellationToken)", mappingsMethod, StringComparison.Ordinal);
+            Assert.Contains(".Where(IsSeasonEligibleForThemeMatching)", mappingsMethod, StringComparison.Ordinal);
+
+            Assert.Contains("BuildResolvedSeasonMappingRowAsync(series, season, cancellationToken)", content, StringComparison.Ordinal);
+            Assert.Contains("season.IndexNumber == 0", content, StringComparison.Ordinal);
+            Assert.Contains("IndexOf(\"special\", StringComparison.OrdinalIgnoreCase)", content, StringComparison.Ordinal);
+            Assert.Contains(".Where(s => IsSeasonEligibleForThemeMatching(s) && s.IndexNumber.HasValue && s.IndexNumber.Value > 1)", content, StringComparison.Ordinal);
+        }
+
+        var browserFiles = new[]
+        {
+            Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js")
+        };
+
+        foreach (var file in browserFiles)
+        {
+            var content = File.ReadAllText(file);
+            Assert.Contains("return !isSpecialGroup(group);", content, StringComparison.Ordinal);
+            Assert.Contains("function seasonMappingHasMatch(row)", content, StringComparison.Ordinal);
+            Assert.Contains("status === 'auto'", content, StringComparison.Ordinal);
+            Assert.Contains("status === 'direct'", content, StringComparison.Ordinal);
+            Assert.Contains("status === 'series'", content, StringComparison.Ordinal);
+            Assert.Contains("if (!hasMatch) addChip(chips, 'Needs match', 'missing');", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("groupHasContent", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("if (!value(row, 'AnimeThemesSlug', 'animeThemesSlug')) addChip(chips, 'Needs match', 'missing');", content, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void ThemeExtrasFileService_CopyOnlyCreatesBrowseableExtra()
     {
         var directory = Path.Combine(Path.GetTempPath(), "AnimeThemesSyncTests", Guid.NewGuid().ToString("N"));

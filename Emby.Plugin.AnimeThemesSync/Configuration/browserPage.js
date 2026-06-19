@@ -209,7 +209,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
 
         function getGroups() {
             var groups = (value(state.currentResult, 'Groups', 'groups') || []).filter(function (group) {
-                return !isSpecialGroup(group) || groupHasContent(group);
+                return !isSpecialGroup(group);
             });
             return groups.sort(function (left, right) {
                 var leftSpecial = isSpecialGroup(left);
@@ -229,10 +229,15 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             return seasonNumber === 0 || name.indexOf('special') !== -1;
         }
 
-        function groupHasContent(group) {
-            return (value(group, 'Themes', 'themes') || []).length > 0 ||
-                !!value(group, 'AnimeThemesSlug', 'animeThemesSlug') ||
-                !!value(group, 'AnimeName', 'animeName');
+        function seasonMappingHasMatch(row) {
+            var status = String(value(row, 'Status', 'status') || '').toLowerCase();
+            return status === 'manual' ||
+                status === 'auto' ||
+                status === 'direct' ||
+                status === 'series' ||
+                !!value(row, 'AnimeThemesSlug', 'animeThemesSlug') ||
+                !!value(row, 'AnimeName', 'animeName') ||
+                !!value(row, 'AnimeThemesId', 'animeThemesId');
         }
 
         function selectDefaultGroup(groups) {
@@ -598,10 +603,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             ].join(' | '));
             var chips = document.createElement('div');
             chips.className = 'ats-status-list';
-            addChip(chips, text(value(row, 'Status', 'status')), value(row, 'AnimeThemesSlug', 'animeThemesSlug') ? 'ok' : 'missing');
+            var hasMatch = seasonMappingHasMatch(row);
+            addChip(chips, text(value(row, 'Status', 'status')), hasMatch ? 'ok' : 'missing');
             addChip(chips, text(value(row, 'Source', 'source')), '');
             if (value(row, 'SameAsSeries', 'sameAsSeries')) addChip(chips, 'Series-level', 'ok');
-            if (!value(row, 'AnimeThemesSlug', 'animeThemesSlug')) addChip(chips, 'Needs match', 'missing');
+            if (!hasMatch) addChip(chips, 'Needs match', 'missing');
             button.appendChild(chips);
             button.addEventListener('click', function () {
                 selectSeason(row);
