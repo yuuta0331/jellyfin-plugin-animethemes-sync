@@ -141,18 +141,106 @@ public class ThemeDownloader : IScheduledTask
     {
         return GetEnabledLibraryItems()
             .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(i => new ThemeBrowserLibraryItem(
-                i.Id,
-                i.Name ?? "Unknown",
-                i is Series ? "Series" : "Movie",
-                i.ProviderIds.TryGetValue(Constants.AnimeThemesProviderId, out var slug) ? slug : null,
-                i.ProviderIds.TryGetValue(Constants.AniListProviderId, out var aniListId) ? aniListId : null,
-                i.ProviderIds.TryGetValue(Constants.MyAnimeListProviderId, out var malId) ? malId : null,
-                BuildImageUrl(i, ImageType.Primary, "Primary"),
-                BuildImageUrl(i, ImageType.Logo, "Logo"),
-                BuildImageUrl(i, ImageType.Backdrop, "Backdrop/0"),
-                BuildImageUrl(i, ImageType.Thumb, "Thumb")))
+            .Select(BuildBrowserLibraryItem)
             .ToList();
+    }
+
+    private ThemeBrowserLibraryItem BuildBrowserLibraryItem(BaseItem item)
+    {
+        var (videos, songs, extras, bytes) = CountLocalThemeFilesForBrowserItem(item);
+        var directLink = item.ProviderIds.TryGetValue(Constants.AnimeThemesProviderId, out var slug) && !string.IsNullOrWhiteSpace(slug);
+        var seasonLinkStatus = GetSeasonLinkStatus(item);
+        var linkStatus = directLink ? "Direct" : seasonLinkStatus;
+        return new ThemeBrowserLibraryItem(
+            item.Id,
+            item.Name ?? "Unknown",
+            item is Series ? "Series" : "Movie",
+            directLink ? slug : null,
+            item.ProviderIds.TryGetValue(Constants.AniListProviderId, out var aniListId) ? aniListId : null,
+            item.ProviderIds.TryGetValue(Constants.MyAnimeListProviderId, out var malId) ? malId : null,
+            BuildImageUrl(item, ImageType.Primary, "Primary"),
+            BuildImageUrl(item, ImageType.Logo, "Logo"),
+            BuildImageUrl(item, ImageType.Backdrop, "Backdrop/0"),
+            BuildImageUrl(item, ImageType.Thumb, "Thumb"),
+            videos,
+            songs,
+            extras,
+            bytes,
+            videos + songs + extras > 0,
+            new DateTimeOffset(DateTime.SpecifyKind(item.DateCreated, DateTimeKind.Local)),
+            item is Series series ? GetLatestEpisodeDateCreated(series) : null,
+            linkStatus,
+            directLink,
+            string.Equals(seasonLinkStatus, "Manual", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private (int Videos, int Songs, int Extras, long Bytes) CountLocalThemeFilesForBrowserItem(BaseItem item)
+    {
+        var videos = 0;
+        var songs = 0;
+        var extras = 0;
+        long bytes = 0;
+        AccumulateLocalThemeDirectories(item.Path, ref videos, ref songs, ref extras, ref bytes);
+        if (item is Series series && IsSeasonThemeDownloadsEnabled())
+        {
+            foreach (var season in GetSeasonItems(series))
+            {
+                if (!string.IsNullOrWhiteSpace(season.Path))
+                {
+                    AccumulateLocalThemeDirectories(season.Path, ref videos, ref songs, ref extras, ref bytes);
+                }
+            }
+        }
+
+        return (videos, songs, extras, bytes);
+    }
+
+    private string GetSeasonLinkStatus(BaseItem item)
+    {
+        if (item is not Series series)
+        {
+            return "Unlinked";
+        }
+
+        var mappings = Plugin.Instance?.Configuration?.SeasonThemeMappings;
+        if (mappings == null || mappings.Count == 0)
+        {
+            return "Unlinked";
+        }
+
+        var hasAuto = false;
+        foreach (var season in GetSeasonItems(series))
+        {
+            var mapping = FindSeasonThemeMapping(mappings, series, season);
+            if (mapping == null)
+            {
+                continue;
+            }
+
+            if (mapping.Locked)
+            {
+                return "Manual";
+            }
+
+            hasAuto = true;
+        }
+
+        return hasAuto ? "Auto" : "Unlinked";
+    }
+
+    private DateTimeOffset? GetLatestEpisodeDateCreated(Series series)
+    {
+        var episodes = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = new[] { BaseItemKind.Episode },
+            Recursive = true,
+            Parent = series
+        });
+
+        return episodes
+            .Select(episode => (DateTimeOffset?)new DateTimeOffset(DateTime.SpecifyKind(episode.DateCreated, DateTimeKind.Local)))
+            .OrderByDescending(date => date)
+            .FirstOrDefault();
     }
 
     public ThemeBrowserSummary GetBrowserSummary()

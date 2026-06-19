@@ -337,7 +337,20 @@ public class ThemeFilePlannerTests
             Assert.Contains("AtsExtrasOptions", content, StringComparison.Ordinal);
             Assert.Contains("AtsTagOptions", content, StringComparison.Ordinal);
             Assert.Contains("Interface Customization", content, StringComparison.Ordinal);
-            Assert.Contains("Manual Linking", content, StringComparison.Ordinal);
+            Assert.Contains("AtsExtrasFormatPreview", content, StringComparison.Ordinal);
+            Assert.Contains("AtsTagFormatPreview", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesBrowserLibraryTypeFilter", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesBrowserLibrarySavedFilter", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesBrowserLibrarySort", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesBrowserShowDetails", content, StringComparison.Ordinal);
+            Assert.Contains("value=\"itemAdded\"", content, StringComparison.Ordinal);
+            Assert.Contains("value=\"latestEpisodeAdded\"", content, StringComparison.Ordinal);
+            Assert.Contains("AtsResetDefaults", content, StringComparison.Ordinal);
+            Assert.Contains("id=\"AtsSettingsSave\" disabled", content, StringComparison.Ordinal);
+            Assert.Contains("top: .75rem;", content, StringComparison.Ordinal);
+            Assert.Contains("width: fit-content;", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("Manual Linking", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("AnimeThemesBrowserForce", content, StringComparison.Ordinal);
             Assert.Contains("Create browseable extras", content, StringComparison.Ordinal);
             Assert.Contains("Add season/year tags", content, StringComparison.Ordinal);
             Assert.Contains("AtsSeriesAudioVolumeSlider", content, StringComparison.Ordinal);
@@ -349,6 +362,12 @@ public class ThemeFilePlannerTests
             Assert.DoesNotContain("AtsOnDemandItemId", content, StringComparison.Ordinal);
             Assert.DoesNotContain("AtsRunOnDemand", content, StringComparison.Ordinal);
             Assert.DoesNotContain("Run Item Download", content, StringComparison.Ordinal);
+
+            var actionsCssStart = content.IndexOf("#AnimeThemesBrowserPage .ats-settings-actions-bar {", StringComparison.Ordinal);
+            var actionsCssEnd = content.IndexOf("#AnimeThemesBrowserPage .ats-settings-actions-bar .fieldDescription", StringComparison.Ordinal);
+            Assert.True(actionsCssStart >= 0 && actionsCssEnd > actionsCssStart);
+            var actionsCss = content[actionsCssStart..actionsCssEnd];
+            Assert.DoesNotContain("bottom:", actionsCss, StringComparison.Ordinal);
         }
 
         var jellyfinPage = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
@@ -358,6 +377,14 @@ public class ThemeFilePlannerTests
         Assert.Contains("Ats' + profileName + mediaName + 'VolumeSlider", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("Ats' + profileName + mediaName + 'Mute", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("syncConditionalSettings", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("syncSettingsDirty", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("resetSettingsDefaults", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("function readSettingsForm()", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("return serializeSettings(readSettingsForm());", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("if (!settingsDirty())", jellyfinPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("collectSettingsFromForm(cloneSettings", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("itemLinkStatus", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("LatestEpisodeDateCreated", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("copyCustomCss", jellyfinPage, StringComparison.Ordinal);
         Assert.DoesNotContain("runOnDemandDownload", jellyfinPage, StringComparison.Ordinal);
 
@@ -368,8 +395,25 @@ public class ThemeFilePlannerTests
         Assert.Contains("Ats' + profileName + mediaName + 'VolumeSlider", embyController, StringComparison.Ordinal);
         Assert.Contains("Ats' + profileName + mediaName + 'Mute", embyController, StringComparison.Ordinal);
         Assert.Contains("syncConditionalSettings", embyController, StringComparison.Ordinal);
+        Assert.Contains("syncSettingsDirty", embyController, StringComparison.Ordinal);
+        Assert.Contains("resetSettingsDefaults", embyController, StringComparison.Ordinal);
+        Assert.Contains("function readSettingsForm()", embyController, StringComparison.Ordinal);
+        Assert.Contains("return serializeSettings(readSettingsForm());", embyController, StringComparison.Ordinal);
+        Assert.Contains("if (!settingsDirty())", embyController, StringComparison.Ordinal);
+        Assert.DoesNotContain("collectSettingsFromForm(cloneSettings", embyController, StringComparison.Ordinal);
+        Assert.Contains("itemLinkStatus", embyController, StringComparison.Ordinal);
+        Assert.Contains("LatestEpisodeDateCreated", embyController, StringComparison.Ordinal);
         Assert.Contains("copyCustomCss", embyController, StringComparison.Ordinal);
         Assert.DoesNotContain("runOnDemandDownload", embyController, StringComparison.Ordinal);
+
+        var embyPage = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+        Assert.Contains("md-icon ats-icon", embyPage, StringComparison.Ordinal);
+        Assert.Contains("&#xE8B6;", embyPage, StringComparison.Ordinal);
+        Assert.Contains("&#xE5C4;", embyPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("material-icons", embyPage, StringComparison.Ordinal);
+        Assert.DoesNotContain(">save<", embyPage, StringComparison.Ordinal);
+        Assert.Contains("md-icon ats-icon", embyController, StringComparison.Ordinal);
+        Assert.DoesNotContain("material-icons", embyController, StringComparison.Ordinal);
     }
 
     [Fact]

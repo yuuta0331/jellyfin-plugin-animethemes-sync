@@ -13,7 +13,17 @@ public sealed record ThemeBrowserLibraryItem(
     string? PrimaryImageUrl,
     string? LogoImageUrl,
     string? BackdropImageUrl,
-    string? ThumbImageUrl);
+    string? ThumbImageUrl,
+    int ThemeVideos,
+    int ThemeSongs,
+    int Extras,
+    long TotalBytes,
+    bool HasSavedFiles,
+    DateTimeOffset DateCreated,
+    DateTimeOffset? LatestEpisodeDateCreated,
+    string LinkStatus,
+    bool HasDirectLink,
+    bool HasManualSeasonLink);
 
 public sealed record ThemeBrowserItemResult(
     Guid ItemId,
