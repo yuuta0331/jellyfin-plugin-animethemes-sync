@@ -1,8 +1,8 @@
-<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260619b" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260619g" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.06.19-a.</div>
+                <div class="fieldDescription">UI version: 2026.06.19-g.</div>
 
                 <div class="verticalSection ats-browser-toolbar">
                     <div class="inputContainer ats-search ats-clearable">
@@ -30,6 +30,9 @@
                     </button>
                     <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-tab" id="AnimeThemesBrowserManageTab" data-ats-tab="manage">
                         <span>Manage</span>
+                    </button>
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-tab" id="AnimeThemesBrowserSettingsTab" data-ats-tab="settings">
+                        <span>Settings</span>
                     </button>
                 </div>
 
@@ -95,6 +98,156 @@
                         </button>
                     </div>
                 </div>
+                </div>
+
+                <div class="verticalSection ats-settings-view" id="AnimeThemesBrowserSettingsView" style="display: none;">
+                    <div class="ats-settings-header">
+                        <div>
+                            <h2 class="sectionTitle">Settings</h2>
+                            <div class="fieldDescription">Configure how AnimeThemes OP/ED media are downloaded, named, tagged, and linked.</div>
+                        </div>
+                        <div class="ats-settings-head-actions">
+                            <a href="https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync" target="_blank" rel="noopener" is="emby-link" class="emby-button ats-button-secondary">Help / GitHub</a>
+                            <div id="AnimeThemesSettingsState" class="ats-finder-state">Ready.</div>
+                        </div>
+                    </div>
+
+                    <div class="ats-settings-grid">
+                        <div class="ats-settings-column">
+                            <div class="ats-finder-panel">
+                                <h3>Download</h3>
+                                <div class="checkboxContainer checkboxContainer-withDescription">
+                                    <label class="emby-checkbox-label">
+                                        <input id="AtsThemeDownloadingEnabled" type="checkbox" is="emby-checkbox" />
+                                        <span>Enable downloads</span>
+                                    </label>
+                                    <div class="fieldDescription">Downloads themes for libraries where AnimeThemesSync is enabled as a metadata fetcher.</div>
+                                </div>
+                                <div class="ats-two-column">
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsMaxConcurrentDownloads">Concurrency</label>
+                                        <input id="AtsMaxConcurrentDownloads" type="number" is="emby-input" min="1" max="10" />
+                                        <div class="fieldDescription">Number of simultaneous downloads. Recommended: 1-3.</div>
+                                    </div>
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsDownloadTimeoutSeconds">Timeout seconds</label>
+                                        <input id="AtsDownloadTimeoutSeconds" type="number" is="emby-input" min="1" />
+                                        <div class="fieldDescription">Increase this if large video downloads time out. Default: 600.</div>
+                                    </div>
+                                </div>
+                                <div class="ats-toggle-list">
+                                    <div><label class="emby-checkbox-label"><input id="AtsAllowAdd" type="checkbox" is="emby-checkbox" /><span>Add missing files</span></label><div class="fieldDescription">Download new theme files when planned files are missing.</div></div>
+                                    <div><label class="emby-checkbox-label"><input id="AtsForceRedownload" type="checkbox" is="emby-checkbox" /><span>Overwrite existing files</span></label><div class="fieldDescription warning-text">Re-downloads and replaces existing AnimeThemes files. Disable after applying volume or version changes.</div></div>
+                                    <div><label class="emby-checkbox-label"><input id="AtsAllowDelete" type="checkbox" is="emby-checkbox" /><span>Delete undesired files</span></label><div class="fieldDescription warning-text">Deletes plugin-managed files in theme-music and backdrops when they are no longer desired.</div></div>
+                                    <div><label class="emby-checkbox-label"><input id="AtsSeasonThemeDownloadsEnabled" type="checkbox" is="emby-checkbox" /><span>Download season themes</span></label><div class="fieldDescription">Creates separate OP/ED output for Season items. Season Finder mappings remain saved when disabled.</div></div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel">
+                                <h3>Extras</h3>
+                                <div class="checkboxContainer checkboxContainer-withDescription">
+                                    <label class="emby-checkbox-label"><input id="AtsExtrasEnabled" type="checkbox" is="emby-checkbox" /><span>Create browseable extras</span></label>
+                                    <div class="fieldDescription">Creates rich display names in extras so OP/ED videos can be opened from Extras/Special Features. Theme videos still remain in backdrops.</div>
+                                </div>
+                                <div id="AtsExtrasOptions" class="ats-conditional-options">
+                                    <div class="selectContainer">
+                                        <label class="selectLabel" for="AtsExtrasLinkMode">Extras file mode</label>
+                                        <select is="emby-select" id="AtsExtrasLinkMode" class="emby-select-withcolor emby-select">
+                                            <option value="0">Hard link, copy fallback</option>
+                                            <option value="1">Hard link only</option>
+                                            <option value="2">Copy only</option>
+                                        </select>
+                                        <div class="fieldDescription">Hard links save disk space. Copy fallback helps when folders are on file systems that do not support hard links.</div>
+                                    </div>
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsExtrasFileNameFormat">Extras display name format</label>
+                                        <input id="AtsExtrasFileNameFormat" type="text" is="emby-input" />
+                                        <div class="fieldDescription">Default: <code>{Order}. {Theme} - {Song}</code>. Tokens: <code>{Order}</code>, <code>{Theme}</code>, <code>{Song}</code>, <code>{Artist}</code>, <code>{Episodes}</code>, <code>{Labels}</code>, <code>{Quality}</code>.</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel">
+                                <h3>Tags</h3>
+                                <div class="checkboxContainer checkboxContainer-withDescription">
+                                    <label class="emby-checkbox-label"><input id="AtsTagsEnabled" type="checkbox" is="emby-checkbox" /><span>Add season/year tags</span></label>
+                                    <div class="fieldDescription">Adds tags like Winter 2024 to downloaded metadata.</div>
+                                </div>
+                                <div id="AtsTagOptions" class="ats-conditional-options">
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsTagFormat">Tag format</label>
+                                        <input id="AtsTagFormat" type="text" is="emby-input" />
+                                        <div class="fieldDescription">Supported placeholders: <code>{Season}</code>, <code>{Year}</code>. Default: <code>{Season} {Year}</code>.</div>
+                                    </div>
+                                    <div class="ats-four-column">
+                                        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonSpring">Spring</label><input id="AtsTagSeasonSpring" type="text" is="emby-input" /></div>
+                                        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonSummer">Summer</label><input id="AtsTagSeasonSummer" type="text" is="emby-input" /></div>
+                                        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonFall">Fall</label><input id="AtsTagSeasonFall" type="text" is="emby-input" /></div>
+                                        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonWinter">Winter</label><input id="AtsTagSeasonWinter" type="text" is="emby-input" /></div>
+                                    </div>
+                                    <div class="fieldDescription">Customize season names used by tag formatting.</div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel">
+                                <h3>Manual Linking</h3>
+                                <div class="fieldDescription">
+                                    If a series is not matched automatically, open the item metadata editor, locate AnimeThemes ID or AnimeThemes Slug in External IDs, and enter the AnimeThemes Slug from the URL.
+                                    Example: <code>blackrock_shooter_tv</code> from <code>https://animethemes.moe/anime/blackrock_shooter_tv</code>.
+                                    For season-specific matches, use Season Finder instead.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="ats-settings-column ats-settings-column-main">
+                            <div class="ats-finder-panel">
+                                <h3>Profiles</h3>
+                                <div class="fieldDescription">Series applies to Series and Season items. Movie applies only to Movie items.</div>
+                                <div class="ats-profile-section" data-profile-section="series">
+                                    <h4>Series Profile</h4>
+                                    <div class="fieldDescription">Used for series-level and season-level theme downloads.</div>
+                                    <div class="ats-profile-grid" data-settings-profile="series" data-profile-controls="AtsSeriesAudioMaxThemes AtsSeriesAudioVolumeSlider AtsSeriesAudioVolume AtsSeriesAudioMute AtsSeriesVideoMaxThemes AtsSeriesVideoVolumeSlider AtsSeriesVideoVolume AtsSeriesVideoMute"></div>
+                                </div>
+                                <div class="ats-profile-section" data-profile-section="movie">
+                                    <h4>Movie Profile</h4>
+                                    <div class="fieldDescription">Used for movie theme downloads.</div>
+                                    <div class="ats-profile-grid" data-settings-profile="movie" data-profile-controls="AtsMovieAudioMaxThemes AtsMovieAudioVolumeSlider AtsMovieAudioVolume AtsMovieAudioMute AtsMovieVideoMaxThemes AtsMovieVideoVolumeSlider AtsMovieVideoVolume AtsMovieVideoMute"></div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel">
+                                <h3>Interface Customization</h3>
+                                <div class="fieldDescription">To replace the AnimeThemes text link with a logo in the Jellyfin web interface, go to Dashboard &gt; General &gt; Custom CSS and add this CSS.</div>
+                                <textarea id="AtsCustomCssText" is="emby-textarea" class="emby-textarea ats-css-textarea" rows="10" readonly>/* Replace "AnimeThemes" link with a logo image */
+.itemExternalLinks &gt; a[href*="animethemes.moe"] {
+    font-size: 0 !important;
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    background-image: url('https://github.com/AnimeThemes.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    vertical-align: middle;
+}</textarea>
+                                <div class="ats-actions">
+                                    <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AtsCopyCssButton"><span>Copy to Clipboard</span></button>
+                                    <span id="AtsCopyCssMessage" class="ats-copy-state" style="display: none;">Copied.</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <div class="ats-settings-actions-bar">
+                        <div class="ats-settings-actions-copy">
+                            <div class="fieldDescription">Save settings before running the scheduled downloader.</div>
+                        </div>
+                        <div class="ats-actions">
+                            <button is="emby-button" type="button" class="raised emby-button ats-action-button" id="AtsSettingsSave"><span>Save Settings</span></button>
+                            <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AtsRunTask"><span>Run Scheduled Task</span></button>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="verticalSection ats-season-finder" id="AnimeThemesSeasonFinderView" style="display: none;">
@@ -928,6 +1081,166 @@
                 min-width: 0;
             }
 
+            #AnimeThemesBrowserPage .ats-settings-header {
+                display: flex;
+                gap: 1rem;
+                justify-content: space-between;
+                align-items: start;
+                margin-bottom: .85rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-head-actions {
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                gap: .6rem;
+                flex-wrap: wrap;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-grid {
+                display: grid;
+                grid-template-columns: minmax(18rem, .85fr) minmax(24rem, 1.35fr);
+                gap: .85rem;
+                align-items: start;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-view {
+                padding-bottom: 5.5rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-column {
+                display: grid;
+                gap: .85rem;
+                align-content: start;
+                min-width: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-actions-bar {
+                position: fixed;
+                right: max(1rem, env(safe-area-inset-right));
+                bottom: max(1rem, env(safe-area-inset-bottom));
+                z-index: 999;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 1rem;
+                width: min(42rem, calc(100vw - 2rem));
+                padding: .65rem .75rem;
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius);
+                background: var(--ats-surface);
+                color: inherit;
+                box-shadow: 0 .45rem 1.4rem rgba(0, 0, 0, .24);
+                backdrop-filter: blur(10px);
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-actions-bar .fieldDescription {
+                margin: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-actions-bar .ats-actions {
+                flex: 0 0 auto;
+                margin: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-grid,
+            #AnimeThemesBrowserPage .ats-two-column,
+            #AnimeThemesBrowserPage .ats-four-column {
+                display: grid;
+                gap: .75rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-grid,
+            #AnimeThemesBrowserPage .ats-two-column {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            #AnimeThemesBrowserPage .ats-four-column {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-card {
+                min-width: 0;
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius);
+                padding: .75rem;
+                background: rgba(127, 127, 127, .06);
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-card h4 {
+                margin: 0 0 .65rem;
+                font-size: 1rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-section {
+                border: 1px solid rgba(127, 127, 127, .18);
+                border-radius: var(--ats-radius);
+                padding: .75rem;
+                margin-top: .8rem;
+                background: rgba(127, 127, 127, .035);
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-section h4,
+            #AnimeThemesBrowserPage .ats-profile-card h5 {
+                margin: 0 0 .45rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-card h5 {
+                font-size: .98rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-volume-row {
+                display: grid;
+                grid-template-columns: minmax(8rem, 1fr) 5.5rem auto;
+                gap: .55rem;
+                align-items: center;
+            }
+
+            #AnimeThemesBrowserPage .ats-volume-range {
+                width: 100%;
+            }
+
+            #AnimeThemesBrowserPage .ats-volume-number input,
+            #AnimeThemesBrowserPage input.ats-volume-number {
+                width: 5.5rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-conditional-options {
+                margin-top: .65rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-conditional-options[hidden] {
+                display: none !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-css-textarea {
+                width: 100%;
+                min-height: 14rem;
+                font-family: Consolas, "Liberation Mono", monospace;
+                resize: vertical;
+            }
+
+            #AnimeThemesBrowserPage .ats-copy-state {
+                align-self: center;
+                color: var(--theme-primary-color);
+            }
+
+            #AnimeThemesBrowserPage .ats-toggle-list {
+                display: grid;
+                gap: .45rem;
+                margin-top: .35rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-view .inputContainer,
+            #AnimeThemesBrowserPage .ats-settings-view .selectContainer {
+                margin-bottom: .65rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-view .ats-actions {
+                margin-top: .75rem;
+                margin-bottom: 0;
+            }
+
             #AnimeThemesBrowserPage .ats-finder-panel h3,
             #AnimeThemesBrowserPage .ats-panel-head h3 {
                 margin: 0 0 .75rem;
@@ -1173,11 +1486,24 @@
                 #AnimeThemesBrowserPage .ats-browser-toolbar,
                 #AnimeThemesBrowserPage .ats-filters,
                 #AnimeThemesBrowserPage .ats-theme-card,
-                #AnimeThemesBrowserPage .ats-finder-layout {
+                #AnimeThemesBrowserPage .ats-finder-layout,
+                #AnimeThemesBrowserPage .ats-settings-grid,
+                #AnimeThemesBrowserPage .ats-profile-grid,
+                #AnimeThemesBrowserPage .ats-two-column,
+                #AnimeThemesBrowserPage .ats-four-column,
+                #AnimeThemesBrowserPage .ats-volume-row {
                     grid-template-columns: 1fr;
                 }
 
-                #AnimeThemesBrowserPage .ats-finder-topbar {
+                #AnimeThemesBrowserPage .ats-settings-actions-bar {
+                    position: static;
+                    display: grid;
+                    gap: .65rem;
+                    width: auto;
+                }
+
+                #AnimeThemesBrowserPage .ats-finder-topbar,
+                #AnimeThemesBrowserPage .ats-settings-header {
                     display: grid;
                     grid-template-columns: 1fr;
                 }

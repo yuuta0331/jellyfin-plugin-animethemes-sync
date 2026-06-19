@@ -9,6 +9,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         view.setAttribute('data-ats-script-bound', 'true');
 
         var page = view;
+        var pluginUniqueId = '66d528df-4632-4d43-9828-56957262572b';
         var state = {
             items: [],
             filteredItems: [],
@@ -30,7 +31,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             finderPreview: null,
             finderSearchTimer: null,
             finderSearchToken: 0,
-            finderAutoSearched: {}
+            finderAutoSearched: {},
+            settingsConfig: null,
+            settingsLoaded: false
         };
         var browserToolbar = page.querySelector('.ats-browser-toolbar');
         var itemSelect = page.querySelector('#AnimeThemesBrowserItemSelect');
@@ -38,6 +41,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         var detailView = page.querySelector('#AnimeThemesBrowserDetailView');
         var manageView = page.querySelector('#AnimeThemesBrowserManageView');
         var finderView = page.querySelector('#AnimeThemesSeasonFinderView');
+        var settingsView = page.querySelector('#AnimeThemesBrowserSettingsView');
         var itemGrid = page.querySelector('#AnimeThemesBrowserItemGrid');
         var libraryCount = page.querySelector('#AnimeThemesBrowserLibraryCount');
         var rowsContainer = page.querySelector('#AnimeThemesBrowserRows');
@@ -75,6 +79,30 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         var finderPreview = page.querySelector('#AnimeThemesFinderPreview');
         var finderState = page.querySelector('#AnimeThemesFinderState');
         var downloadItemButton = page.querySelector('#AnimeThemesBrowserDownload');
+        var settingsState = page.querySelector('#AnimeThemesSettingsState');
+        var settingsFields = {
+            ThemeDownloadingEnabled: page.querySelector('#AtsThemeDownloadingEnabled'),
+            MaxConcurrentDownloads: page.querySelector('#AtsMaxConcurrentDownloads'),
+            DownloadTimeoutSeconds: page.querySelector('#AtsDownloadTimeoutSeconds'),
+            AllowAdd: page.querySelector('#AtsAllowAdd'),
+            ForceRedownload: page.querySelector('#AtsForceRedownload'),
+            AllowDelete: page.querySelector('#AtsAllowDelete'),
+            SeasonThemeDownloadsEnabled: page.querySelector('#AtsSeasonThemeDownloadsEnabled'),
+            ExtrasEnabled: page.querySelector('#AtsExtrasEnabled'),
+            ExtrasOptions: page.querySelector('#AtsExtrasOptions'),
+            ExtrasLinkMode: page.querySelector('#AtsExtrasLinkMode'),
+            ExtrasFileNameFormat: page.querySelector('#AtsExtrasFileNameFormat'),
+            TagsEnabled: page.querySelector('#AtsTagsEnabled'),
+            TagOptions: page.querySelector('#AtsTagOptions'),
+            TagFormat: page.querySelector('#AtsTagFormat'),
+            TagSeasonSpring: page.querySelector('#AtsTagSeasonSpring'),
+            TagSeasonSummer: page.querySelector('#AtsTagSeasonSummer'),
+            TagSeasonFall: page.querySelector('#AtsTagSeasonFall'),
+            TagSeasonWinter: page.querySelector('#AtsTagSeasonWinter'),
+            CustomCssText: page.querySelector('#AtsCustomCssText'),
+            CopyCssButton: page.querySelector('#AtsCopyCssButton'),
+            CopyCssMessage: page.querySelector('#AtsCopyCssMessage')
+        };
 
         function value(obj, pascal, camel) {
             return obj ? obj[pascal] !== undefined ? obj[pascal] : obj[camel] : null;
@@ -435,7 +463,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         }
 
         function setActiveTab(tab) {
-            state.activeTab = tab === 'manage' || tab === 'finder' ? tab : 'library';
+            state.activeTab = tab === 'manage' || tab === 'finder' || tab === 'settings' ? tab : 'library';
             syncLayout();
         }
 
@@ -446,11 +474,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             var libraryActive = state.activeTab === 'library';
             var finderActive = state.activeTab === 'finder';
             var manageActive = state.activeTab === 'manage';
+            var settingsActive = state.activeTab === 'settings';
             var detailActive = libraryActive && (state.detailLoading || state.detailError || !!state.currentResult);
             browserToolbar.style.display = libraryActive && !detailActive ? '' : 'none';
             filtersPanel.style.display = detailActive ? '' : 'none';
             manageView.style.display = manageActive ? '' : 'none';
             finderView.style.display = finderActive ? '' : 'none';
+            settingsView.style.display = settingsActive ? '' : 'none';
             if (libraryActive) {
                 detailView.style.display = detailActive ? '' : 'none';
                 libraryView.style.display = detailActive ? 'none' : '';
@@ -458,6 +488,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
                 libraryView.style.display = 'none';
                 detailView.style.display = 'none';
                 loadSeasonMappings();
+            } else if (settingsActive) {
+                libraryView.style.display = 'none';
+                detailView.style.display = 'none';
+                loadSettings(false);
             } else {
                 libraryView.style.display = 'none';
                 detailView.style.display = 'none';
@@ -1247,6 +1281,349 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             });
         }
 
+        function getConfigValue(config, key, defaultValue) {
+            if (!config) return defaultValue;
+            var camel = key.charAt(0).toLowerCase() + key.slice(1);
+            var value = config[key] !== undefined ? config[key] : config[camel];
+            return value === undefined || value === null ? defaultValue : value;
+        }
+
+        function ensureThemeConfig(config) {
+            config = config || {};
+            return {
+                MaxThemes: Math.max(0, parseInt(getConfigValue(config, 'MaxThemes', 1), 10) || 0),
+                Volume: Math.max(0, Math.min(100, parseInt(getConfigValue(config, 'Volume', 100), 10) || 0)),
+                IgnoreOp: !!getConfigValue(config, 'IgnoreOp', false),
+                IgnoreEd: !!getConfigValue(config, 'IgnoreEd', true),
+                IgnoreOverlaps: !!getConfigValue(config, 'IgnoreOverlaps', false),
+                IgnoreCredits: !!getConfigValue(config, 'IgnoreCredits', false)
+            };
+        }
+
+        function ensureMediaConfig(config) {
+            config = config || {};
+            return {
+                Audio: ensureThemeConfig(getConfigValue(config, 'Audio', null)),
+                Video: ensureThemeConfig(getConfigValue(config, 'Video', null))
+            };
+        }
+
+        function ensureSettingsConfig(config) {
+            config = config || {};
+            config.ConfigurationVersion = 2;
+            config.Series = ensureMediaConfig(getConfigValue(config, 'Series', null));
+            config.Movie = ensureMediaConfig(getConfigValue(config, 'Movie', null));
+            if (!Array.isArray(getConfigValue(config, 'SeasonThemeMappings', []))) {
+                config.SeasonThemeMappings = [];
+            }
+            return config;
+        }
+
+        function normalizeExtrasLinkMode(value) {
+            if (value === 'HardLinkOnly') return '1';
+            if (value === 'CopyOnly') return '2';
+            if (value === 'HardLinkWithCopyFallback') return '0';
+            return String(value || 0);
+        }
+
+        function setSettingsState(message) {
+            settingsState.textContent = message || 'Ready.';
+        }
+
+        function profileId(profile) {
+            return profile === 'movie' ? 'Movie' : 'Series';
+        }
+
+        function mediaId(media) {
+            return media === 'video' ? 'Video' : 'Audio';
+        }
+
+        function profileFieldId(profile, media, field) {
+            return 'Ats' + profileId(profile) + mediaId(media) + field;
+        }
+
+        function profileFields(profile, media) {
+            return {
+                MaxThemes: page.querySelector('#' + profileFieldId(profile, media, 'MaxThemes')),
+                VolumeSlider: page.querySelector('#' + profileFieldId(profile, media, 'VolumeSlider')),
+                Volume: page.querySelector('#' + profileFieldId(profile, media, 'Volume')),
+                Mute: page.querySelector('#' + profileFieldId(profile, media, 'Mute')),
+                IgnoreOp: page.querySelector('#' + profileFieldId(profile, media, 'IgnoreOp')),
+                IgnoreEd: page.querySelector('#' + profileFieldId(profile, media, 'IgnoreEd')),
+                IgnoreOverlaps: page.querySelector('#' + profileFieldId(profile, media, 'IgnoreOverlaps')),
+                IgnoreCredits: page.querySelector('#' + profileFieldId(profile, media, 'IgnoreCredits'))
+            };
+        }
+
+        function clampVolume(value) {
+            value = parseInt(value, 10);
+            if (isNaN(value)) value = 0;
+            return Math.max(0, Math.min(100, value));
+        }
+
+        function setVolumeFields(fields, value) {
+            var volume = clampVolume(value);
+            if (!fields.Volume || !fields.VolumeSlider || !fields.Mute) return;
+            fields.Volume.value = volume;
+            fields.VolumeSlider.value = volume;
+            fields.Mute.checked = volume === 0;
+            if (volume > 0) {
+                fields.Volume.dataset.lastNonZero = String(volume);
+            } else if (!fields.Volume.dataset.lastNonZero) {
+                fields.Volume.dataset.lastNonZero = '100';
+            }
+        }
+
+        function bindVolumeControl(profile, media) {
+            var fields = profileFields(profile, media);
+            if (!fields.Volume || !fields.VolumeSlider || !fields.Mute) return;
+
+            fields.VolumeSlider.addEventListener('input', function () {
+                setVolumeFields(fields, fields.VolumeSlider.value);
+            });
+            fields.Volume.addEventListener('input', function () {
+                setVolumeFields(fields, fields.Volume.value);
+            });
+            fields.Mute.addEventListener('change', function () {
+                if (fields.Mute.checked) {
+                    setVolumeFields(fields, 0);
+                    return;
+                }
+
+                setVolumeFields(fields, fields.Volume.dataset.lastNonZero || 100);
+            });
+        }
+
+        function profileCardHtml(profile, media) {
+            var profileName = profileId(profile);
+            var mediaName = mediaId(media);
+            var title = mediaName === 'Audio' ? 'Audio / theme-music' : 'Video / backdrops';
+            var volumeHelp = mediaName === 'Audio' ? '100 = original, 1-99 = re-encode, 0 = mute.' : '100 = original, 0 = remove audio.';
+            return [
+                '<div class="ats-profile-card">',
+                '<h5>' + title + '</h5>',
+                '<div class="inputContainer">',
+                '<label class="inputLabel inputLabelUnfocused" for="Ats' + profileName + mediaName + 'MaxThemes">Max themes</label>',
+                '<input id="Ats' + profileName + mediaName + 'MaxThemes" type="number" is="emby-input" min="0" />',
+                '<div class="fieldDescription">Maximum number of themes to download for this output. 0 disables this output.</div>',
+                '</div>',
+                '<div class="inputContainer">',
+                '<label class="inputLabel inputLabelUnfocused" for="Ats' + profileName + mediaName + 'Volume">Volume</label>',
+                '<div class="ats-volume-row">',
+                '<input id="Ats' + profileName + mediaName + 'VolumeSlider" class="ats-volume-range" type="range" min="0" max="100" step="1" />',
+                '<input id="Ats' + profileName + mediaName + 'Volume" class="ats-volume-number" type="number" is="emby-input" min="0" max="100" />',
+                '<label class="emby-checkbox-label"><input id="Ats' + profileName + mediaName + 'Mute" type="checkbox" is="emby-checkbox" /><span>Mute</span></label>',
+                '</div>',
+                '<div class="fieldDescription">' + volumeHelp + '</div>',
+                '</div>',
+                '<div class="ats-toggle-list">',
+                '<div><label class="emby-checkbox-label"><input id="Ats' + profileName + mediaName + 'IgnoreOp" type="checkbox" is="emby-checkbox" /><span>Ignore OP</span></label><div class="fieldDescription">Skip opening themes for this output.</div></div>',
+                '<div><label class="emby-checkbox-label"><input id="Ats' + profileName + mediaName + 'IgnoreEd" type="checkbox" is="emby-checkbox" /><span>Ignore ED</span></label><div class="fieldDescription">Skip ending themes for this output.</div></div>',
+                '<div><label class="emby-checkbox-label"><input id="Ats' + profileName + mediaName + 'IgnoreOverlaps" type="checkbox" is="emby-checkbox" /><span>Ignore overlaps</span></label><div class="fieldDescription">Skip themes marked as overlapping with episode content.</div></div>',
+                '<div><label class="emby-checkbox-label"><input id="Ats' + profileName + mediaName + 'IgnoreCredits" type="checkbox" is="emby-checkbox" /><span>Ignore credits</span></label><div class="fieldDescription">Skip creditless or credits variants when AnimeThemes marks them separately.</div></div>',
+                '</div>',
+                '</div>'
+            ].join('');
+        }
+
+        function buildProfileControls() {
+            ['series', 'movie'].forEach(function (profile) {
+                var container = page.querySelector('.ats-profile-grid[data-settings-profile="' + profile + '"]');
+                if (!container || container.getAttribute('data-built') === 'true') return;
+                container.innerHTML = profileCardHtml(profile, 'audio') + profileCardHtml(profile, 'video');
+                container.setAttribute('data-built', 'true');
+                bindVolumeControl(profile, 'audio');
+                bindVolumeControl(profile, 'video');
+            });
+        }
+
+        function renderThemeSettings(profile, media, theme) {
+            var fields = profileFields(profile, media);
+            theme = ensureThemeConfig(theme);
+            fields.MaxThemes.value = theme.MaxThemes;
+            setVolumeFields(fields, theme.Volume);
+            fields.IgnoreOp.checked = theme.IgnoreOp;
+            fields.IgnoreEd.checked = theme.IgnoreEd;
+            fields.IgnoreOverlaps.checked = theme.IgnoreOverlaps;
+            fields.IgnoreCredits.checked = theme.IgnoreCredits;
+        }
+
+        function collectThemeSettings(profile, media) {
+            var fields = profileFields(profile, media);
+            return ensureThemeConfig({
+                MaxThemes: parseInt(fields.MaxThemes.value, 10) || 0,
+                Volume: clampVolume(fields.Volume.value),
+                IgnoreOp: fields.IgnoreOp.checked,
+                IgnoreEd: fields.IgnoreEd.checked,
+                IgnoreOverlaps: fields.IgnoreOverlaps.checked,
+                IgnoreCredits: fields.IgnoreCredits.checked
+            });
+        }
+
+        function renderAllProfileSettings() {
+            ensureSettingsConfig(state.settingsConfig);
+            renderThemeSettings('series', 'audio', state.settingsConfig.Series.Audio);
+            renderThemeSettings('series', 'video', state.settingsConfig.Series.Video);
+            renderThemeSettings('movie', 'audio', state.settingsConfig.Movie.Audio);
+            renderThemeSettings('movie', 'video', state.settingsConfig.Movie.Video);
+        }
+
+        function applyAllProfileSettings() {
+            if (!state.settingsConfig) return;
+            ensureSettingsConfig(state.settingsConfig);
+            state.settingsConfig.Series.Audio = collectThemeSettings('series', 'audio');
+            state.settingsConfig.Series.Video = collectThemeSettings('series', 'video');
+            state.settingsConfig.Movie.Audio = collectThemeSettings('movie', 'audio');
+            state.settingsConfig.Movie.Video = collectThemeSettings('movie', 'video');
+        }
+
+        function syncConditionalSettings() {
+            if (settingsFields.ExtrasOptions) {
+                settingsFields.ExtrasOptions.hidden = !settingsFields.ExtrasEnabled.checked;
+            }
+            if (settingsFields.TagOptions) {
+                settingsFields.TagOptions.hidden = !settingsFields.TagsEnabled.checked;
+            }
+        }
+
+        function showCopyState(message) {
+            if (!settingsFields.CopyCssMessage) return;
+            settingsFields.CopyCssMessage.textContent = message;
+            settingsFields.CopyCssMessage.style.display = '';
+            window.setTimeout(function () {
+                settingsFields.CopyCssMessage.style.display = 'none';
+            }, 1800);
+        }
+
+        function copyCustomCss() {
+            var textarea = settingsFields.CustomCssText;
+            if (!textarea) return;
+            var css = textarea.value || textarea.textContent || '';
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(css).then(function () {
+                    showCopyState('Copied.');
+                }).catch(function () {
+                    textarea.select();
+                    document.execCommand('copy');
+                    showCopyState('Copied.');
+                });
+                return;
+            }
+
+            textarea.select();
+            document.execCommand('copy');
+            showCopyState('Copied.');
+        }
+
+        function applySettingsToForm(config) {
+            state.settingsConfig = ensureSettingsConfig(config);
+            settingsFields.ThemeDownloadingEnabled.checked = !!getConfigValue(config, 'ThemeDownloadingEnabled', true);
+            settingsFields.MaxConcurrentDownloads.value = getConfigValue(config, 'MaxConcurrentDownloads', 1);
+            settingsFields.DownloadTimeoutSeconds.value = getConfigValue(config, 'DownloadTimeoutSeconds', 600);
+            settingsFields.AllowAdd.checked = !!getConfigValue(config, 'AllowAdd', true);
+            settingsFields.ForceRedownload.checked = !!getConfigValue(config, 'ForceRedownload', false);
+            settingsFields.AllowDelete.checked = !!getConfigValue(config, 'AllowDelete', false);
+            settingsFields.SeasonThemeDownloadsEnabled.checked = !!getConfigValue(config, 'SeasonThemeDownloadsEnabled', true);
+            settingsFields.ExtrasEnabled.checked = !!getConfigValue(config, 'ExtrasEnabled', false);
+            settingsFields.ExtrasLinkMode.value = normalizeExtrasLinkMode(getConfigValue(config, 'ExtrasLinkMode', 0));
+            settingsFields.ExtrasFileNameFormat.value = getConfigValue(config, 'ExtrasFileNameFormat', '{Order}. {Theme} - {Song}');
+            settingsFields.TagsEnabled.checked = !!getConfigValue(config, 'TagsEnabled', true);
+            settingsFields.TagFormat.value = getConfigValue(config, 'TagFormat', '{Season} {Year}');
+            settingsFields.TagSeasonSpring.value = getConfigValue(config, 'TagSeasonSpring', 'Spring');
+            settingsFields.TagSeasonSummer.value = getConfigValue(config, 'TagSeasonSummer', 'Summer');
+            settingsFields.TagSeasonFall.value = getConfigValue(config, 'TagSeasonFall', 'Fall');
+            settingsFields.TagSeasonWinter.value = getConfigValue(config, 'TagSeasonWinter', 'Winter');
+            syncConditionalSettings();
+            renderAllProfileSettings();
+        }
+
+        function removeLegacySettings(config) {
+            [
+                'SeriesAudioMaxThemes', 'SeriesAudioVolume', 'SeriesAudioIgnoreOp', 'SeriesAudioIgnoreEd', 'SeriesAudioIgnoreOverlaps', 'SeriesAudioIgnoreCredits',
+                'SeriesVideoMaxThemes', 'SeriesVideoVolume', 'SeriesVideoIgnoreOp', 'SeriesVideoIgnoreEd', 'SeriesVideoIgnoreOverlaps', 'SeriesVideoIgnoreCredits',
+                'MovieAudioMaxThemes', 'MovieAudioVolume', 'MovieAudioIgnoreOp', 'MovieAudioIgnoreEd', 'MovieAudioIgnoreOverlaps', 'MovieAudioIgnoreCredits',
+                'MovieVideoMaxThemes', 'MovieVideoVolume', 'MovieVideoIgnoreOp', 'MovieVideoIgnoreEd', 'MovieVideoIgnoreOverlaps', 'MovieVideoIgnoreCredits'
+            ].forEach(function (key) {
+                delete config[key];
+                delete config[key.charAt(0).toLowerCase() + key.slice(1)];
+            });
+        }
+
+        function collectSettingsFromForm(config) {
+            applyAllProfileSettings();
+            config = ensureSettingsConfig(config || state.settingsConfig);
+            config.ConfigurationVersion = 2;
+            config.ThemeDownloadingEnabled = settingsFields.ThemeDownloadingEnabled.checked;
+            config.MaxConcurrentDownloads = parseInt(settingsFields.MaxConcurrentDownloads.value, 10) || 1;
+            config.DownloadTimeoutSeconds = parseInt(settingsFields.DownloadTimeoutSeconds.value, 10) || 600;
+            config.AllowAdd = settingsFields.AllowAdd.checked;
+            config.ForceRedownload = settingsFields.ForceRedownload.checked;
+            config.AllowDelete = settingsFields.AllowDelete.checked;
+            config.SeasonThemeDownloadsEnabled = settingsFields.SeasonThemeDownloadsEnabled.checked;
+            config.ExtrasEnabled = settingsFields.ExtrasEnabled.checked;
+            config.ExtrasLinkMode = parseInt(settingsFields.ExtrasLinkMode.value, 10) || 0;
+            config.ExtrasFileNameFormat = settingsFields.ExtrasFileNameFormat.value;
+            config.TagsEnabled = settingsFields.TagsEnabled.checked;
+            config.TagFormat = settingsFields.TagFormat.value;
+            config.TagSeasonSpring = settingsFields.TagSeasonSpring.value;
+            config.TagSeasonSummer = settingsFields.TagSeasonSummer.value;
+            config.TagSeasonFall = settingsFields.TagSeasonFall.value;
+            config.TagSeasonWinter = settingsFields.TagSeasonWinter.value;
+            removeLegacySettings(config);
+            state.settingsConfig = ensureSettingsConfig(config);
+            return state.settingsConfig;
+        }
+
+        function loadSettings(force) {
+            if (state.settingsLoaded && !force) return;
+            setSettingsState('Loading settings...');
+            ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                state.settingsLoaded = true;
+                applySettingsToForm(config || {});
+                setSettingsState('Settings loaded.');
+            }).catch(function (err) {
+                setSettingsState('Failed to load settings.');
+                Dashboard.alert({ title: 'Settings Error', message: getErrorMessage(err) });
+            });
+        }
+
+        function saveSettings(showResult) {
+            setSettingsState('Saving settings...');
+            return ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                config = collectSettingsFromForm(config || {});
+                return ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function (result) {
+                    state.settingsLoaded = true;
+                    setSettingsState('Settings saved.');
+                    if (showResult) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                    }
+                    return result;
+                });
+            }).catch(function (err) {
+                setSettingsState('Failed to save settings.');
+                Dashboard.alert({ title: 'Settings Error', message: getErrorMessage(err) });
+                throw err;
+            });
+        }
+
+        function runScheduledTask() {
+            saveSettings(false).then(function () {
+                return ApiClient.getScheduledTasks();
+            }).then(function (tasks) {
+                var task = tasks.find(function (t) { return t.Key === 'AnimeThemesSyncDownloader'; });
+                if (!task) {
+                    throw new Error('AnimeThemes scheduled task was not found.');
+                }
+                return ApiClient.startScheduledTask(task.Id);
+            }).then(function () {
+                setSettingsState('Scheduled task started.');
+                Dashboard.alert('Task started.');
+            }).catch(function (err) {
+                setSettingsState('Failed to start task.');
+                Dashboard.alert({ title: 'Task Error', message: getErrorMessage(err) });
+            });
+        }
+
         function downloadTheme(row) {
             var itemId = activeGroupItemId();
             var rowId = value(row, 'RowId', 'rowId');
@@ -1282,16 +1659,18 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
                 var status = value(job, 'Status', 'status');
                 var progress = value(job, 'Progress', 'progress') || 0;
                 var message = value(job, 'Message', 'message') || status || 'Running';
-                setProgress(true, message, progress);
-                if (status === 'Completed') {
-                    if (state.activeTab === 'finder') {
-                        loadSeasonMappings();
-                    } else {
-                        loadThemes();
-                    }
-                    setTimeout(function () { setProgress(false, '', 0); }, 1600);
-                    return;
-                }
+                        setProgress(true, message, progress);
+                        if (status === 'Completed') {
+                            if (state.activeTab === 'finder') {
+                                loadSeasonMappings();
+                            } else if (state.activeTab === 'library') {
+                                loadThemes();
+                            } else if (state.activeTab === 'settings') {
+                                loadSettings(true);
+                            }
+                            setTimeout(function () { setProgress(false, '', 0); }, 1600);
+                            return;
+                        }
 
                 if (status === 'Failed') {
                     var error = value(job, 'Error', 'error') || 'Download failed.';
@@ -1429,6 +1808,17 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
                 deleteThemeFiles(button.getAttribute('data-delete-scope') || 'all');
             });
         });
+        buildProfileControls();
+        settingsFields.ExtrasEnabled.addEventListener('change', syncConditionalSettings);
+        settingsFields.TagsEnabled.addEventListener('change', syncConditionalSettings);
+        syncConditionalSettings();
+        page.querySelector('#AtsSettingsSave').addEventListener('click', function () {
+            saveSettings(true);
+        });
+        page.querySelector('#AtsRunTask').addEventListener('click', runScheduledTask);
+        if (settingsFields.CopyCssButton) {
+            settingsFields.CopyCssButton.addEventListener('click', copyCustomCss);
+        }
         page.querySelector('#AnimeThemesBrowserPlayerClose').addEventListener('click', closePlayer);
         player.addEventListener('click', function (event) {
             if (event.target === player) closePlayer();

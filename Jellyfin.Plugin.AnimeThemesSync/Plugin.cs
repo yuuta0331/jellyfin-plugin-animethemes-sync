@@ -27,6 +27,10 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     {
         Instance = this;
         Console.OutputEncoding = Encoding.UTF8;
+        if (Configuration.Normalize())
+        {
+            UpdateConfiguration(Configuration);
+        }
     }
 
     /// <inheritdoc />
@@ -52,7 +56,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
             {
                 Name = configPageName,
                 DisplayName = Name,
-                EnableInMainMenu = true,
+                EnableInMainMenu = false,
                 EmbeddedResourcePath = string.Format(CultureInfo.InvariantCulture, "{0}.Configuration.configPage.html", GetType().Namespace)
             },
             new PluginPageInfo

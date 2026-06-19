@@ -1149,49 +1149,18 @@ public class ThemeDownloader : IScheduledTask
     /// </summary>
     private static ThemeConfig CreateThemeConfig(BaseItem item, PluginConfiguration config, bool isVideo)
     {
-        if (item is Series or Season)
+        config.Normalize();
+        var mediaConfig = item is Series or Season ? config.Series : config.Movie;
+        var themeConfig = isVideo ? mediaConfig.Video : mediaConfig.Audio;
+        return new ThemeConfig
         {
-            return isVideo
-                ? new ThemeConfig
-                {
-                    MaxThemes = config.SeriesVideoMaxThemes,
-                    Volume = config.SeriesVideoVolume,
-                    IgnoreOp = config.SeriesVideoIgnoreOp,
-                    IgnoreEd = config.SeriesVideoIgnoreEd,
-                    IgnoreOverlaps = config.SeriesVideoIgnoreOverlaps,
-                    IgnoreCredits = config.SeriesVideoIgnoreCredits,
-                }
-                : new ThemeConfig
-                {
-                    MaxThemes = config.SeriesAudioMaxThemes,
-                    Volume = config.SeriesAudioVolume,
-                    IgnoreOp = config.SeriesAudioIgnoreOp,
-                    IgnoreEd = config.SeriesAudioIgnoreEd,
-                    IgnoreOverlaps = config.SeriesAudioIgnoreOverlaps,
-                    IgnoreCredits = config.SeriesAudioIgnoreCredits,
-                };
-        }
-
-        // Movie
-        return isVideo
-            ? new ThemeConfig
-            {
-                MaxThemes = config.MovieVideoMaxThemes,
-                Volume = config.MovieVideoVolume,
-                IgnoreOp = config.MovieVideoIgnoreOp,
-                IgnoreEd = config.MovieVideoIgnoreEd,
-                IgnoreOverlaps = config.MovieVideoIgnoreOverlaps,
-                IgnoreCredits = config.MovieVideoIgnoreCredits,
-            }
-            : new ThemeConfig
-            {
-                MaxThemes = config.MovieAudioMaxThemes,
-                Volume = config.MovieAudioVolume,
-                IgnoreOp = config.MovieAudioIgnoreOp,
-                IgnoreEd = config.MovieAudioIgnoreEd,
-                IgnoreOverlaps = config.MovieAudioIgnoreOverlaps,
-                IgnoreCredits = config.MovieAudioIgnoreCredits,
-            };
+            MaxThemes = themeConfig.MaxThemes,
+            Volume = themeConfig.Volume,
+            IgnoreOp = themeConfig.IgnoreOp,
+            IgnoreEd = themeConfig.IgnoreEd,
+            IgnoreOverlaps = themeConfig.IgnoreOverlaps,
+            IgnoreCredits = themeConfig.IgnoreCredits,
+        };
     }
 
     /// <summary>

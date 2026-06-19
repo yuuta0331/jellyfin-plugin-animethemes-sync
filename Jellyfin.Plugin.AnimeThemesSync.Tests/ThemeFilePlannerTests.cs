@@ -318,33 +318,58 @@ public class ThemeFilePlannerTests
     }
 
     [Fact]
-    public void ConfigurationPagesExposeSeasonThemeMappings()
+    public void BrowserPagesExposeIntegratedSettingsAndSeasonFinder()
     {
         var root = FindRepositoryRoot();
-        var configPages = new[]
+        var browserPages = new[]
         {
-            Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "configPage.html"),
-            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "configPage.html")
+            Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.html")
         };
 
-        foreach (var file in configPages)
+        foreach (var file in browserPages)
         {
             var content = File.ReadAllText(file);
-            Assert.Contains("SeasonThemeDownloadsEnabled", content, StringComparison.Ordinal);
-            Assert.Contains("Enable Season Theme Downloads", content, StringComparison.Ordinal);
-            Assert.Contains("SeasonThemeMappingsJson", content, StringComparison.Ordinal);
-            Assert.Contains("Season Theme Mapping", content, StringComparison.Ordinal);
-            Assert.Contains("Season Mappings JSON", content, StringComparison.Ordinal);
+            Assert.Contains("data-ats-tab=\"settings\"", content, StringComparison.Ordinal);
+            Assert.Contains("AtsSeasonThemeDownloadsEnabled", content, StringComparison.Ordinal);
+            Assert.Contains("https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync", content, StringComparison.Ordinal);
+            Assert.Contains("Help / GitHub", content, StringComparison.Ordinal);
+            Assert.Contains("AtsExtrasOptions", content, StringComparison.Ordinal);
+            Assert.Contains("AtsTagOptions", content, StringComparison.Ordinal);
+            Assert.Contains("Interface Customization", content, StringComparison.Ordinal);
+            Assert.Contains("Manual Linking", content, StringComparison.Ordinal);
+            Assert.Contains("Create browseable extras", content, StringComparison.Ordinal);
+            Assert.Contains("Add season/year tags", content, StringComparison.Ordinal);
+            Assert.Contains("AtsSeriesAudioVolumeSlider", content, StringComparison.Ordinal);
+            Assert.Contains("AtsSeriesVideoMute", content, StringComparison.Ordinal);
+            Assert.Contains("AtsMovieAudioVolumeSlider", content, StringComparison.Ordinal);
+            Assert.Contains("AtsMovieVideoMute", content, StringComparison.Ordinal);
+            Assert.Contains("Season Finder", content, StringComparison.Ordinal);
+            Assert.Contains("Settings", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("AtsOnDemandItemId", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("AtsRunOnDemand", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("Run Item Download", content, StringComparison.Ordinal);
         }
 
-        var jellyfinPage = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "configPage.html"));
-        Assert.Contains("SeasonThemeMappings", jellyfinPage, StringComparison.Ordinal);
-        Assert.Contains("parseSeasonMappings", jellyfinPage, StringComparison.Ordinal);
+        var jellyfinPage = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+        Assert.Contains("SeasonMappings", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("loadSettings", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("ConfigurationVersion", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("Ats' + profileName + mediaName + 'VolumeSlider", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("Ats' + profileName + mediaName + 'Mute", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("syncConditionalSettings", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("copyCustomCss", jellyfinPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("runOnDemandDownload", jellyfinPage, StringComparison.Ordinal);
 
-        var embyController = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "configPage.js"));
-        Assert.Contains("SeasonThemeDownloadsEnabled", embyController, StringComparison.Ordinal);
-        Assert.Contains("SeasonThemeMappings", embyController, StringComparison.Ordinal);
-        Assert.Contains("parseSeasonMappings", embyController, StringComparison.Ordinal);
+        var embyController = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js"));
+        Assert.Contains("SeasonMappings", embyController, StringComparison.Ordinal);
+        Assert.Contains("loadSettings", embyController, StringComparison.Ordinal);
+        Assert.Contains("ConfigurationVersion", embyController, StringComparison.Ordinal);
+        Assert.Contains("Ats' + profileName + mediaName + 'VolumeSlider", embyController, StringComparison.Ordinal);
+        Assert.Contains("Ats' + profileName + mediaName + 'Mute", embyController, StringComparison.Ordinal);
+        Assert.Contains("syncConditionalSettings", embyController, StringComparison.Ordinal);
+        Assert.Contains("copyCustomCss", embyController, StringComparison.Ordinal);
+        Assert.DoesNotContain("runOnDemandDownload", embyController, StringComparison.Ordinal);
     }
 
     [Fact]

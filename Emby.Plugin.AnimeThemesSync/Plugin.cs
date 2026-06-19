@@ -55,7 +55,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
                 Name = configPageName,
                 DisplayName = Name,
                 EmbeddedResourcePath = type.Namespace + ".Configuration.configPage.html",
-                EnableInMainMenu = true,
+                EnableInMainMenu = false,
                 MenuSection = "server",
                 MenuIcon = "music_note"
             },

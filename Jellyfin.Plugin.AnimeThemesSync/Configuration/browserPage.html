@@ -8,11 +8,11 @@
 
 <body>
     <div id="AnimeThemesBrowserPage" data-role="page" class="page type-interior pluginConfigurationPage"
-        data-require="emby-input,emby-button,emby-select,emby-checkbox">
+        data-require="emby-input,emby-button,emby-select,emby-checkbox,emby-textarea">
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.06.19-a.</div>
+                <div class="fieldDescription">UI version: 2026.06.19-g.</div>
 
                 <div class="verticalSection ats-browser-toolbar">
                     <div class="inputContainer ats-search ats-clearable">
@@ -40,6 +40,9 @@
                     </button>
                     <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-tab" id="AnimeThemesBrowserManageTab" data-ats-tab="manage">
                         <span>Manage</span>
+                    </button>
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-tab" id="AnimeThemesBrowserSettingsTab" data-ats-tab="settings">
+                        <span>Settings</span>
                     </button>
                 </div>
 
@@ -105,6 +108,156 @@
                         </button>
                     </div>
                 </div>
+                </div>
+
+                <div class="verticalSection ats-settings-view" id="AnimeThemesBrowserSettingsView" style="display: none;">
+                    <div class="ats-settings-header">
+                        <div>
+                            <h2 class="sectionTitle">Settings</h2>
+                            <div class="fieldDescription">Configure how AnimeThemes OP/ED media are downloaded, named, tagged, and linked.</div>
+                        </div>
+                        <div class="ats-settings-head-actions">
+                            <a href="https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync" target="_blank" rel="noopener" is="emby-link" class="emby-button ats-button-secondary">Help / GitHub</a>
+                            <div id="AnimeThemesSettingsState" class="ats-finder-state">Ready.</div>
+                        </div>
+                    </div>
+
+                    <div class="ats-settings-grid">
+                        <div class="ats-settings-column">
+                            <div class="ats-finder-panel">
+                                <h3>Download</h3>
+                                <div class="checkboxContainer checkboxContainer-withDescription">
+                                    <label class="emby-checkbox-label">
+                                        <input id="AtsThemeDownloadingEnabled" type="checkbox" is="emby-checkbox" />
+                                        <span>Enable downloads</span>
+                                    </label>
+                                    <div class="fieldDescription">Downloads themes for libraries where AnimeThemesSync is enabled as a metadata fetcher.</div>
+                                </div>
+                                <div class="ats-two-column">
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsMaxConcurrentDownloads">Concurrency</label>
+                                        <input id="AtsMaxConcurrentDownloads" type="number" is="emby-input" min="1" max="10" />
+                                        <div class="fieldDescription">Number of simultaneous downloads. Recommended: 1-3.</div>
+                                    </div>
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsDownloadTimeoutSeconds">Timeout seconds</label>
+                                        <input id="AtsDownloadTimeoutSeconds" type="number" is="emby-input" min="1" />
+                                        <div class="fieldDescription">Increase this if large video downloads time out. Default: 600.</div>
+                                    </div>
+                                </div>
+                                <div class="ats-toggle-list">
+                                    <div><label class="emby-checkbox-label"><input id="AtsAllowAdd" type="checkbox" is="emby-checkbox" /><span>Add missing files</span></label><div class="fieldDescription">Download new theme files when planned files are missing.</div></div>
+                                    <div><label class="emby-checkbox-label"><input id="AtsForceRedownload" type="checkbox" is="emby-checkbox" /><span>Overwrite existing files</span></label><div class="fieldDescription warning-text">Re-downloads and replaces existing AnimeThemes files. Disable after applying volume or version changes.</div></div>
+                                    <div><label class="emby-checkbox-label"><input id="AtsAllowDelete" type="checkbox" is="emby-checkbox" /><span>Delete undesired files</span></label><div class="fieldDescription warning-text">Deletes plugin-managed files in theme-music and backdrops when they are no longer desired.</div></div>
+                                    <div><label class="emby-checkbox-label"><input id="AtsSeasonThemeDownloadsEnabled" type="checkbox" is="emby-checkbox" /><span>Download season themes</span></label><div class="fieldDescription">Creates separate OP/ED output for Season items. Season Finder mappings remain saved when disabled.</div></div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel">
+                                <h3>Extras</h3>
+                                <div class="checkboxContainer checkboxContainer-withDescription">
+                                    <label class="emby-checkbox-label"><input id="AtsExtrasEnabled" type="checkbox" is="emby-checkbox" /><span>Create browseable extras</span></label>
+                                    <div class="fieldDescription">Creates rich display names in extras so OP/ED videos can be opened from Extras/Special Features. Theme videos still remain in backdrops.</div>
+                                </div>
+                                <div id="AtsExtrasOptions" class="ats-conditional-options">
+                                    <div class="selectContainer">
+                                        <label class="selectLabel" for="AtsExtrasLinkMode">Extras file mode</label>
+                                        <select is="emby-select" id="AtsExtrasLinkMode" class="emby-select-withcolor emby-select">
+                                            <option value="0">Hard link, copy fallback</option>
+                                            <option value="1">Hard link only</option>
+                                            <option value="2">Copy only</option>
+                                        </select>
+                                        <div class="fieldDescription">Hard links save disk space. Copy fallback helps when folders are on file systems that do not support hard links.</div>
+                                    </div>
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsExtrasFileNameFormat">Extras display name format</label>
+                                        <input id="AtsExtrasFileNameFormat" type="text" is="emby-input" />
+                                        <div class="fieldDescription">Default: <code>{Order}. {Theme} - {Song}</code>. Tokens: <code>{Order}</code>, <code>{Theme}</code>, <code>{Song}</code>, <code>{Artist}</code>, <code>{Episodes}</code>, <code>{Labels}</code>, <code>{Quality}</code>.</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel">
+                                <h3>Tags</h3>
+                                <div class="checkboxContainer checkboxContainer-withDescription">
+                                    <label class="emby-checkbox-label"><input id="AtsTagsEnabled" type="checkbox" is="emby-checkbox" /><span>Add season/year tags</span></label>
+                                    <div class="fieldDescription">Adds tags like Winter 2024 to downloaded metadata.</div>
+                                </div>
+                                <div id="AtsTagOptions" class="ats-conditional-options">
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsTagFormat">Tag format</label>
+                                        <input id="AtsTagFormat" type="text" is="emby-input" />
+                                        <div class="fieldDescription">Supported placeholders: <code>{Season}</code>, <code>{Year}</code>. Default: <code>{Season} {Year}</code>.</div>
+                                    </div>
+                                    <div class="ats-four-column">
+                                        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonSpring">Spring</label><input id="AtsTagSeasonSpring" type="text" is="emby-input" /></div>
+                                        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonSummer">Summer</label><input id="AtsTagSeasonSummer" type="text" is="emby-input" /></div>
+                                        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonFall">Fall</label><input id="AtsTagSeasonFall" type="text" is="emby-input" /></div>
+                                        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonWinter">Winter</label><input id="AtsTagSeasonWinter" type="text" is="emby-input" /></div>
+                                    </div>
+                                    <div class="fieldDescription">Customize season names used by tag formatting.</div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel">
+                                <h3>Manual Linking</h3>
+                                <div class="fieldDescription">
+                                    If a series is not matched automatically, open the item metadata editor, locate AnimeThemes ID or AnimeThemes Slug in External IDs, and enter the AnimeThemes Slug from the URL.
+                                    Example: <code>blackrock_shooter_tv</code> from <code>https://animethemes.moe/anime/blackrock_shooter_tv</code>.
+                                    For season-specific matches, use Season Finder instead.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="ats-settings-column ats-settings-column-main">
+                            <div class="ats-finder-panel">
+                                <h3>Profiles</h3>
+                                <div class="fieldDescription">Series applies to Series and Season items. Movie applies only to Movie items.</div>
+                                <div class="ats-profile-section" data-profile-section="series">
+                                    <h4>Series Profile</h4>
+                                    <div class="fieldDescription">Used for series-level and season-level theme downloads.</div>
+                                    <div class="ats-profile-grid" data-settings-profile="series" data-profile-controls="AtsSeriesAudioMaxThemes AtsSeriesAudioVolumeSlider AtsSeriesAudioVolume AtsSeriesAudioMute AtsSeriesVideoMaxThemes AtsSeriesVideoVolumeSlider AtsSeriesVideoVolume AtsSeriesVideoMute"></div>
+                                </div>
+                                <div class="ats-profile-section" data-profile-section="movie">
+                                    <h4>Movie Profile</h4>
+                                    <div class="fieldDescription">Used for movie theme downloads.</div>
+                                    <div class="ats-profile-grid" data-settings-profile="movie" data-profile-controls="AtsMovieAudioMaxThemes AtsMovieAudioVolumeSlider AtsMovieAudioVolume AtsMovieAudioMute AtsMovieVideoMaxThemes AtsMovieVideoVolumeSlider AtsMovieVideoVolume AtsMovieVideoMute"></div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel">
+                                <h3>Interface Customization</h3>
+                                <div class="fieldDescription">To replace the AnimeThemes text link with a logo in the Jellyfin web interface, go to Dashboard &gt; General &gt; Custom CSS and add this CSS.</div>
+                                <textarea id="AtsCustomCssText" is="emby-textarea" class="emby-textarea ats-css-textarea" rows="10" readonly>/* Replace "AnimeThemes" link with a logo image */
+.itemExternalLinks &gt; a[href*="animethemes.moe"] {
+    font-size: 0 !important;
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    background-image: url('https://github.com/AnimeThemes.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    vertical-align: middle;
+}</textarea>
+                                <div class="ats-actions">
+                                    <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AtsCopyCssButton"><span>Copy to Clipboard</span></button>
+                                    <span id="AtsCopyCssMessage" class="ats-copy-state" style="display: none;">Copied.</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <div class="ats-settings-actions-bar">
+                        <div class="ats-settings-actions-copy">
+                            <div class="fieldDescription">Save settings before running the scheduled downloader.</div>
+                        </div>
+                        <div class="ats-actions">
+                            <button is="emby-button" type="button" class="raised emby-button ats-action-button" id="AtsSettingsSave"><span>Save Settings</span></button>
+                            <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AtsRunTask"><span>Run Scheduled Task</span></button>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="verticalSection ats-season-finder" id="AnimeThemesSeasonFinderView" style="display: none;">
@@ -938,6 +1091,166 @@
                 min-width: 0;
             }
 
+            #AnimeThemesBrowserPage .ats-settings-header {
+                display: flex;
+                gap: 1rem;
+                justify-content: space-between;
+                align-items: start;
+                margin-bottom: .85rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-head-actions {
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                gap: .6rem;
+                flex-wrap: wrap;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-grid {
+                display: grid;
+                grid-template-columns: minmax(18rem, .85fr) minmax(24rem, 1.35fr);
+                gap: .85rem;
+                align-items: start;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-view {
+                padding-bottom: 5.5rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-column {
+                display: grid;
+                gap: .85rem;
+                align-content: start;
+                min-width: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-actions-bar {
+                position: fixed;
+                right: max(1rem, env(safe-area-inset-right));
+                bottom: max(1rem, env(safe-area-inset-bottom));
+                z-index: 999;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 1rem;
+                width: min(42rem, calc(100vw - 2rem));
+                padding: .65rem .75rem;
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius);
+                background: var(--ats-surface);
+                color: inherit;
+                box-shadow: 0 .45rem 1.4rem rgba(0, 0, 0, .24);
+                backdrop-filter: blur(10px);
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-actions-bar .fieldDescription {
+                margin: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-actions-bar .ats-actions {
+                flex: 0 0 auto;
+                margin: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-grid,
+            #AnimeThemesBrowserPage .ats-two-column,
+            #AnimeThemesBrowserPage .ats-four-column {
+                display: grid;
+                gap: .75rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-grid,
+            #AnimeThemesBrowserPage .ats-two-column {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            #AnimeThemesBrowserPage .ats-four-column {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-card {
+                min-width: 0;
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius);
+                padding: .75rem;
+                background: rgba(127, 127, 127, .06);
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-card h4 {
+                margin: 0 0 .65rem;
+                font-size: 1rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-section {
+                border: 1px solid rgba(127, 127, 127, .18);
+                border-radius: var(--ats-radius);
+                padding: .75rem;
+                margin-top: .8rem;
+                background: rgba(127, 127, 127, .035);
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-section h4,
+            #AnimeThemesBrowserPage .ats-profile-card h5 {
+                margin: 0 0 .45rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-profile-card h5 {
+                font-size: .98rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-volume-row {
+                display: grid;
+                grid-template-columns: minmax(8rem, 1fr) 5.5rem auto;
+                gap: .55rem;
+                align-items: center;
+            }
+
+            #AnimeThemesBrowserPage .ats-volume-range {
+                width: 100%;
+            }
+
+            #AnimeThemesBrowserPage .ats-volume-number input,
+            #AnimeThemesBrowserPage input.ats-volume-number {
+                width: 5.5rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-conditional-options {
+                margin-top: .65rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-conditional-options[hidden] {
+                display: none !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-css-textarea {
+                width: 100%;
+                min-height: 14rem;
+                font-family: Consolas, "Liberation Mono", monospace;
+                resize: vertical;
+            }
+
+            #AnimeThemesBrowserPage .ats-copy-state {
+                align-self: center;
+                color: var(--theme-primary-color);
+            }
+
+            #AnimeThemesBrowserPage .ats-toggle-list {
+                display: grid;
+                gap: .45rem;
+                margin-top: .35rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-view .inputContainer,
+            #AnimeThemesBrowserPage .ats-settings-view .selectContainer {
+                margin-bottom: .65rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-settings-view .ats-actions {
+                margin-top: .75rem;
+                margin-bottom: 0;
+            }
+
             #AnimeThemesBrowserPage .ats-finder-panel h3,
             #AnimeThemesBrowserPage .ats-panel-head h3 {
                 margin: 0 0 .75rem;
@@ -1183,11 +1496,24 @@
                 #AnimeThemesBrowserPage .ats-browser-toolbar,
                 #AnimeThemesBrowserPage .ats-filters,
                 #AnimeThemesBrowserPage .ats-theme-card,
-                #AnimeThemesBrowserPage .ats-finder-layout {
+                #AnimeThemesBrowserPage .ats-finder-layout,
+                #AnimeThemesBrowserPage .ats-settings-grid,
+                #AnimeThemesBrowserPage .ats-profile-grid,
+                #AnimeThemesBrowserPage .ats-two-column,
+                #AnimeThemesBrowserPage .ats-four-column,
+                #AnimeThemesBrowserPage .ats-volume-row {
                     grid-template-columns: 1fr;
                 }
 
-                #AnimeThemesBrowserPage .ats-finder-topbar {
+                #AnimeThemesBrowserPage .ats-settings-actions-bar {
+                    position: static;
+                    display: grid;
+                    gap: .65rem;
+                    width: auto;
+                }
+
+                #AnimeThemesBrowserPage .ats-finder-topbar,
+                #AnimeThemesBrowserPage .ats-settings-header {
                     display: grid;
                     grid-template-columns: 1fr;
                 }
@@ -1254,6 +1580,7 @@
                         if (!page) {
                             return;
                         }
+                var pluginUniqueId = '66d528df-4632-4d43-9828-56957262572b';
                 var state = {
                     items: [],
                     filteredItems: [],
@@ -1275,7 +1602,9 @@
                     finderPreview: null,
                     finderSearchTimer: null,
                     finderSearchToken: 0,
-                    finderAutoSearched: {}
+                    finderAutoSearched: {},
+                    settingsConfig: null,
+                    settingsLoaded: false
                 };
                 var browserToolbar = page.querySelector('.ats-browser-toolbar');
                 var itemSelect = page.querySelector('#AnimeThemesBrowserItemSelect');
@@ -1283,6 +1612,7 @@
                 var detailView = page.querySelector('#AnimeThemesBrowserDetailView');
                 var manageView = page.querySelector('#AnimeThemesBrowserManageView');
                 var finderView = page.querySelector('#AnimeThemesSeasonFinderView');
+                var settingsView = page.querySelector('#AnimeThemesBrowserSettingsView');
                 var itemGrid = page.querySelector('#AnimeThemesBrowserItemGrid');
                 var libraryCount = page.querySelector('#AnimeThemesBrowserLibraryCount');
                 var rowsContainer = page.querySelector('#AnimeThemesBrowserRows');
@@ -1320,6 +1650,30 @@
                 var finderPreview = page.querySelector('#AnimeThemesFinderPreview');
                 var finderState = page.querySelector('#AnimeThemesFinderState');
                 var downloadItemButton = page.querySelector('#AnimeThemesBrowserDownload');
+                var settingsState = page.querySelector('#AnimeThemesSettingsState');
+                var settingsFields = {
+                    ThemeDownloadingEnabled: page.querySelector('#AtsThemeDownloadingEnabled'),
+                    MaxConcurrentDownloads: page.querySelector('#AtsMaxConcurrentDownloads'),
+                    DownloadTimeoutSeconds: page.querySelector('#AtsDownloadTimeoutSeconds'),
+                    AllowAdd: page.querySelector('#AtsAllowAdd'),
+                    ForceRedownload: page.querySelector('#AtsForceRedownload'),
+                    AllowDelete: page.querySelector('#AtsAllowDelete'),
+                    SeasonThemeDownloadsEnabled: page.querySelector('#AtsSeasonThemeDownloadsEnabled'),
+                    ExtrasEnabled: page.querySelector('#AtsExtrasEnabled'),
+                    ExtrasOptions: page.querySelector('#AtsExtrasOptions'),
+                    ExtrasLinkMode: page.querySelector('#AtsExtrasLinkMode'),
+                    ExtrasFileNameFormat: page.querySelector('#AtsExtrasFileNameFormat'),
+                    TagsEnabled: page.querySelector('#AtsTagsEnabled'),
+                    TagOptions: page.querySelector('#AtsTagOptions'),
+                    TagFormat: page.querySelector('#AtsTagFormat'),
+                    TagSeasonSpring: page.querySelector('#AtsTagSeasonSpring'),
+                    TagSeasonSummer: page.querySelector('#AtsTagSeasonSummer'),
+                    TagSeasonFall: page.querySelector('#AtsTagSeasonFall'),
+                    TagSeasonWinter: page.querySelector('#AtsTagSeasonWinter'),
+                    CustomCssText: page.querySelector('#AtsCustomCssText'),
+                    CopyCssButton: page.querySelector('#AtsCopyCssButton'),
+                    CopyCssMessage: page.querySelector('#AtsCopyCssMessage')
+                };
 
                 function value(obj, pascal, camel) {
                     return obj ? obj[pascal] !== undefined ? obj[pascal] : obj[camel] : null;
@@ -1680,7 +2034,7 @@
                 }
 
                 function setActiveTab(tab) {
-                    state.activeTab = tab === 'manage' || tab === 'finder' ? tab : 'library';
+                    state.activeTab = tab === 'manage' || tab === 'finder' || tab === 'settings' ? tab : 'library';
                     syncLayout();
                 }
 
@@ -1691,11 +2045,13 @@
                     var libraryActive = state.activeTab === 'library';
                     var finderActive = state.activeTab === 'finder';
                     var manageActive = state.activeTab === 'manage';
+                    var settingsActive = state.activeTab === 'settings';
                     var detailActive = libraryActive && (state.detailLoading || state.detailError || !!state.currentResult);
                     browserToolbar.style.display = libraryActive && !detailActive ? '' : 'none';
                     filtersPanel.style.display = detailActive ? '' : 'none';
                     manageView.style.display = manageActive ? '' : 'none';
                     finderView.style.display = finderActive ? '' : 'none';
+                    settingsView.style.display = settingsActive ? '' : 'none';
                     if (libraryActive) {
                         detailView.style.display = detailActive ? '' : 'none';
                         libraryView.style.display = detailActive ? 'none' : '';
@@ -1703,6 +2059,10 @@
                         libraryView.style.display = 'none';
                         detailView.style.display = 'none';
                         loadSeasonMappings();
+                    } else if (settingsActive) {
+                        libraryView.style.display = 'none';
+                        detailView.style.display = 'none';
+                        loadSettings(false);
                     } else {
                         libraryView.style.display = 'none';
                         detailView.style.display = 'none';
@@ -2492,6 +2852,349 @@
                     });
                 }
 
+                function getConfigValue(config, key, defaultValue) {
+                    if (!config) return defaultValue;
+                    var camel = key.charAt(0).toLowerCase() + key.slice(1);
+                    var value = config[key] !== undefined ? config[key] : config[camel];
+                    return value === undefined || value === null ? defaultValue : value;
+                }
+
+                function ensureThemeConfig(config) {
+                    config = config || {};
+                    return {
+                        MaxThemes: Math.max(0, parseInt(getConfigValue(config, 'MaxThemes', 1), 10) || 0),
+                        Volume: Math.max(0, Math.min(100, parseInt(getConfigValue(config, 'Volume', 100), 10) || 0)),
+                        IgnoreOp: !!getConfigValue(config, 'IgnoreOp', false),
+                        IgnoreEd: !!getConfigValue(config, 'IgnoreEd', true),
+                        IgnoreOverlaps: !!getConfigValue(config, 'IgnoreOverlaps', false),
+                        IgnoreCredits: !!getConfigValue(config, 'IgnoreCredits', false)
+                    };
+                }
+
+                function ensureMediaConfig(config) {
+                    config = config || {};
+                    return {
+                        Audio: ensureThemeConfig(getConfigValue(config, 'Audio', null)),
+                        Video: ensureThemeConfig(getConfigValue(config, 'Video', null))
+                    };
+                }
+
+                function ensureSettingsConfig(config) {
+                    config = config || {};
+                    config.ConfigurationVersion = 2;
+                    config.Series = ensureMediaConfig(getConfigValue(config, 'Series', null));
+                    config.Movie = ensureMediaConfig(getConfigValue(config, 'Movie', null));
+                    if (!Array.isArray(getConfigValue(config, 'SeasonThemeMappings', []))) {
+                        config.SeasonThemeMappings = [];
+                    }
+                    return config;
+                }
+
+                function normalizeExtrasLinkMode(value) {
+                    if (value === 'HardLinkOnly') return '1';
+                    if (value === 'CopyOnly') return '2';
+                    if (value === 'HardLinkWithCopyFallback') return '0';
+                    return String(value || 0);
+                }
+
+                function setSettingsState(message) {
+                    settingsState.textContent = message || 'Ready.';
+                }
+
+                function profileId(profile) {
+                    return profile === 'movie' ? 'Movie' : 'Series';
+                }
+
+                function mediaId(media) {
+                    return media === 'video' ? 'Video' : 'Audio';
+                }
+
+                function profileFieldId(profile, media, field) {
+                    return 'Ats' + profileId(profile) + mediaId(media) + field;
+                }
+
+                function profileFields(profile, media) {
+                    return {
+                        MaxThemes: page.querySelector('#' + profileFieldId(profile, media, 'MaxThemes')),
+                        VolumeSlider: page.querySelector('#' + profileFieldId(profile, media, 'VolumeSlider')),
+                        Volume: page.querySelector('#' + profileFieldId(profile, media, 'Volume')),
+                        Mute: page.querySelector('#' + profileFieldId(profile, media, 'Mute')),
+                        IgnoreOp: page.querySelector('#' + profileFieldId(profile, media, 'IgnoreOp')),
+                        IgnoreEd: page.querySelector('#' + profileFieldId(profile, media, 'IgnoreEd')),
+                        IgnoreOverlaps: page.querySelector('#' + profileFieldId(profile, media, 'IgnoreOverlaps')),
+                        IgnoreCredits: page.querySelector('#' + profileFieldId(profile, media, 'IgnoreCredits'))
+                    };
+                }
+
+                function clampVolume(value) {
+                    value = parseInt(value, 10);
+                    if (isNaN(value)) value = 0;
+                    return Math.max(0, Math.min(100, value));
+                }
+
+                function setVolumeFields(fields, value) {
+                    var volume = clampVolume(value);
+                    if (!fields.Volume || !fields.VolumeSlider || !fields.Mute) return;
+                    fields.Volume.value = volume;
+                    fields.VolumeSlider.value = volume;
+                    fields.Mute.checked = volume === 0;
+                    if (volume > 0) {
+                        fields.Volume.dataset.lastNonZero = String(volume);
+                    } else if (!fields.Volume.dataset.lastNonZero) {
+                        fields.Volume.dataset.lastNonZero = '100';
+                    }
+                }
+
+                function bindVolumeControl(profile, media) {
+                    var fields = profileFields(profile, media);
+                    if (!fields.Volume || !fields.VolumeSlider || !fields.Mute) return;
+
+                    fields.VolumeSlider.addEventListener('input', function () {
+                        setVolumeFields(fields, fields.VolumeSlider.value);
+                    });
+                    fields.Volume.addEventListener('input', function () {
+                        setVolumeFields(fields, fields.Volume.value);
+                    });
+                    fields.Mute.addEventListener('change', function () {
+                        if (fields.Mute.checked) {
+                            setVolumeFields(fields, 0);
+                            return;
+                        }
+
+                        setVolumeFields(fields, fields.Volume.dataset.lastNonZero || 100);
+                    });
+                }
+
+                function profileCardHtml(profile, media) {
+                    var profileName = profileId(profile);
+                    var mediaName = mediaId(media);
+                    var title = mediaName === 'Audio' ? 'Audio / theme-music' : 'Video / backdrops';
+                    var volumeHelp = mediaName === 'Audio' ? '100 = original, 1-99 = re-encode, 0 = mute.' : '100 = original, 0 = remove audio.';
+                    return [
+                        '<div class="ats-profile-card">',
+                        '<h5>' + title + '</h5>',
+                        '<div class="inputContainer">',
+                        '<label class="inputLabel inputLabelUnfocused" for="Ats' + profileName + mediaName + 'MaxThemes">Max themes</label>',
+                        '<input id="Ats' + profileName + mediaName + 'MaxThemes" type="number" is="emby-input" min="0" />',
+                        '<div class="fieldDescription">Maximum number of themes to download for this output. 0 disables this output.</div>',
+                        '</div>',
+                        '<div class="inputContainer">',
+                        '<label class="inputLabel inputLabelUnfocused" for="Ats' + profileName + mediaName + 'Volume">Volume</label>',
+                        '<div class="ats-volume-row">',
+                        '<input id="Ats' + profileName + mediaName + 'VolumeSlider" class="ats-volume-range" type="range" min="0" max="100" step="1" />',
+                        '<input id="Ats' + profileName + mediaName + 'Volume" class="ats-volume-number" type="number" is="emby-input" min="0" max="100" />',
+                        '<label class="emby-checkbox-label"><input id="Ats' + profileName + mediaName + 'Mute" type="checkbox" is="emby-checkbox" /><span>Mute</span></label>',
+                        '</div>',
+                        '<div class="fieldDescription">' + volumeHelp + '</div>',
+                        '</div>',
+                        '<div class="ats-toggle-list">',
+                        '<div><label class="emby-checkbox-label"><input id="Ats' + profileName + mediaName + 'IgnoreOp" type="checkbox" is="emby-checkbox" /><span>Ignore OP</span></label><div class="fieldDescription">Skip opening themes for this output.</div></div>',
+                        '<div><label class="emby-checkbox-label"><input id="Ats' + profileName + mediaName + 'IgnoreEd" type="checkbox" is="emby-checkbox" /><span>Ignore ED</span></label><div class="fieldDescription">Skip ending themes for this output.</div></div>',
+                        '<div><label class="emby-checkbox-label"><input id="Ats' + profileName + mediaName + 'IgnoreOverlaps" type="checkbox" is="emby-checkbox" /><span>Ignore overlaps</span></label><div class="fieldDescription">Skip themes marked as overlapping with episode content.</div></div>',
+                        '<div><label class="emby-checkbox-label"><input id="Ats' + profileName + mediaName + 'IgnoreCredits" type="checkbox" is="emby-checkbox" /><span>Ignore credits</span></label><div class="fieldDescription">Skip creditless or credits variants when AnimeThemes marks them separately.</div></div>',
+                        '</div>',
+                        '</div>'
+                    ].join('');
+                }
+
+                function buildProfileControls() {
+                    ['series', 'movie'].forEach(function (profile) {
+                        var container = page.querySelector('.ats-profile-grid[data-settings-profile="' + profile + '"]');
+                        if (!container || container.getAttribute('data-built') === 'true') return;
+                        container.innerHTML = profileCardHtml(profile, 'audio') + profileCardHtml(profile, 'video');
+                        container.setAttribute('data-built', 'true');
+                        bindVolumeControl(profile, 'audio');
+                        bindVolumeControl(profile, 'video');
+                    });
+                }
+
+                function renderThemeSettings(profile, media, theme) {
+                    var fields = profileFields(profile, media);
+                    theme = ensureThemeConfig(theme);
+                    fields.MaxThemes.value = theme.MaxThemes;
+                    setVolumeFields(fields, theme.Volume);
+                    fields.IgnoreOp.checked = theme.IgnoreOp;
+                    fields.IgnoreEd.checked = theme.IgnoreEd;
+                    fields.IgnoreOverlaps.checked = theme.IgnoreOverlaps;
+                    fields.IgnoreCredits.checked = theme.IgnoreCredits;
+                }
+
+                function collectThemeSettings(profile, media) {
+                    var fields = profileFields(profile, media);
+                    return ensureThemeConfig({
+                        MaxThemes: parseInt(fields.MaxThemes.value, 10) || 0,
+                        Volume: clampVolume(fields.Volume.value),
+                        IgnoreOp: fields.IgnoreOp.checked,
+                        IgnoreEd: fields.IgnoreEd.checked,
+                        IgnoreOverlaps: fields.IgnoreOverlaps.checked,
+                        IgnoreCredits: fields.IgnoreCredits.checked
+                    });
+                }
+
+                function renderAllProfileSettings() {
+                    ensureSettingsConfig(state.settingsConfig);
+                    renderThemeSettings('series', 'audio', state.settingsConfig.Series.Audio);
+                    renderThemeSettings('series', 'video', state.settingsConfig.Series.Video);
+                    renderThemeSettings('movie', 'audio', state.settingsConfig.Movie.Audio);
+                    renderThemeSettings('movie', 'video', state.settingsConfig.Movie.Video);
+                }
+
+                function applyAllProfileSettings() {
+                    if (!state.settingsConfig) return;
+                    ensureSettingsConfig(state.settingsConfig);
+                    state.settingsConfig.Series.Audio = collectThemeSettings('series', 'audio');
+                    state.settingsConfig.Series.Video = collectThemeSettings('series', 'video');
+                    state.settingsConfig.Movie.Audio = collectThemeSettings('movie', 'audio');
+                    state.settingsConfig.Movie.Video = collectThemeSettings('movie', 'video');
+                }
+
+                function syncConditionalSettings() {
+                    if (settingsFields.ExtrasOptions) {
+                        settingsFields.ExtrasOptions.hidden = !settingsFields.ExtrasEnabled.checked;
+                    }
+                    if (settingsFields.TagOptions) {
+                        settingsFields.TagOptions.hidden = !settingsFields.TagsEnabled.checked;
+                    }
+                }
+
+                function showCopyState(message) {
+                    if (!settingsFields.CopyCssMessage) return;
+                    settingsFields.CopyCssMessage.textContent = message;
+                    settingsFields.CopyCssMessage.style.display = '';
+                    window.setTimeout(function () {
+                        settingsFields.CopyCssMessage.style.display = 'none';
+                    }, 1800);
+                }
+
+                function copyCustomCss() {
+                    var textarea = settingsFields.CustomCssText;
+                    if (!textarea) return;
+                    var css = textarea.value || textarea.textContent || '';
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(css).then(function () {
+                            showCopyState('Copied.');
+                        }).catch(function () {
+                            textarea.select();
+                            document.execCommand('copy');
+                            showCopyState('Copied.');
+                        });
+                        return;
+                    }
+
+                    textarea.select();
+                    document.execCommand('copy');
+                    showCopyState('Copied.');
+                }
+
+                function applySettingsToForm(config) {
+                    state.settingsConfig = ensureSettingsConfig(config);
+                    settingsFields.ThemeDownloadingEnabled.checked = !!getConfigValue(config, 'ThemeDownloadingEnabled', true);
+                    settingsFields.MaxConcurrentDownloads.value = getConfigValue(config, 'MaxConcurrentDownloads', 1);
+                    settingsFields.DownloadTimeoutSeconds.value = getConfigValue(config, 'DownloadTimeoutSeconds', 600);
+                    settingsFields.AllowAdd.checked = !!getConfigValue(config, 'AllowAdd', true);
+                    settingsFields.ForceRedownload.checked = !!getConfigValue(config, 'ForceRedownload', false);
+                    settingsFields.AllowDelete.checked = !!getConfigValue(config, 'AllowDelete', false);
+                    settingsFields.SeasonThemeDownloadsEnabled.checked = !!getConfigValue(config, 'SeasonThemeDownloadsEnabled', true);
+                    settingsFields.ExtrasEnabled.checked = !!getConfigValue(config, 'ExtrasEnabled', false);
+                    settingsFields.ExtrasLinkMode.value = normalizeExtrasLinkMode(getConfigValue(config, 'ExtrasLinkMode', 0));
+                    settingsFields.ExtrasFileNameFormat.value = getConfigValue(config, 'ExtrasFileNameFormat', '{Order}. {Theme} - {Song}');
+                    settingsFields.TagsEnabled.checked = !!getConfigValue(config, 'TagsEnabled', true);
+                    settingsFields.TagFormat.value = getConfigValue(config, 'TagFormat', '{Season} {Year}');
+                    settingsFields.TagSeasonSpring.value = getConfigValue(config, 'TagSeasonSpring', 'Spring');
+                    settingsFields.TagSeasonSummer.value = getConfigValue(config, 'TagSeasonSummer', 'Summer');
+                    settingsFields.TagSeasonFall.value = getConfigValue(config, 'TagSeasonFall', 'Fall');
+                    settingsFields.TagSeasonWinter.value = getConfigValue(config, 'TagSeasonWinter', 'Winter');
+                    syncConditionalSettings();
+                    renderAllProfileSettings();
+                }
+
+                function removeLegacySettings(config) {
+                    [
+                        'SeriesAudioMaxThemes', 'SeriesAudioVolume', 'SeriesAudioIgnoreOp', 'SeriesAudioIgnoreEd', 'SeriesAudioIgnoreOverlaps', 'SeriesAudioIgnoreCredits',
+                        'SeriesVideoMaxThemes', 'SeriesVideoVolume', 'SeriesVideoIgnoreOp', 'SeriesVideoIgnoreEd', 'SeriesVideoIgnoreOverlaps', 'SeriesVideoIgnoreCredits',
+                        'MovieAudioMaxThemes', 'MovieAudioVolume', 'MovieAudioIgnoreOp', 'MovieAudioIgnoreEd', 'MovieAudioIgnoreOverlaps', 'MovieAudioIgnoreCredits',
+                        'MovieVideoMaxThemes', 'MovieVideoVolume', 'MovieVideoIgnoreOp', 'MovieVideoIgnoreEd', 'MovieVideoIgnoreOverlaps', 'MovieVideoIgnoreCredits'
+                    ].forEach(function (key) {
+                        delete config[key];
+                        delete config[key.charAt(0).toLowerCase() + key.slice(1)];
+                    });
+                }
+
+                function collectSettingsFromForm(config) {
+                    applyAllProfileSettings();
+                    config = ensureSettingsConfig(config || state.settingsConfig);
+                    config.ConfigurationVersion = 2;
+                    config.ThemeDownloadingEnabled = settingsFields.ThemeDownloadingEnabled.checked;
+                    config.MaxConcurrentDownloads = parseInt(settingsFields.MaxConcurrentDownloads.value, 10) || 1;
+                    config.DownloadTimeoutSeconds = parseInt(settingsFields.DownloadTimeoutSeconds.value, 10) || 600;
+                    config.AllowAdd = settingsFields.AllowAdd.checked;
+                    config.ForceRedownload = settingsFields.ForceRedownload.checked;
+                    config.AllowDelete = settingsFields.AllowDelete.checked;
+                    config.SeasonThemeDownloadsEnabled = settingsFields.SeasonThemeDownloadsEnabled.checked;
+                    config.ExtrasEnabled = settingsFields.ExtrasEnabled.checked;
+                    config.ExtrasLinkMode = parseInt(settingsFields.ExtrasLinkMode.value, 10) || 0;
+                    config.ExtrasFileNameFormat = settingsFields.ExtrasFileNameFormat.value;
+                    config.TagsEnabled = settingsFields.TagsEnabled.checked;
+                    config.TagFormat = settingsFields.TagFormat.value;
+                    config.TagSeasonSpring = settingsFields.TagSeasonSpring.value;
+                    config.TagSeasonSummer = settingsFields.TagSeasonSummer.value;
+                    config.TagSeasonFall = settingsFields.TagSeasonFall.value;
+                    config.TagSeasonWinter = settingsFields.TagSeasonWinter.value;
+                    removeLegacySettings(config);
+                    state.settingsConfig = ensureSettingsConfig(config);
+                    return state.settingsConfig;
+                }
+
+                function loadSettings(force) {
+                    if (state.settingsLoaded && !force) return;
+                    setSettingsState('Loading settings...');
+                    ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                        state.settingsLoaded = true;
+                        applySettingsToForm(config || {});
+                        setSettingsState('Settings loaded.');
+                    }).catch(function (err) {
+                        setSettingsState('Failed to load settings.');
+                        Dashboard.alert({ title: 'Settings Error', message: getErrorMessage(err) });
+                    });
+                }
+
+                function saveSettings(showResult) {
+                    setSettingsState('Saving settings...');
+                    return ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                        config = collectSettingsFromForm(config || {});
+                        return ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function (result) {
+                            state.settingsLoaded = true;
+                            setSettingsState('Settings saved.');
+                            if (showResult) {
+                                Dashboard.processPluginConfigurationUpdateResult(result);
+                            }
+                            return result;
+                        });
+                    }).catch(function (err) {
+                        setSettingsState('Failed to save settings.');
+                        Dashboard.alert({ title: 'Settings Error', message: getErrorMessage(err) });
+                        throw err;
+                    });
+                }
+
+                function runScheduledTask() {
+                    saveSettings(false).then(function () {
+                        return ApiClient.getScheduledTasks();
+                    }).then(function (tasks) {
+                        var task = tasks.find(function (t) { return t.Key === 'AnimeThemesSyncDownloader'; });
+                        if (!task) {
+                            throw new Error('AnimeThemes scheduled task was not found.');
+                        }
+                        return ApiClient.startScheduledTask(task.Id);
+                    }).then(function () {
+                        setSettingsState('Scheduled task started.');
+                        Dashboard.alert('Task started.');
+                    }).catch(function (err) {
+                        setSettingsState('Failed to start task.');
+                        Dashboard.alert({ title: 'Task Error', message: getErrorMessage(err) });
+                    });
+                }
+
                 function downloadTheme(row) {
                     var itemId = activeGroupItemId();
                     var rowId = value(row, 'RowId', 'rowId');
@@ -2531,8 +3234,10 @@
                         if (status === 'Completed') {
                             if (state.activeTab === 'finder') {
                                 loadSeasonMappings();
-                            } else {
+                            } else if (state.activeTab === 'library') {
                                 loadThemes();
+                            } else if (state.activeTab === 'settings') {
+                                loadSettings(true);
                             }
                             setTimeout(function () { setProgress(false, '', 0); }, 1600);
                             return;
@@ -2674,6 +3379,17 @@
                         deleteThemeFiles(button.getAttribute('data-delete-scope') || 'all');
                     });
                 });
+                buildProfileControls();
+                settingsFields.ExtrasEnabled.addEventListener('change', syncConditionalSettings);
+                settingsFields.TagsEnabled.addEventListener('change', syncConditionalSettings);
+                syncConditionalSettings();
+                page.querySelector('#AtsSettingsSave').addEventListener('click', function () {
+                    saveSettings(true);
+                });
+                page.querySelector('#AtsRunTask').addEventListener('click', runScheduledTask);
+                if (settingsFields.CopyCssButton) {
+                    settingsFields.CopyCssButton.addEventListener('click', copyCustomCss);
+                }
                 page.querySelector('#AnimeThemesBrowserPlayerClose').addEventListener('click', closePlayer);
                 player.addEventListener('click', function (event) {
                     if (event.target === player) closePlayer();
