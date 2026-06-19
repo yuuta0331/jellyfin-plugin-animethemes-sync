@@ -1,4 +1,4 @@
-<div is="emby-scroller" id="AnimeThemesSyncConfigPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-centerfocus="true" data-bindheader="true" data-controller="__plugin/animethemessyncconfigjs20260619a" data-title="AnimeThemes Sync"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesSyncConfigPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-centerfocus="true" data-bindheader="true" data-controller="__plugin/animethemessyncconfigjs20260619b" data-title="AnimeThemes Sync"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <form id="AnimeThemesSyncConfigForm">
@@ -7,7 +7,7 @@
                             is="emby-link" class="button-link emby-button">Help / GitHub</a>
                     </div>
                     <div class="fieldDescription">
-                        Configure how AnimeThemes (OP/ED) are downloaded and managed. UI version: 2026.06.19-a.
+                        Configure how AnimeThemes (OP/ED) are downloaded and managed. UI version: 2026.06.19-b.
                     </div>
 
                     <!-- Global Settings -->
@@ -96,6 +96,17 @@
                             <div class="fieldDescription">
                                 Hard links save disk space. Copy fallback is useful when the media folder and extras
                                 folder are on file systems that do not support hard links.
+                            </div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="ExtrasFileNameFormat">Extras Display Name Format</label>
+                            <input id="ExtrasFileNameFormat" name="ExtrasFileNameFormat" type="text" is="emby-input" />
+                            <div class="fieldDescription">
+                                Default: <code>{Order}. {Theme} - {Song}</code>. Tokens: <code>{Order}</code>,
+                                <code>{Theme}</code>, <code>{Song}</code>, <code>{Artist}</code>,
+                                <code>{Episodes}</code>, <code>{Labels}</code>, <code>{Quality}</code>.
+                                Existing plugin-created extras will be renamed on the next download run.
                             </div>
                         </div>
 

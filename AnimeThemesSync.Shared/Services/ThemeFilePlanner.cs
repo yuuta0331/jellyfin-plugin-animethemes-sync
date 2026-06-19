@@ -16,10 +16,12 @@ namespace AnimeThemesSync.Shared.Services;
 /// </summary>
 public static class ThemeFilePlanner
 {
+    public const string DefaultExtrasFileNameFormat = "{Order}. {Theme} - {Song}";
     private const int MaxExtrasFileNameLength = 180;
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
     private static readonly Regex LegacyPluginFileRegex = new(@"^(OP|ED)\d+v?\d*(-video)?\.(webm|mp3)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex CanonicalPluginFileRegex = new(@"^\d{2}-(OP|ED)\d+v?\d*( - .+)?\.(webm|mp3)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex DefaultExtrasPluginFileRegex = new(@"^\d{2}\. (OP|ED)\d+v?\d*( - .+)?\.webm$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
     /// Builds all desired media and extras files for an item.
@@ -29,13 +31,15 @@ public static class ThemeFilePlanner
     /// <param name="audioConfig">The audio theme configuration.</param>
     /// <param name="videoConfig">The video theme configuration.</param>
     /// <param name="extrasEnabled">Whether browseable extras should be planned.</param>
+    /// <param name="extrasFileNameFormat">The browseable extras display-name format.</param>
     /// <returns>The output plan for theme media and extras.</returns>
     public static ThemeOutputPlan BuildPlan(
         AnimeThemesAnime anime,
         string itemPath,
         ThemeConfig audioConfig,
         ThemeConfig videoConfig,
-        bool extrasEnabled)
+        bool extrasEnabled,
+        string? extrasFileNameFormat = null)
     {
         var mediaFiles = new List<ThemeFilePlan>();
         var extraFiles = new List<ThemeExtraPlan>();
@@ -57,10 +61,13 @@ public static class ThemeFilePlanner
 
         if (extrasEnabled)
         {
+            var plannedExtraNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in videoFiles)
             {
-                var extrasFileName = BuildExtrasFileName(item.Candidate, item.File.Order);
-                extraFiles.Add(new ThemeExtraPlan(item.File.Path, Path.Combine(extrasPath, extrasFileName)));
+                var extrasFileName = EnsureUniqueFileName(
+                    BuildExtrasFileName(item.Candidate, item.File.Order, extrasFileNameFormat),
+                    plannedExtraNames);
+                extraFiles.Add(BuildExtraPlan(item.File.Path, extrasPath, extrasFileName, item.Candidate, item.File.Order));
             }
         }
 
@@ -88,7 +95,8 @@ public static class ThemeFilePlanner
         string itemPath,
         bool includeAudio,
         bool includeVideo,
-        bool includeExtras)
+        bool includeExtras,
+        string? extrasFileNameFormat = null)
     {
         var mediaFiles = new List<ThemeFilePlan>();
         var extraFiles = new List<ThemeExtraPlan>();
@@ -122,9 +130,8 @@ public static class ThemeFilePlanner
 
         if (includeExtras && videoPlan != null)
         {
-            extraFiles.Add(new ThemeExtraPlan(
-                videoPlan.Path,
-                Path.Combine(extrasPath, BuildExtrasFileName(candidate, order))));
+            var extrasFileName = BuildExtrasFileName(candidate, order, extrasFileNameFormat);
+            extraFiles.Add(BuildExtraPlan(videoPlan.Path, extrasPath, extrasFileName, candidate, order));
         }
 
         return new ThemeOutputPlan(mediaFiles, extraFiles, anime.AnimeThemes ?? new List<AnimeThemesTheme>());
@@ -187,7 +194,9 @@ public static class ThemeFilePlanner
             return true;
         }
 
-        if (CanonicalPluginFileRegex.IsMatch(fileName) || LegacyPluginFileRegex.IsMatch(fileName))
+        if (DefaultExtrasPluginFileRegex.IsMatch(fileName) ||
+            CanonicalPluginFileRegex.IsMatch(fileName) ||
+            LegacyPluginFileRegex.IsMatch(fileName))
         {
             return true;
         }
@@ -358,7 +367,94 @@ public static class ThemeFilePlanner
         return TruncateFileName(stem, ".webm", MaxExtrasFileNameLength);
     }
 
-    private static string BuildExtrasFileName(ScoredCandidate candidate, int order)
+    private static ThemeExtraPlan BuildExtraPlan(
+        string sourcePath,
+        string extrasPath,
+        string extrasFileName,
+        ScoredCandidate candidate,
+        int order)
+    {
+        var targetPath = Path.Combine(extrasPath, extrasFileName);
+        var legacyFileName = BuildLegacyRichExtrasFileName(candidate, order);
+        var legacyPaths = string.Equals(legacyFileName, extrasFileName, StringComparison.OrdinalIgnoreCase)
+            ? Array.Empty<string>()
+            : new[] { Path.Combine(extrasPath, legacyFileName) };
+
+        return new ThemeExtraPlan(sourcePath, targetPath)
+        {
+            Key = BuildBrowserRowId(candidate),
+            LegacyTargetPaths = legacyPaths
+        };
+    }
+
+    private static string EnsureUniqueFileName(string fileName, HashSet<string> usedNames)
+    {
+        if (usedNames.Add(fileName))
+        {
+            return fileName;
+        }
+
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        var extension = Path.GetExtension(fileName);
+        for (var index = 2; ; index++)
+        {
+            var suffix = string.Format(CultureInfo.InvariantCulture, " ({0})", index);
+            var candidate = TruncateFileName(stem + suffix, extension, MaxExtrasFileNameLength);
+            if (usedNames.Add(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
+    private static string BuildExtrasFileName(ScoredCandidate candidate, int order, string? format)
+    {
+        var selectedFormat = string.IsNullOrWhiteSpace(format) ? DefaultExtrasFileNameFormat : format!;
+        var tokens = BuildExtrasFormatTokens(candidate, order);
+        var stem = selectedFormat;
+        foreach (var token in tokens)
+        {
+            stem = Regex.Replace(
+                stem,
+                Regex.Escape("{" + token.Key + "}"),
+                _ => token.Value,
+                RegexOptions.IgnoreCase);
+        }
+
+        stem = Regex.Replace(stem, @"\{[A-Za-z0-9]+\}", string.Empty);
+        stem = Regex.Replace(stem, @"(\s*-\s*){2,}", " - ");
+        stem = Regex.Replace(stem, @"^\s*-\s*|\s*-\s*$", string.Empty);
+        stem = SanitizeFileNamePart(stem, fallback: BuildThemeKey(candidate)).Trim(' ', '.', '-');
+        return TruncateFileName(stem, ".webm", MaxExtrasFileNameLength);
+    }
+
+    private static Dictionary<string, string> BuildExtrasFormatTokens(ScoredCandidate candidate, int order)
+    {
+        var themeKey = BuildThemeKey(candidate);
+        var episodes = string.IsNullOrWhiteSpace(candidate.Entry.Episodes)
+            ? string.Empty
+            : "Eps " + SanitizeFileNamePart(candidate.Entry.Episodes, fallback: string.Empty);
+        var labels = BuildLabels(candidate).ToList();
+        var quality = BuildQualityLabel(candidate.Video);
+
+        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Order"] = order.ToString("00", CultureInfo.InvariantCulture),
+            ["Theme"] = themeKey,
+            ["Type"] = SanitizeFileNamePart(candidate.Theme.Type, fallback: "Theme").ToUpperInvariant(),
+            ["Sequence"] = candidate.Theme.Sequence?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+            ["Version"] = candidate.Entry.Version.HasValue && candidate.Entry.Version.Value > 1
+                ? "v" + candidate.Entry.Version.Value.ToString(CultureInfo.InvariantCulture)
+                : string.Empty,
+            ["Song"] = SanitizeFileNamePart(candidate.Theme.Song?.Title, fallback: string.Empty),
+            ["Artist"] = SanitizeFileNamePart(BuildArtistDisplay(candidate.Theme.Song), fallback: string.Empty),
+            ["Episodes"] = episodes,
+            ["Labels"] = labels.Count > 0 ? string.Join(" ", labels) : string.Empty,
+            ["Quality"] = quality
+        };
+    }
+
+    private static string BuildLegacyRichExtrasFileName(ScoredCandidate candidate, int order)
     {
         var themeKey = BuildThemeKey(candidate);
         var tokens = new List<string>

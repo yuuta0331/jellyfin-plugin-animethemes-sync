@@ -11,7 +11,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests;
 public class ThemeFilePlannerTests
 {
     [Fact]
-    public void BuildPlan_UsesRichExtrasNameFromAnimeThemesMetadata()
+    public void BuildPlan_UsesCompactExtrasNameByDefault()
     {
         var anime = CreateAnime();
 
@@ -32,8 +32,30 @@ public class ThemeFilePlannerTests
                 "02-OP2 - Kaerimichi - Emiri Katou - Eps 3-5 - Spoiler WEB720.webm"
             },
             backdropNames);
-        Assert.Contains("AnimeThemes - 01 - OP1 - staple stable - Chiwa Saitou - Eps 1-2, 12 - NC BD1080.webm", extrasNames);
-        Assert.Contains("AnimeThemes - 02 - OP2 - Kaerimichi - Emiri Katou - Eps 3-5 - Spoiler WEB720.webm", extrasNames);
+        Assert.Contains("01. OP1 - staple stable.webm", extrasNames);
+        Assert.Contains("02. OP2 - Kaerimichi.webm", extrasNames);
+        Assert.Contains(
+            Path.Combine("Media", "Bakemonogatari", "extras", "AnimeThemes - 01 - OP1 - staple stable - Chiwa Saitou - Eps 1-2, 12 - NC BD1080.webm"),
+            plan.ExtraFiles[0].LegacyTargetPaths);
+        Assert.False(string.IsNullOrWhiteSpace(plan.ExtraFiles[0].Key));
+    }
+
+    [Fact]
+    public void BuildPlan_UsesCustomExtrasNameFormat()
+    {
+        var anime = CreateAnime();
+
+        var plan = ThemeFilePlanner.BuildPlan(
+            anime,
+            Path.Combine("Media", "Bakemonogatari"),
+            Disabled(),
+            Enabled(maxThemes: 1),
+            extrasEnabled: true,
+            extrasFileNameFormat: "{Theme} - {Song} - {Artist} - {Episodes} - {Quality}");
+
+        var extrasName = Path.GetFileName(plan.ExtraFiles.Single().TargetPath);
+
+        Assert.Equal("OP1 - staple stable - Chiwa Saitou - Eps 1-2, 12 - BD1080.webm", extrasName);
     }
 
     [Fact]
@@ -88,7 +110,7 @@ public class ThemeFilePlannerTests
 
         Assert.Equal("01-ED Finalv2 - bad title.mp3", Path.GetFileName(plan.MediaFiles.Single(f => !f.IsVideo).Path));
         Assert.Equal("01-ED Finalv2 - bad title.webm", Path.GetFileName(plan.MediaFiles.Single(f => f.IsVideo).Path));
-        Assert.Equal("AnimeThemes - 01 - ED Finalv2 - bad title.webm", Path.GetFileName(plan.ExtraFiles.Single().TargetPath));
+        Assert.Equal("01. ED Finalv2 - bad title.webm", Path.GetFileName(plan.ExtraFiles.Single().TargetPath));
     }
 
     [Fact]
@@ -102,7 +124,7 @@ public class ThemeFilePlannerTests
         var extrasName = Path.GetFileName(plan.ExtraFiles.Single().TargetPath);
 
         Assert.True(extrasName.Length <= 180);
-        Assert.StartsWith("AnimeThemes - 01 - OP1 - ", extrasName, StringComparison.Ordinal);
+        Assert.StartsWith("01. OP1 - ", extrasName, StringComparison.Ordinal);
         Assert.EndsWith(".webm", extrasName, StringComparison.Ordinal);
     }
 
@@ -182,7 +204,50 @@ public class ThemeFilePlannerTests
         Assert.Single(plan.ExtraFiles);
         Assert.Equal("02-OP2 - Kaerimichi - Emiri Katou - Eps 3-5 - Spoiler WEB720.webm", Path.GetFileName(plan.MediaFiles.Single(f => f.IsVideo).Path));
         Assert.Equal("02-OP2 - Kaerimichi - Emiri Katou.mp3", Path.GetFileName(plan.MediaFiles.Single(f => !f.IsVideo).Path));
-        Assert.Equal("AnimeThemes - 02 - OP2 - Kaerimichi - Emiri Katou - Eps 3-5 - Spoiler WEB720.webm", Path.GetFileName(plan.ExtraFiles.Single().TargetPath));
+        Assert.Equal("02. OP2 - Kaerimichi.webm", Path.GetFileName(plan.ExtraFiles.Single().TargetPath));
+    }
+
+    [Fact]
+    public void ExtrasManifest_RenamesLegacyAndPreviouslyTrackedExtras()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ats-extras-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+
+        try
+        {
+            var legacyPath = Path.Combine(directory, "AnimeThemes - 01 - OP1 - Song.webm");
+            var firstTargetPath = Path.Combine(directory, "01. OP1 - Song.webm");
+            var secondTargetPath = Path.Combine(directory, "OP1 - Song.webm");
+            File.WriteAllText(legacyPath, "video");
+
+            var firstPlan = new ThemeExtraPlan(Path.Combine(directory, "source.webm"), firstTargetPath)
+            {
+                Key = "theme-key",
+                LegacyTargetPaths = new[] { legacyPath }
+            };
+
+            var firstResult = ThemeExtrasManifestService.MigrateExtraFile(firstPlan, overwrite: false);
+
+            Assert.Equal("renamed", firstResult.Action);
+            Assert.False(File.Exists(legacyPath));
+            Assert.True(File.Exists(firstTargetPath));
+
+            var secondPlan = new ThemeExtraPlan(Path.Combine(directory, "source.webm"), secondTargetPath)
+            {
+                Key = "theme-key"
+            };
+
+            var secondResult = ThemeExtrasManifestService.MigrateExtraFile(secondPlan, overwrite: false);
+
+            Assert.Equal("renamed", secondResult.Action);
+            Assert.False(File.Exists(firstTargetPath));
+            Assert.True(File.Exists(secondTargetPath));
+            Assert.True(File.Exists(Path.Combine(directory, ThemeExtrasManifestService.ManifestFileName)));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
@@ -423,7 +488,7 @@ public class ThemeFilePlannerTests
     }
 
     [Fact]
-    public void SeasonFinderMappings_UseBrowserResolutionAndHideSpecialSeasons()
+    public void SeasonFinderMappings_LoadWithoutExternalResolutionAndHideSpecialSeasons()
     {
         var root = FindRepositoryRoot();
         var downloaderFiles = new[]
@@ -435,21 +500,32 @@ public class ThemeFilePlannerTests
         foreach (var file in downloaderFiles)
         {
             var content = File.ReadAllText(file);
-            Assert.Contains("public async Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync", content, StringComparison.Ordinal);
-            Assert.DoesNotContain("private SeasonThemeMappingRow BuildSeasonMappingRow(", content, StringComparison.Ordinal);
-            Assert.DoesNotContain("Task.FromResult(BuildSeasonMappingRow", content, StringComparison.Ordinal);
+            Assert.Contains("public Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync", content, StringComparison.Ordinal);
+            Assert.Contains("private SeasonThemeMappingRow BuildSeasonMappingRow(", content, StringComparison.Ordinal);
+            Assert.Contains("private SeasonThemeMatchState BuildSeasonThemeMatchState(", content, StringComparison.Ordinal);
+            Assert.Contains("Task.FromResult<IReadOnlyList<SeasonThemeMappingRow>>(rows)", content, StringComparison.Ordinal);
 
-            var start = content.IndexOf("public async Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync", StringComparison.Ordinal);
+            var start = content.IndexOf("public Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync", StringComparison.Ordinal);
             var end = content.IndexOf("public async Task<IReadOnlyList<ThemeFinderSearchResult>> SearchThemeFinderAnimeAsync", StringComparison.Ordinal);
             Assert.True(start >= 0 && end > start);
 
             var mappingsMethod = content[start..end];
-            Assert.Contains("ResolveAnime(series, cancellationToken, logMissingIds: false)", mappingsMethod, StringComparison.Ordinal);
-            Assert.Contains("BuildAutomaticSeasonAnimeMapAsync(series, seasons, seriesAnime, cancellationToken)", mappingsMethod, StringComparison.Ordinal);
-            Assert.Contains("BuildSeasonMappingRowAsync(series, season, seriesAnime, automaticSeasonAnime, cancellationToken)", mappingsMethod, StringComparison.Ordinal);
+            Assert.Contains("BuildSeasonMappingRow(series, season)", mappingsMethod, StringComparison.Ordinal);
             Assert.Contains(".Where(IsSeasonEligibleForThemeMatching)", mappingsMethod, StringComparison.Ordinal);
+            Assert.DoesNotContain("ResolveAnime(series", mappingsMethod, StringComparison.Ordinal);
+            Assert.DoesNotContain("BuildAutomaticSeasonAnimeMapAsync", mappingsMethod, StringComparison.Ordinal);
 
-            Assert.Contains("BuildResolvedSeasonMappingRowAsync(series, season, cancellationToken)", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("GetSeasonThemeMappingAsync", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("BuildResolvedSeasonMappingRowAsync", content, StringComparison.Ordinal);
+            Assert.Contains("SaveAutomaticSeasonThemeMapping(series, season", content, StringComparison.Ordinal);
+            Assert.Contains("Locked = false", content, StringComparison.Ordinal);
+            Assert.Contains("existing?.Locked == true", content, StringComparison.Ordinal);
+            Assert.Contains("var status = mapping.Locked ? \"Manual\" : \"Auto\"", content, StringComparison.Ordinal);
+            Assert.Contains("ResolveSeasonBrowserAnimeAsync(series, season", content, StringComparison.Ordinal);
+            Assert.Contains("ResolveAnimeByIdentityAsync", content, StringComparison.Ordinal);
+            Assert.Contains("GetSeasonMappingMatchRank", content, StringComparison.Ordinal);
+            Assert.Contains("OrderByDescending(candidate => candidate.Mapping.Locked)", content, StringComparison.Ordinal);
+            Assert.Contains("MatchesId(mapping.SeriesItemId", content, StringComparison.Ordinal);
             Assert.Contains("season.IndexNumber == 0", content, StringComparison.Ordinal);
             Assert.Contains("IndexOf(\"special\", StringComparison.OrdinalIgnoreCase)", content, StringComparison.Ordinal);
             Assert.Contains(".Where(s => IsSeasonEligibleForThemeMatching(s) && s.IndexNumber.HasValue && s.IndexNumber.Value > 1)", content, StringComparison.Ordinal);
@@ -469,7 +545,11 @@ public class ThemeFilePlannerTests
             Assert.Contains("status === 'auto'", content, StringComparison.Ordinal);
             Assert.Contains("status === 'direct'", content, StringComparison.Ordinal);
             Assert.Contains("status === 'series'", content, StringComparison.Ordinal);
+            Assert.Contains("value(row, 'AniListId', 'aniListId')", content, StringComparison.Ordinal);
+            Assert.Contains("value(row, 'MyAnimeListId', 'myAnimeListId')", content, StringComparison.Ordinal);
             Assert.Contains("if (!hasMatch) addChip(chips, 'Needs match', 'missing');", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("function resolveSeasonMappings(rows)", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("seasonMappingResolveToken", content, StringComparison.Ordinal);
             Assert.DoesNotContain("groupHasContent", content, StringComparison.Ordinal);
             Assert.DoesNotContain("if (!value(row, 'AnimeThemesSlug', 'animeThemesSlug')) addChip(chips, 'Needs match', 'missing');", content, StringComparison.Ordinal);
         }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace AnimeThemesSync.Shared.Models;
@@ -22,7 +23,18 @@ public sealed record ThemeFilePlan(
 /// </summary>
 /// <param name="SourcePath">The already downloaded video path.</param>
 /// <param name="TargetPath">The extras path.</param>
-public sealed record ThemeExtraPlan(string SourcePath, string TargetPath);
+public sealed record ThemeExtraPlan(string SourcePath, string TargetPath)
+{
+    /// <summary>
+    /// Gets a stable key for this extras item across display-name format changes.
+    /// </summary>
+    public string Key { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets known pre-manifest target paths that can be renamed to <see cref="TargetPath"/>.
+    /// </summary>
+    public IReadOnlyList<string> LegacyTargetPaths { get; init; } = Array.Empty<string>();
+}
 
 /// <summary>
 /// Describes one local directory cleanup pass for plugin-owned theme files.

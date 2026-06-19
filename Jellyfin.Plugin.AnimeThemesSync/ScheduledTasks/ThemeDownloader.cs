@@ -184,7 +184,7 @@ public class ThemeDownloader : IScheduledTask
         return new ThemeBrowserSummary(items.Count, videos, songs, extras, bytes);
     }
 
-    public async Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync(CancellationToken cancellationToken)
+    public Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync(CancellationToken cancellationToken)
     {
         var rows = new List<SeasonThemeMappingRow>();
         foreach (var series in GetEnabledLibraryItems().OfType<Series>().OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase))
@@ -194,10 +194,6 @@ public class ThemeDownloader : IScheduledTask
             var seasons = GetSeasonItems(series)
                 .Where(IsSeasonEligibleForThemeMatching)
                 .ToList();
-            var seriesAnime = await ResolveAnime(series, cancellationToken, logMissingIds: false).ConfigureAwait(false);
-            var automaticSeasonAnime = seriesAnime == null
-                ? new Dictionary<Guid, AnimeThemesAnime>()
-                : await BuildAutomaticSeasonAnimeMapAsync(series, seasons, seriesAnime, cancellationToken).ConfigureAwait(false);
 
             foreach (var season in seasons)
             {
@@ -206,11 +202,11 @@ public class ThemeDownloader : IScheduledTask
                     continue;
                 }
 
-                rows.Add(await BuildSeasonMappingRowAsync(series, season, seriesAnime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false));
+                rows.Add(BuildSeasonMappingRow(series, season));
             }
         }
 
-        return rows;
+        return Task.FromResult<IReadOnlyList<SeasonThemeMappingRow>>(rows);
     }
 
     public async Task<IReadOnlyList<ThemeFinderSearchResult>> SearchThemeFinderAnimeAsync(
@@ -280,7 +276,7 @@ public class ThemeDownloader : IScheduledTask
             ?? throw new InvalidOperationException("The parent series for the requested season was not found.");
 
         config.SeasonThemeMappings ??= [];
-        RemoveSeasonMappings(config.SeasonThemeMappings, season);
+        RemoveSeasonMappings(config.SeasonThemeMappings, series, season);
         config.SeasonThemeMappings.Add(new SeasonThemeMapping
         {
             Enabled = true,
@@ -296,7 +292,7 @@ public class ThemeDownloader : IScheduledTask
         });
         Plugin.Instance.UpdateConfiguration(config);
 
-        return await BuildResolvedSeasonMappingRowAsync(series, season, cancellationToken).ConfigureAwait(false);
+        return await Task.FromResult(BuildSeasonMappingRow(series, season)).ConfigureAwait(false);
     }
 
     public async Task<SeasonThemeMappingRow> DeleteSeasonThemeMappingAsync(Guid seasonItemId, CancellationToken cancellationToken)
@@ -308,10 +304,10 @@ public class ThemeDownloader : IScheduledTask
             ?? throw new InvalidOperationException("The parent series for the requested season was not found.");
 
         config.SeasonThemeMappings ??= [];
-        RemoveSeasonMappings(config.SeasonThemeMappings, season);
+        RemoveSeasonMappings(config.SeasonThemeMappings, series, season);
         Plugin.Instance.UpdateConfiguration(config);
 
-        return await BuildResolvedSeasonMappingRowAsync(series, season, cancellationToken).ConfigureAwait(false);
+        return await Task.FromResult(BuildSeasonMappingRow(series, season)).ConfigureAwait(false);
     }
 
     private void AccumulateLocalThemeDirectories(string itemPath, ref int videos, ref int songs, ref int extras, ref long bytes)
@@ -427,8 +423,10 @@ public class ThemeDownloader : IScheduledTask
             item.Path,
             includeAudio: true,
             includeVideo: true,
-            includeExtras: config.ExtrasEnabled);
+            includeExtras: config.ExtrasEnabled,
+            extrasFileNameFormat: config.ExtrasFileNameFormat);
 
+        MigrateExtraFiles(plan.ExtraFiles, forceRedownload || config.ForceRedownload);
         var pendingMedia = plan.MediaFiles
             .Where(file => forceRedownload || config.ForceRedownload || !_fileSystem.FileExists(file.Path))
             .ToList();
@@ -473,6 +471,7 @@ public class ThemeDownloader : IScheduledTask
                     continue;
                 }
 
+                ThemeExtrasManifestService.UpdateExtraFile(extra);
                 extrasCompleted++;
                 _logger.LogInformation(
                     "Extras {Action} [{ItemName}] {Filename} (HardLinkVerified={HardLinkVerified}, LinkCount={LinkCount}, FallbackReason={FallbackReason})",
@@ -753,7 +752,7 @@ public class ThemeDownloader : IScheduledTask
 
         foreach (var season in seasonsWithPath)
         {
-            var resolution = await ResolveSeasonBrowserAnimeAsync(season, seriesAnime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false);
+            var resolution = await ResolveSeasonBrowserAnimeAsync(series, season, seriesAnime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false);
             var rows = resolution.SameAsSeries ? seriesRows : BuildBrowserRowsForResolution(season, resolution, config);
             groups.Add(BuildBrowserThemeGroup(
                 season,
@@ -815,13 +814,16 @@ public class ThemeDownloader : IScheduledTask
         if (item is Season season)
         {
             var series = FindSeriesForSeason(season);
-            var seriesAnime = series == null
-                ? null
-                : await ResolveAnime(series, cancellationToken, logMissingIds: false).ConfigureAwait(false);
-            var automaticSeasonAnime = series == null || seriesAnime == null
+            if (series == null)
+            {
+                return new BrowserAnimeResolution(null, "Unmatched", "NoSeries", false);
+            }
+
+            var seriesAnime = await ResolveAnime(series, cancellationToken, logMissingIds: false).ConfigureAwait(false);
+            var automaticSeasonAnime = seriesAnime == null
                 ? new Dictionary<Guid, AnimeThemesAnime>()
                 : await BuildAutomaticSeasonAnimeMapAsync(series, GetSeasonItems(series), seriesAnime, cancellationToken).ConfigureAwait(false);
-            return await ResolveSeasonBrowserAnimeAsync(season, seriesAnime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false);
+            return await ResolveSeasonBrowserAnimeAsync(series, season, seriesAnime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false);
         }
 
         var anime = await ResolveAnime(item, cancellationToken).ConfigureAwait(false);
@@ -833,54 +835,42 @@ public class ThemeDownloader : IScheduledTask
     }
 
     private async Task<BrowserAnimeResolution> ResolveSeasonBrowserAnimeAsync(
+        Series series,
         Season season,
         AnimeThemesAnime? seriesAnime,
         Dictionary<Guid, AnimeThemesAnime> automaticSeasonAnime,
         CancellationToken cancellationToken)
     {
-        var mapping = FindSeasonThemeMapping(season);
+        automaticSeasonAnime.TryGetValue(season.Id, out var automaticAnime);
+        var state = BuildSeasonThemeMatchState(series, season, automaticAnime);
         AnimeThemesAnime? anime = null;
-        var status = "Unmatched";
-        var source = "None";
 
-        if (mapping != null)
+        if (state.Status == "Series")
         {
-            anime = await ResolveAnime(season, cancellationToken, logMissingIds: false).ConfigureAwait(false);
-            status = "Manual";
-            source = "SeasonThemeMappings";
+            anime = seriesAnime;
         }
-        else if (HasProviderIdentity(season))
-        {
-            anime = await ResolveAnime(season, cancellationToken, logMissingIds: false).ConfigureAwait(false);
-            if (anime != null)
-            {
-                status = "Direct";
-                source = "SeasonProviderIds";
-            }
-        }
-
-        if (anime == null && automaticSeasonAnime.TryGetValue(season.Id, out var automaticAnime))
+        else if (automaticAnime != null && state.Status == "Auto" && state.Source == "AniListRelations")
         {
             anime = automaticAnime;
-            status = "Auto";
-            source = "AniListRelations";
+        }
+        else if (state.HasAnimeIdentity)
+        {
+            anime = await ResolveAnimeByIdentityAsync(
+                state.AnimeThemesSlug,
+                state.AniListId,
+                state.MyAnimeListId,
+                cancellationToken).ConfigureAwait(false);
         }
 
-        var sameAsSeries = seriesAnime != null && anime != null && IsSameAnime(seriesAnime, anime);
-        if (anime == null && season.IndexNumber == 1 && seriesAnime != null)
+        var sameAsSeries = state.SameAsSeries ||
+            (seriesAnime != null && anime != null && IsSameAnime(seriesAnime, anime));
+        if (anime == null && state.Status == "Series")
         {
             anime = seriesAnime;
             sameAsSeries = true;
-            status = "Series";
-            source = "SeriesLevel";
-        }
-        else if (sameAsSeries && status != "Manual")
-        {
-            status = "Series";
-            source = "SeriesLevel";
         }
 
-        return new BrowserAnimeResolution(anime, status, source, sameAsSeries);
+        return new BrowserAnimeResolution(anime, state.Status, state.Source, sameAsSeries);
     }
 
     private static string? BuildAnimeThemesUrl(AnimeThemesAnime? anime)
@@ -921,6 +911,7 @@ public class ThemeDownloader : IScheduledTask
             var result = await ResolveItem(item, audioConfig, videoConfig, cancellationToken).ConfigureAwait(false);
             if (result != null)
             {
+                MigrateExtraFiles(result.ExtraFiles, forceRedownload || config.ForceRedownload);
                 if (config.AllowAdd)
                 {
                     foreach (var file in result.MediaFiles)
@@ -934,7 +925,7 @@ public class ThemeDownloader : IScheduledTask
 
                     foreach (var extra in result.ExtraFiles)
                     {
-                        if (forceRedownload || !_fileSystem.FileExists(extra.TargetPath))
+                        if (forceRedownload || config.ForceRedownload || !_fileSystem.FileExists(extra.TargetPath))
                         {
                             allExtras.Add((extra, itemName));
                         }
@@ -1046,6 +1037,7 @@ public class ThemeDownloader : IScheduledTask
                     config.ExtrasLinkMode,
                     config.ForceRedownload);
 
+                ThemeExtrasManifestService.UpdateExtraFile(extra.Extra);
                 _logger.LogInformation(
                     "Extras {Action} [{ItemName}] {Filename} (HardLinkVerified={HardLinkVerified}, LinkCount={LinkCount}, FallbackReason={FallbackReason})",
                     result.Action,
@@ -1237,7 +1229,7 @@ public class ThemeDownloader : IScheduledTask
         var plans = new List<ThemeOutputPlan>();
         if (anime?.AnimeThemes != null)
         {
-            plans.Add(ThemeFilePlanner.BuildPlan(anime, item.Path, audioConfig, videoConfig, config?.ExtrasEnabled ?? false));
+            plans.Add(ThemeFilePlanner.BuildPlan(anime, item.Path, audioConfig, videoConfig, config?.ExtrasEnabled ?? false, config?.ExtrasFileNameFormat));
         }
         else
         {
@@ -1266,24 +1258,21 @@ public class ThemeDownloader : IScheduledTask
 
         foreach (var season in seasons)
         {
-            if (string.IsNullOrWhiteSpace(season.Path))
+            if (!IsSeasonEligibleForThemeMatching(season) || string.IsNullOrWhiteSpace(season.Path))
             {
                 continue;
             }
 
-            var seasonMapping = FindSeasonThemeMapping(season);
-            var seasonAnime = await ResolveAnime(season, cancellationToken, logMissingIds: false).ConfigureAwait(false);
-            if (seasonAnime == null && automaticSeasonAnime.TryGetValue(season.Id, out var automaticAnime))
-            {
-                seasonAnime = automaticAnime;
-            }
+            var seasonMapping = FindSeasonThemeMapping(series, season);
+            var seasonResolution = await ResolveSeasonBrowserAnimeAsync(series, season, anime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false);
+            var seasonAnime = seasonResolution.Anime;
 
             if (seasonAnime?.AnimeThemes == null)
             {
                 continue;
             }
 
-            if (anime != null && IsSameAnime(seasonAnime, anime))
+            if (seasonResolution.SameAsSeries)
             {
                 _logger.LogInformation(
                     "  Skipping season theme output for {SeriesName} / {SeasonName}; it resolves to the series-level AnimeThemes entry.",
@@ -1298,7 +1287,7 @@ public class ThemeDownloader : IScheduledTask
                 season.Name,
                 seasonAnime.Name ?? seasonAnime.Slug ?? "Unknown");
             var outputPath = ShouldOutputMappedSeasonToSeriesRoot(season, seasonMapping) ? series.Path : season.Path;
-            plans.Add(ThemeFilePlanner.BuildPlan(seasonAnime, outputPath, audioConfig, videoConfig, config?.ExtrasEnabled ?? false));
+            plans.Add(ThemeFilePlanner.BuildPlan(seasonAnime, outputPath, audioConfig, videoConfig, config?.ExtrasEnabled ?? false, config?.ExtrasFileNameFormat));
         }
 
         if (plans.Count == 0)
@@ -1312,6 +1301,100 @@ public class ThemeDownloader : IScheduledTask
     private static bool ShouldOutputMappedSeasonToSeriesRoot(Season season, SeasonThemeMapping? mapping)
     {
         return mapping != null && (!season.IndexNumber.HasValue || season.IndexNumber.Value <= 1);
+    }
+
+    private SeasonThemeMappingRow BuildSeasonMappingRow(Series series, Season season)
+    {
+        var state = BuildSeasonThemeMatchState(series, season, null);
+
+        var animeThemesUrl = !string.IsNullOrWhiteSpace(state.AnimeThemesSlug)
+            ? Constants.AnimeThemesWebUrl + "/anime/" + state.AnimeThemesSlug
+            : null;
+
+        return new SeasonThemeMappingRow(
+            series.Id,
+            series.Name ?? "Unknown",
+            series.Path,
+            season.Id,
+            season.Name ?? "Season",
+            season.Path,
+            season.IndexNumber,
+            state.Status,
+            state.Source,
+            state.SameAsSeries,
+            state.AnimeName,
+            null,
+            state.AnimeThemesSlug,
+            animeThemesUrl,
+            state.AniListId,
+            state.MyAnimeListId,
+            BuildImageUrl(season, ImageType.Primary, "Primary") ?? BuildImageUrl(series, ImageType.Primary, "Primary"));
+    }
+
+    private SeasonThemeMatchState BuildSeasonThemeMatchState(
+        Series series,
+        Season season,
+        AnimeThemesAnime? automaticAnime)
+    {
+        var mapping = FindSeasonThemeMapping(series, season);
+        var seasonIds = ExtractItemProviderIds(season);
+        var seriesIds = ExtractItemProviderIds(series);
+        var seasonSlug = GetItemAnimeThemesSlug(season);
+        var seriesSlug = GetItemAnimeThemesSlug(series);
+
+        if (mapping != null)
+        {
+            var status = mapping.Locked ? "Manual" : "Auto";
+            var source = mapping.Locked ? "SeasonThemeMappings" : "AniListRelations";
+            var animeThemesSlug = mapping.AnimeThemesSlug ?? seasonSlug;
+            return new SeasonThemeMatchState(
+                status,
+                source,
+                false,
+                animeThemesSlug ?? season.Name,
+                animeThemesSlug,
+                mapping.AniListId ?? seasonIds.AniListId,
+                mapping.MyAnimeListId ?? seasonIds.MyAnimeListId);
+        }
+
+        if (HasProviderIdentity(season))
+        {
+            return new SeasonThemeMatchState(
+                "Direct",
+                "SeasonProviderIds",
+                false,
+                season.Name,
+                seasonSlug,
+                seasonIds.AniListId,
+                seasonIds.MyAnimeListId);
+        }
+
+        if (automaticAnime != null)
+        {
+            var automaticIds = ExtractAnimeExternalIds(automaticAnime);
+            return new SeasonThemeMatchState(
+                "Auto",
+                "AniListRelations",
+                false,
+                automaticAnime.Name ?? automaticAnime.Slug ?? season.Name,
+                automaticAnime.Slug,
+                automaticIds.AniListId,
+                automaticIds.MyAnimeListId);
+        }
+
+        if (season.IndexNumber == 1 && HasProviderIdentity(series))
+        {
+            return new SeasonThemeMatchState(
+                "Series",
+                "SeriesLevel",
+                true,
+                series.Name,
+                seriesSlug,
+                seriesIds.AniListId,
+                seriesIds.MyAnimeListId);
+        }
+
+        return new SeasonThemeMatchState("Unmatched", "None", false, null, null, null, null);
     }
 
     private async Task<Dictionary<Guid, AnimeThemesAnime>> BuildAutomaticSeasonAnimeMapAsync(
@@ -1364,6 +1447,7 @@ public class ThemeDownloader : IScheduledTask
             }
 
             map[season.Id] = resolved[candidateIndex].Anime;
+            SaveAutomaticSeasonThemeMapping(series, season, resolved[candidateIndex].Anime);
             _logger.LogInformation(
                 "  Auto-mapped {SeriesName} / {SeasonName} to AnimeThemes anime {AnimeName} via AniList relations.",
                 series.Name,
@@ -1374,95 +1458,60 @@ public class ThemeDownloader : IScheduledTask
         return map;
     }
 
-    private async Task<SeasonThemeMappingRow> BuildResolvedSeasonMappingRowAsync(
-        Series series,
-        Season season,
-        CancellationToken cancellationToken)
+    private static void SaveAutomaticSeasonThemeMapping(Series series, Season season, AnimeThemesAnime anime)
     {
-        var seriesAnime = await ResolveAnime(series, cancellationToken, logMissingIds: false).ConfigureAwait(false);
-        var seasons = GetSeasonItems(series)
-            .Where(IsSeasonEligibleForThemeMatching)
-            .ToList();
-        var automaticSeasonAnime = seriesAnime == null || !IsSeasonEligibleForThemeMatching(season)
-            ? new Dictionary<Guid, AnimeThemesAnime>()
-            : await BuildAutomaticSeasonAnimeMapAsync(series, seasons, seriesAnime, cancellationToken).ConfigureAwait(false);
-
-        return await BuildSeasonMappingRowAsync(series, season, seriesAnime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<SeasonThemeMappingRow> BuildSeasonMappingRowAsync(
-        Series series,
-        Season season,
-        AnimeThemesAnime? seriesAnime,
-        Dictionary<Guid, AnimeThemesAnime> automaticSeasonAnime,
-        CancellationToken cancellationToken)
-    {
-        var mapping = FindSeasonThemeMapping(season);
-        AnimeThemesAnime? anime = null;
-        var status = "Unmatched";
-        var source = "None";
-
-        if (mapping != null)
+        if (!IsSeasonEligibleForThemeMatching(season))
         {
-            anime = await ResolveAnime(season, cancellationToken, logMissingIds: false).ConfigureAwait(false);
-            status = "Manual";
-            source = "SeasonThemeMappings";
-        }
-        else if (HasProviderIdentity(season))
-        {
-            anime = await ResolveAnime(season, cancellationToken, logMissingIds: false).ConfigureAwait(false);
-            if (anime != null)
-            {
-                status = "Direct";
-                source = "SeasonProviderIds";
-            }
+            return;
         }
 
-        if (anime == null && automaticSeasonAnime.TryGetValue(season.Id, out var automaticAnime))
+        var plugin = Plugin.Instance;
+        var config = plugin?.Configuration;
+        if (config == null)
         {
-            anime = automaticAnime;
-            status = "Auto";
-            source = "AniListRelations";
+            return;
         }
 
-        var sameAsSeries = seriesAnime != null && anime != null && IsSameAnime(seriesAnime, anime);
-        if (anime == null && season.IndexNumber == 1 && seriesAnime != null)
+        config.SeasonThemeMappings ??= [];
+        var existing = FindSeasonThemeMapping(config.SeasonThemeMappings, series, season);
+        if (existing?.Locked == true)
         {
-            anime = seriesAnime;
-            sameAsSeries = true;
-            status = "Series";
-            source = "SeriesLevel";
-        }
-        else if (sameAsSeries && status != "Manual")
-        {
-            status = "Series";
-            source = "SeriesLevel";
+            return;
         }
 
         var ids = ExtractAnimeExternalIds(anime);
-        var fallbackIds = ExtractItemProviderIds(season);
-        var animeThemesUrl = !string.IsNullOrWhiteSpace(anime?.Slug)
-            ? Constants.AnimeThemesWebUrl + "/anime/" + anime.Slug
-            : null;
+        var animeThemesSlug = !string.IsNullOrWhiteSpace(anime.Slug) ? anime.Slug.Trim() : existing?.AnimeThemesSlug;
+        var aniListId = ids.AniListId ?? existing?.AniListId;
+        var myAnimeListId = ids.MyAnimeListId ?? existing?.MyAnimeListId;
+        if (string.IsNullOrWhiteSpace(animeThemesSlug) && !aniListId.HasValue && !myAnimeListId.HasValue)
+        {
+            return;
+        }
 
-        return new SeasonThemeMappingRow(
-            series.Id,
-            series.Name ?? "Unknown",
-            series.Path,
-            season.Id,
-            season.Name ?? "Season",
-            season.Path,
-            season.IndexNumber,
-            status,
-            source,
-            sameAsSeries,
-            anime?.Name,
-            anime?.Id > 0 ? anime.Id : null,
-            anime?.Slug,
-            animeThemesUrl,
-            mapping?.AniListId ?? ids.AniListId ?? fallbackIds.AniListId,
-            mapping?.MyAnimeListId ?? ids.MyAnimeListId ?? fallbackIds.MyAnimeListId,
-            BuildImageUrl(season, ImageType.Primary, "Primary") ?? BuildImageUrl(series, ImageType.Primary, "Primary"));
+        if (existing != null &&
+            !existing.Locked &&
+            string.Equals(existing.AnimeThemesSlug, animeThemesSlug, StringComparison.OrdinalIgnoreCase) &&
+            existing.AniListId == aniListId &&
+            existing.MyAnimeListId == myAnimeListId)
+        {
+            return;
+        }
+
+        RemoveSeasonMappings(config.SeasonThemeMappings, series, season);
+        config.SeasonThemeMappings.Add(new SeasonThemeMapping
+        {
+            Enabled = true,
+            SeriesItemId = series.Id.ToString("D"),
+            SeriesPath = series.Path,
+            SeasonItemId = season.Id.ToString("D"),
+            SeasonPath = season.Path,
+            SeasonNumber = season.IndexNumber,
+            AnimeThemesSlug = animeThemesSlug,
+            AniListId = aniListId,
+            MyAnimeListId = myAnimeListId,
+            Locked = false,
+        });
+        plugin!.UpdateConfiguration(config);
     }
 
     private static string? GetAnimePrimaryImageUrl(AnimeThemesAnime? anime)
@@ -1645,12 +1694,15 @@ public class ThemeDownloader : IScheduledTask
             .FirstOrDefault(series => GetSeasonItems(series).Any(candidate => candidate.Id == season.Id));
     }
 
-    private static void RemoveSeasonMappings(List<SeasonThemeMapping> mappings, Season season)
+    private static void RemoveSeasonMappings(List<SeasonThemeMapping> mappings, Series series, Season season)
     {
         var seasonItemId = season.Id.ToString("D");
         var compactSeasonItemId = season.Id.ToString("N");
         var seasonPath = NormalizeMappingPath(season.Path);
-        var seriesPath = NormalizeMappingPath(Path.GetDirectoryName(season.Path));
+        var seriesItemId = series.Id.ToString("D");
+        var compactSeriesItemId = series.Id.ToString("N");
+        var seriesPath = NormalizeMappingPath(series.Path);
+        var seasonParentPath = NormalizeMappingPath(Path.GetDirectoryName(season.Path));
         var seasonNumber = season.IndexNumber;
 
         mappings.RemoveAll(mapping =>
@@ -1658,7 +1710,9 @@ public class ThemeDownloader : IScheduledTask
             MatchesPath(mapping.SeasonPath, seasonPath) ||
             (mapping.SeasonNumber.HasValue &&
              seasonNumber == mapping.SeasonNumber.Value &&
-             MatchesPath(mapping.SeriesPath, seriesPath)));
+             (MatchesId(mapping.SeriesItemId, seriesItemId, compactSeriesItemId) ||
+              MatchesPath(mapping.SeriesPath, seriesPath) ||
+              MatchesPath(mapping.SeriesPath, seasonParentPath))));
     }
 
     private async Task<AnimeThemesAnime?> ResolveAnime(
@@ -1666,7 +1720,7 @@ public class ThemeDownloader : IScheduledTask
         CancellationToken cancellationToken,
         bool logMissingIds = true)
     {
-        var mapping = item is Season ? FindSeasonThemeMapping(item) : null;
+        var mapping = item is Season season ? FindSeasonThemeMapping(FindSeriesForSeason(season), season) : null;
         int? aniListId = null;
         int? malId = null;
         string? animeThemesSlug = mapping?.AnimeThemesSlug;
@@ -1702,12 +1756,22 @@ public class ThemeDownloader : IScheduledTask
             animeThemesSlug = providerSlug;
         }
 
-        if (aniListId == null && malId == null &&
-            string.IsNullOrWhiteSpace(animeThemesSlug))
+        return await ResolveAnimeByIdentityAsync(animeThemesSlug, aniListId, malId, cancellationToken, item.Name, logMissingIds).ConfigureAwait(false);
+    }
+
+    private async Task<AnimeThemesAnime?> ResolveAnimeByIdentityAsync(
+        string? animeThemesSlug,
+        int? aniListId,
+        int? malId,
+        CancellationToken cancellationToken,
+        string? itemName = null,
+        bool logMissingIds = false)
+    {
+        if (aniListId == null && malId == null && string.IsNullOrWhiteSpace(animeThemesSlug))
         {
             if (logMissingIds)
             {
-                _logger.LogWarning("  No AnimeThemes, AniList, or MAL ID found for {ItemName}. Skipping.", item.Name);
+                _logger.LogWarning("  No AnimeThemes, AniList, or MAL ID found for {ItemName}. Skipping.", itemName ?? "item");
             }
 
             return null;
@@ -1788,26 +1852,86 @@ public class ThemeDownloader : IScheduledTask
 
     private SeasonThemeMapping? FindSeasonThemeMapping(BaseItem season)
     {
+        return FindSeasonThemeMapping(season is Season typedSeason ? FindSeriesForSeason(typedSeason) : null, season);
+    }
+
+    private SeasonThemeMapping? FindSeasonThemeMapping(Series? series, BaseItem season)
+    {
         var mappings = Plugin.Instance?.Configuration?.SeasonThemeMappings;
         if (mappings == null || mappings.Count == 0)
         {
             return null;
         }
 
+        return FindSeasonThemeMapping(mappings, series, season);
+    }
+
+    private static SeasonThemeMapping? FindSeasonThemeMapping(List<SeasonThemeMapping> mappings, Series? series, BaseItem season)
+    {
         var seasonItemId = season.Id.ToString("D");
         var compactSeasonItemId = season.Id.ToString("N");
         var seasonPath = NormalizeMappingPath(season.Path);
-        var seriesPath = NormalizeMappingPath(Path.GetDirectoryName(season.Path));
+        var seriesItemId = series?.Id.ToString("D") ?? string.Empty;
+        var compactSeriesItemId = series?.Id.ToString("N") ?? string.Empty;
+        var seriesPath = NormalizeMappingPath(series?.Path);
+        var seasonParentPath = NormalizeMappingPath(Path.GetDirectoryName(season.Path));
         var seasonNumber = season.IndexNumber;
 
-        return mappings.FirstOrDefault(mapping =>
-            mapping.Enabled &&
-            HasThemeIdentity(mapping) &&
-            (MatchesId(mapping.SeasonItemId, seasonItemId, compactSeasonItemId) ||
-             MatchesPath(mapping.SeasonPath, seasonPath) ||
-             (mapping.SeasonNumber.HasValue &&
-              seasonNumber == mapping.SeasonNumber.Value &&
-              MatchesPath(mapping.SeriesPath, seriesPath))));
+        return mappings
+            .Where(mapping => mapping.Enabled && HasThemeIdentity(mapping))
+            .Select(mapping => new
+            {
+                Mapping = mapping,
+                Rank = GetSeasonMappingMatchRank(
+                    mapping,
+                    seasonItemId,
+                    compactSeasonItemId,
+                    seasonPath,
+                    seriesItemId,
+                    compactSeriesItemId,
+                    seriesPath,
+                    seasonParentPath,
+                    seasonNumber),
+            })
+            .Where(candidate => candidate.Rank > 0)
+            .OrderByDescending(candidate => candidate.Mapping.Locked)
+            .ThenByDescending(candidate => candidate.Rank)
+            .Select(candidate => candidate.Mapping)
+            .FirstOrDefault();
+    }
+
+    private static int GetSeasonMappingMatchRank(
+        SeasonThemeMapping mapping,
+        string seasonItemId,
+        string compactSeasonItemId,
+        string seasonPath,
+        string seriesItemId,
+        string compactSeriesItemId,
+        string seriesPath,
+        string seasonParentPath,
+        int? seasonNumber)
+    {
+        if (MatchesId(mapping.SeasonItemId, seasonItemId, compactSeasonItemId))
+        {
+            return 4;
+        }
+
+        if (MatchesPath(mapping.SeasonPath, seasonPath))
+        {
+            return 3;
+        }
+
+        if (!mapping.SeasonNumber.HasValue || seasonNumber != mapping.SeasonNumber.Value)
+        {
+            return 0;
+        }
+
+        if (MatchesId(mapping.SeriesItemId, seriesItemId, compactSeriesItemId))
+        {
+            return 2;
+        }
+
+        return MatchesPath(mapping.SeriesPath, seriesPath) || MatchesPath(mapping.SeriesPath, seasonParentPath) ? 1 : 0;
     }
 
     private static bool IsSeasonThemeDownloadsEnabled()
@@ -1901,7 +2025,8 @@ public class ThemeDownloader : IScheduledTask
                     itemPath,
                     includeAudio: true,
                     includeVideo: true,
-                    includeExtras: config.ExtrasEnabled);
+                    includeExtras: config.ExtrasEnabled,
+                    extrasFileNameFormat: config.ExtrasFileNameFormat);
                 return BuildBrowserRow(
                     c,
                     order,
@@ -1975,6 +2100,30 @@ public class ThemeDownloader : IScheduledTask
         }
 
         return 2;
+    }
+
+    /// <summary>
+    /// Renames existing extras files to the current display-name format when possible.
+    /// </summary>
+    private void MigrateExtraFiles(IEnumerable<ThemeExtraPlan> extras, bool overwrite)
+    {
+        foreach (var extra in extras)
+        {
+            try
+            {
+                var result = ThemeExtrasManifestService.MigrateExtraFile(extra, overwrite);
+                if (string.Equals(result.Action, "renamed", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogInformation(
+                        "Renamed browseable extra to match current naming format: {Filename}",
+                        Path.GetFileName(extra.TargetPath));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to migrate browseable extra name: {Path}", extra.TargetPath);
+            }
+        }
     }
 
     /// <summary>
@@ -2186,4 +2335,19 @@ public class ThemeDownloader : IScheduledTask
         string Status,
         string Source,
         bool SameAsSeries);
+
+    private sealed record SeasonThemeMatchState(
+        string Status,
+        string Source,
+        bool SameAsSeries,
+        string? AnimeName,
+        string? AnimeThemesSlug,
+        int? AniListId,
+        int? MyAnimeListId)
+    {
+        public bool HasAnimeIdentity =>
+            !string.IsNullOrWhiteSpace(AnimeThemesSlug) ||
+            AniListId.HasValue ||
+            MyAnimeListId.HasValue;
+    }
 }

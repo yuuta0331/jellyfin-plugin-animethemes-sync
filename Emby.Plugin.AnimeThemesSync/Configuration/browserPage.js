@@ -237,7 +237,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
                 status === 'series' ||
                 !!value(row, 'AnimeThemesSlug', 'animeThemesSlug') ||
                 !!value(row, 'AnimeName', 'animeName') ||
-                !!value(row, 'AnimeThemesId', 'animeThemesId');
+                !!value(row, 'AnimeThemesId', 'animeThemesId') ||
+                !!value(row, 'AniListId', 'aniListId') ||
+                !!value(row, 'MyAnimeListId', 'myAnimeListId');
         }
 
         function selectDefaultGroup(groups) {

@@ -2,6 +2,7 @@ using MediaBrowser.Model.Plugins;
 using System;
 using System.Collections.Generic;
 using AnimeThemesSync.Shared.Configuration;
+using AnimeThemesSync.Shared.Services;
 
 namespace Emby.Plugin.AnimeThemesSync.Configuration;
 
@@ -17,6 +18,7 @@ public class PluginConfiguration : BasePluginConfiguration
     private string _tagSeasonFall = "Fall";
     private string _tagSeasonWinter = "Winter";
     private string _tagFormat = "{Season} {Year}";
+    private string _extrasFileNameFormat = ThemeFilePlanner.DefaultExtrasFileNameFormat;
     private int _seriesAudioVolume = 100;
     private int _seriesVideoVolume = 100;
     private int _movieAudioVolume = 100;
@@ -35,6 +37,7 @@ public class PluginConfiguration : BasePluginConfiguration
         AllowDelete = false;
         ExtrasEnabled = false;
         ExtrasLinkMode = ExtrasLinkMode.HardLinkWithCopyFallback;
+        ExtrasFileNameFormat = ThemeFilePlanner.DefaultExtrasFileNameFormat;
         SeasonThemeDownloadsEnabled = true;
         TagsEnabled = true;
         SeasonThemeMappings = [];
@@ -98,6 +101,14 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool ExtrasEnabled { get; set; }
 
     public ExtrasLinkMode ExtrasLinkMode { get; set; }
+
+    public string ExtrasFileNameFormat
+    {
+        get => _extrasFileNameFormat;
+        set => _extrasFileNameFormat = string.IsNullOrWhiteSpace(value)
+            ? ThemeFilePlanner.DefaultExtrasFileNameFormat
+            : value;
+    }
 
     public bool SeasonThemeDownloadsEnabled { get; set; }
 
