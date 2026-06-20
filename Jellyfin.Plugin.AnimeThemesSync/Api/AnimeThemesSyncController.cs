@@ -115,6 +115,23 @@ public sealed class AnimeThemesSyncController : ControllerBase
         }
     }
 
+    [HttpPost("SeasonMappings/Import")]
+    [ProducesResponseType(typeof(SeasonThemeMappingImportResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<SeasonThemeMappingImportResult>> ImportSeasonMappings(
+        [FromBody] ImportSeasonThemeMappingsRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _themeDownloader.ImportSeasonThemeMappingsAsync(request, cancellationToken).ConfigureAwait(false));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpDelete("SeasonMappings/{seasonItemId:guid}")]
     [ProducesResponseType(typeof(SeasonThemeMappingRow), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

@@ -36,6 +36,8 @@ public sealed record ThemeBrowserItemResult(
 
 public sealed record ThemeBrowserThemeGroup(
     Guid ItemId,
+    Guid? SeriesItemId,
+    Guid? SeasonItemId,
     string Name,
     string Type,
     int? SeasonNumber,
@@ -95,11 +97,25 @@ public sealed record ThemeBrowserSummary(
     int ThemeVideos,
     int ThemeSongs,
     int Extras,
-    long TotalBytes);
+    long TotalBytes,
+    int SeriesItems = 0,
+    int MovieItems = 0,
+    int SeasonItems = 0,
+    int SavedItems = 0,
+    int ManualSeasonMappings = 0,
+    int AutoSeasonMappings = 0,
+    int DirectSeasonMappings = 0,
+    int SeriesSharedSeasons = 0,
+    int UnmatchedSeasons = 0);
 
 public sealed record ThemeDeleteResult(
     int FilesDeleted,
     long BytesDeleted);
+
+public sealed record SeasonThemeMappingImportResult(
+    int Imported,
+    int Skipped,
+    List<string> Errors);
 
 public sealed record SeasonThemeMappingRow(
     Guid SeriesItemId,
@@ -146,4 +162,24 @@ public sealed class SaveSeasonThemeMappingRequest
     public int? MyAnimeListId { get; set; }
 
     public bool Locked { get; set; }
+}
+
+public sealed class ImportSeasonThemeMappingsRequest
+{
+    public List<ImportSeasonThemeMappingRow> Mappings { get; set; } = [];
+}
+
+public sealed class ImportSeasonThemeMappingRow
+{
+    public Guid SeasonItemId { get; set; }
+
+    public string? AnimeThemesSlug { get; set; }
+
+    public int? AniListId { get; set; }
+
+    public int? MyAnimeListId { get; set; }
+
+    public bool? Locked { get; set; }
+
+    public string? Status { get; set; }
 }

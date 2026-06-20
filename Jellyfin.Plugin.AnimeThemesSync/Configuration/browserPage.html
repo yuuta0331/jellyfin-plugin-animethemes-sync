@@ -141,24 +141,61 @@
 
                 <div class="verticalSection ats-manage-view" id="AnimeThemesBrowserManageView" style="display: none;">
                 <div class="ats-summary" id="AnimeThemesBrowserSummary">
-                    <div class="ats-summary-grid">
-                        <div><strong id="AnimeThemesSummaryItems">0</strong><span>Items</span></div>
-                        <div><strong id="AnimeThemesSummaryVideos">0</strong><span>Videos</span></div>
-                        <div><strong id="AnimeThemesSummarySongs">0</strong><span>Songs</span></div>
-                        <div><strong id="AnimeThemesSummaryExtras">0</strong><span>Extras</span></div>
-                        <div><strong id="AnimeThemesSummaryBytes">0 B</strong><span>Size</span></div>
+                    <div class="ats-panel-head">
+                        <div>
+                            <h2 class="sectionTitle">Overview</h2>
+                            <div class="fieldDescription">Library totals, saved media, and Season Finder matching status.</div>
+                        </div>
                     </div>
-                    <div class="ats-toolbar-actions">
-                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="audio">
-                            <span class="material-icons ats-icon" aria-hidden="true">music_off</span><span>Delete Songs</span>
-                        </button>
-                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="video">
-                            <span class="material-icons ats-icon" aria-hidden="true">video_file</span><span>Delete Videos</span>
-                        </button>
-                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="all">
-                            <span class="material-icons ats-icon" aria-hidden="true">delete</span><span>Delete All</span>
-                        </button>
+                    <div class="ats-overview-grid">
+                        <div class="ats-overview-section"><h3>Library</h3><div class="ats-summary-grid"><div><strong id="AnimeThemesSummaryItems">0</strong><span>Items</span></div><div><strong id="AnimeThemesSummarySeriesItems">0</strong><span>Series</span></div><div><strong id="AnimeThemesSummaryMovieItems">0</strong><span>Movies</span></div><div><strong id="AnimeThemesSummarySeasonItems">0</strong><span>Seasons</span></div></div></div>
+                        <div class="ats-overview-section"><h3>Matching</h3><div class="ats-summary-grid"><div><strong id="AnimeThemesSummaryManualSeasonMappings">0</strong><span>Manual</span></div><div><strong id="AnimeThemesSummaryAutoSeasonMappings">0</strong><span>Auto</span></div><div><strong id="AnimeThemesSummaryDirectSeasonMappings">0</strong><span>Direct</span></div><div><strong id="AnimeThemesSummarySeriesSharedSeasons">0</strong><span>Series Shared</span></div><div><strong id="AnimeThemesSummaryUnmatchedSeasons">0</strong><span>Unmatched</span></div></div></div>
+                        <div class="ats-overview-section"><h3>Local Files</h3><div class="ats-summary-grid"><div><strong id="AnimeThemesSummarySavedItems">0</strong><span>Saved Items</span></div><div><strong id="AnimeThemesSummaryVideos">0</strong><span>Videos</span></div><div><strong id="AnimeThemesSummarySongs">0</strong><span>Songs</span></div><div><strong id="AnimeThemesSummaryExtras">0</strong><span>Extras</span></div></div></div>
+                        <div class="ats-overview-section"><h3>Storage & Actions</h3><div class="ats-summary-grid"><div><strong id="AnimeThemesSummaryBytes">0 B</strong><span>Size</span></div></div><div class="ats-toolbar-actions"><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="audio"><span class="material-icons ats-icon" aria-hidden="true">music_off</span><span>Delete Songs</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="video"><span class="material-icons ats-icon" aria-hidden="true">video_file</span><span>Delete Videos</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="all"><span class="material-icons ats-icon" aria-hidden="true">delete</span><span>Delete All</span></button></div></div>
                     </div>
+                </div>
+                <div class="ats-finder-panel ats-import-panel">
+                    <div class="ats-panel-head"><div><h3>Data Model</h3><div class="fieldDescription">Series and Season items are stored in the media server library. Provider IDs are stored on each media item. Manual/imported Season matches are stored in <code>PluginConfiguration.SeasonThemeMappings</code>. Season Finder rows are regenerated from the library and mappings.</div></div></div>
+                </div>
+                <div class="ats-finder-panel ats-import-panel">
+                    <div class="ats-panel-head"><div><h3>Settings Import / Export</h3><div class="fieldDescription">Downloads, naming, tags, and profile settings only. Season mappings are handled separately.</div></div><div id="AtsImportState" class="ats-finder-state">Ready.</div></div>
+                    <div class="ats-import-grid"><div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsImportFile">Settings JSON file</label><input id="AtsImportFile" type="file" accept="application/json,.json" /></div><div class="ats-toolbar-actions"><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsExportConfig"><span class="material-icons ats-icon" aria-hidden="true">download</span><span>Export Settings</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsImportLoadCurrent"><span class="material-icons ats-icon" aria-hidden="true">content_paste</span><span>Load Current</span></button><button is="emby-button" type="button" class="raised emby-button ats-action-button ats-icon-button-text" id="AtsImportApply" disabled><span class="material-icons ats-icon" aria-hidden="true">upload</span><span>Apply Settings</span></button></div></div>
+                    <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsImportJson">Settings JSON</label><textarea id="AtsImportJson" is="emby-textarea" rows="8"></textarea></div>
+                    <div id="AtsImportPreview" class="ats-import-preview fieldDescription">No settings import loaded.</div>
+                </div>
+                <div class="ats-finder-panel ats-import-panel">
+                    <div class="ats-panel-head"><div><h3>Mappings Import / Export</h3><div class="fieldDescription">Season Finder resolved rows. Import stores rows with AnimeThemes, AniList, or MAL IDs into SeasonThemeMappings.</div></div><div id="AtsMappingsState" class="ats-finder-state">Ready.</div></div>
+                    <div class="ats-import-grid"><div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsMappingsFile">Mappings JSON file</label><input id="AtsMappingsFile" type="file" accept="application/json,.json" /></div><div class="ats-toolbar-actions"><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsExportMappings"><span class="material-icons ats-icon" aria-hidden="true">download</span><span>Export Mappings</span></button><button is="emby-button" type="button" class="raised emby-button ats-action-button ats-icon-button-text" id="AtsMappingsApply" disabled><span class="material-icons ats-icon" aria-hidden="true">upload</span><span>Apply Mappings</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsLibrarySnapshotExport"><span class="material-icons ats-icon" aria-hidden="true">inventory_2</span><span>Export Library Snapshot</span></button></div></div>
+                    <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsMappingsJson">Mappings JSON</label><textarea id="AtsMappingsJson" is="emby-textarea" rows="8"></textarea></div>
+                    <div id="AtsMappingsPreview" class="ats-import-preview fieldDescription">No mappings import loaded.</div>
+                </div>
+                <div class="ats-finder-panel ats-explorer-panel">
+                    <div class="ats-panel-head">
+                        <div>
+                            <h3>Mapping Explorer</h3>
+                            <div class="fieldDescription">Explore SeasonThemeMappings and their resolved Season Finder status.</div>
+                        </div>
+                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsExplorerRefresh"><span class="material-icons ats-icon" aria-hidden="true">refresh</span><span>Refresh</span></button>
+                    </div>
+                    <div class="ats-explorer-controls">
+                        <div class="inputContainer ats-clearable">
+                            <label class="inputLabel inputLabelUnfocused" for="AtsExplorerSearch">Search mappings</label>
+                            <input id="AtsExplorerSearch" type="text" is="emby-input" autocomplete="off" />
+                            <button type="button" class="ats-clear-input" data-clear-target="AtsExplorerSearch" aria-label="Clear mapping search">x</button>
+                        </div>
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="AtsExplorerStatus">Status</label>
+                            <select is="emby-select" id="AtsExplorerStatus" class="emby-select-withcolor emby-select">
+                                <option value="all">All</option>
+                                <option value="manual">Manual</option>
+                                <option value="auto">Auto</option>
+                                <option value="direct">Direct</option>
+                                <option value="series">Series</option>
+                                <option value="unmatched">Unmatched</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="AtsExplorerTable" class="ats-explorer-table"></div>
                 </div>
                 </div>
 
@@ -406,6 +443,9 @@
                         </button>
                     </div>
                     <div class="ats-detail-action-right">
+                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesBrowserMatchInFinder">
+                            <span class="material-icons ats-icon" aria-hidden="true">travel_explore</span><span>Match in Season Finder</span>
+                        </button>
                         <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-icon-button-text" id="AnimeThemesBrowserDownload">
                             <span class="material-icons ats-icon" aria-hidden="true">download</span><span>Download Item</span>
                         </button>
@@ -542,6 +582,13 @@
             #AnimeThemesBrowserPage .ats-empty-detail {
                 opacity: .72;
                 overflow-wrap: anywhere;
+            }
+
+            #AnimeThemesBrowserPage .ats-empty-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: .5rem;
+                margin-top: .65rem;
             }
 
             @keyframes atsFadeIn {
@@ -687,9 +734,27 @@
 
             #AnimeThemesBrowserPage .ats-summary-grid {
                 display: grid;
-                grid-template-columns: repeat(5, minmax(6rem, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
                 gap: .75rem;
                 margin-bottom: .75rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-overview-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+                gap: .85rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-overview-section {
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius-sm);
+                padding: .75rem;
+                background: rgba(127, 127, 127, .055);
+                min-width: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-overview-section h3 {
+                margin: 0 0 .6rem;
             }
 
             #AnimeThemesBrowserPage .ats-summary-grid div {
@@ -736,6 +801,52 @@
             #AnimeThemesBrowserPage .ats-manage-view {
                 display: grid;
                 gap: 1rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-import-grid,
+            #AnimeThemesBrowserPage .ats-explorer-controls {
+                display: grid;
+                grid-template-columns: minmax(14rem, 1fr) auto;
+                gap: .75rem;
+                align-items: end;
+            }
+
+            #AnimeThemesBrowserPage .ats-import-preview {
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+            }
+
+            #AnimeThemesBrowserPage .ats-explorer-table {
+                max-height: 28rem;
+                overflow: auto;
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius-sm);
+            }
+
+            #AnimeThemesBrowserPage .ats-explorer-table table {
+                width: 100%;
+                border-collapse: collapse;
+                min-width: 58rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-explorer-table th,
+            #AnimeThemesBrowserPage .ats-explorer-table td {
+                padding: .55rem .65rem;
+                border-bottom: 1px solid var(--ats-border);
+                text-align: left;
+                vertical-align: top;
+                overflow-wrap: anywhere;
+            }
+
+            #AnimeThemesBrowserPage .ats-explorer-table th {
+                font-weight: 700;
+                opacity: 1;
+                position: sticky;
+                top: 0;
+                z-index: 1;
+                background: #202124;
+                color: #fff;
+                box-shadow: 0 1px 0 var(--ats-border), 0 2px 8px rgba(0, 0, 0, .22);
             }
 
             #AnimeThemesBrowserPage .ats-item-grid {
@@ -895,6 +1006,8 @@
             #AnimeThemesBrowserPage .ats-detail-action-left,
             #AnimeThemesBrowserPage .ats-detail-action-right {
                 display: flex;
+                gap: .5rem;
+                flex-wrap: wrap;
                 min-width: 0;
             }
 
@@ -1769,6 +1882,8 @@
                     finderSearchTimer: null,
                     finderSearchToken: 0,
                     finderAutoSearched: {},
+                    importConfig: null,
+                    mappingsImportRows: null,
                     settingsConfig: null,
                     settingsLoaded: false,
                     settingsSnapshot: '',
@@ -1812,10 +1927,19 @@
                 var progressPercent = page.querySelector('#AnimeThemesBrowserProgressPercent');
                 var progressBar = page.querySelector('#AnimeThemesBrowserProgressBar');
                 var summaryItems = page.querySelector('#AnimeThemesSummaryItems');
+                var summarySeriesItems = page.querySelector('#AnimeThemesSummarySeriesItems');
+                var summaryMovieItems = page.querySelector('#AnimeThemesSummaryMovieItems');
+                var summarySeasonItems = page.querySelector('#AnimeThemesSummarySeasonItems');
+                var summarySavedItems = page.querySelector('#AnimeThemesSummarySavedItems');
                 var summaryVideos = page.querySelector('#AnimeThemesSummaryVideos');
                 var summarySongs = page.querySelector('#AnimeThemesSummarySongs');
                 var summaryExtras = page.querySelector('#AnimeThemesSummaryExtras');
                 var summaryBytes = page.querySelector('#AnimeThemesSummaryBytes');
+                var summaryManualSeasonMappings = page.querySelector('#AnimeThemesSummaryManualSeasonMappings');
+                var summaryAutoSeasonMappings = page.querySelector('#AnimeThemesSummaryAutoSeasonMappings');
+                var summaryDirectSeasonMappings = page.querySelector('#AnimeThemesSummaryDirectSeasonMappings');
+                var summarySeriesSharedSeasons = page.querySelector('#AnimeThemesSummarySeriesSharedSeasons');
+                var summaryUnmatchedSeasons = page.querySelector('#AnimeThemesSummaryUnmatchedSeasons');
                 var seasonFilter = page.querySelector('#AnimeThemesSeasonFilter');
                 var seasonList = page.querySelector('#AnimeThemesSeasonList');
                 var finderSearchInput = page.querySelector('#AnimeThemesFinderSearchInput');
@@ -1824,7 +1948,21 @@
                 var finderPreview = page.querySelector('#AnimeThemesFinderPreview');
                 var finderState = page.querySelector('#AnimeThemesFinderState');
                 var downloadItemButton = page.querySelector('#AnimeThemesBrowserDownload');
+                var matchInFinderButton = page.querySelector('#AnimeThemesBrowserMatchInFinder');
                 var settingsState = page.querySelector('#AnimeThemesSettingsState');
+                var importFileInput = page.querySelector('#AtsImportFile');
+                var importJsonInput = page.querySelector('#AtsImportJson');
+                var importPreview = page.querySelector('#AtsImportPreview');
+                var importApplyButton = page.querySelector('#AtsImportApply');
+                var importState = page.querySelector('#AtsImportState');
+                var mappingsFileInput = page.querySelector('#AtsMappingsFile');
+                var mappingsJsonInput = page.querySelector('#AtsMappingsJson');
+                var mappingsPreview = page.querySelector('#AtsMappingsPreview');
+                var mappingsApplyButton = page.querySelector('#AtsMappingsApply');
+                var mappingsState = page.querySelector('#AtsMappingsState');
+                var explorerSearch = page.querySelector('#AtsExplorerSearch');
+                var explorerStatus = page.querySelector('#AtsExplorerStatus');
+                var explorerTable = page.querySelector('#AtsExplorerTable');
                 var settingsFields = {
                     ThemeDownloadingEnabled: page.querySelector('#AtsThemeDownloadingEnabled'),
                     MaxConcurrentDownloads: page.querySelector('#AtsMaxConcurrentDownloads'),
@@ -1981,7 +2119,7 @@
                 }
 
                 function groupId(group) {
-                    return String(value(group, 'ItemId', 'itemId') || '') + ':' + String(value(group, 'Type', 'type') || '');
+                    return String(value(group, 'SeasonItemId', 'seasonItemId') || value(group, 'ItemId', 'itemId') || '') + ':' + String(value(group, 'Type', 'type') || '');
                 }
 
                 function getGroups() {
@@ -2206,7 +2344,12 @@
                 }
 
                 function renderSummarySkeleton() {
-                    [summaryItems, summaryVideos, summarySongs, summaryExtras, summaryBytes].forEach(function (node) {
+                    [
+                        summaryItems, summarySeriesItems, summaryMovieItems, summarySeasonItems, summarySavedItems,
+                        summaryVideos, summarySongs, summaryExtras, summaryBytes,
+                        summaryManualSeasonMappings, summaryAutoSeasonMappings, summaryDirectSeasonMappings,
+                        summarySeriesSharedSeasons, summaryUnmatchedSeasons
+                    ].forEach(function (node) {
                         node.innerHTML = '<span class="ats-skeleton ats-skeleton-text"></span>';
                     });
                 }
@@ -2329,7 +2472,17 @@
                     } else if (finderActive) {
                         libraryView.style.display = 'none';
                         detailView.style.display = 'none';
-                        loadSeasonMappings();
+                        if (!state.finderLoading && !state.seasonMappings.length) {
+                            loadSeasonMappings().catch(function () { });
+                        }
+                    } else if (manageActive) {
+                        libraryView.style.display = 'none';
+                        detailView.style.display = 'none';
+                        if (!state.finderLoading && !state.seasonMappings.length) {
+                            loadSeasonMappings().catch(function () { });
+                        } else {
+                            renderMappingExplorer();
+                        }
                     } else if (settingsActive) {
                         libraryView.style.display = 'none';
                         detailView.style.display = 'none';
@@ -2414,6 +2567,7 @@
                     }
                     state.selectedSeason = row;
                     renderSeasonMappings();
+                    renderMappingExplorer();
                 }
 
                 function loadSeasonMappings() {
@@ -2421,7 +2575,7 @@
                     state.finderLoading = true;
                     finderState.textContent = 'Loading season mappings...';
                     renderFinderSkeleton(seasonList);
-                    apiGet('AnimeThemesSync/SeasonMappings').then(function (rows) {
+                    return apiGet('AnimeThemesSync/SeasonMappings').then(function (rows) {
                         state.finderLoading = false;
                         state.seasonMappings = rows || [];
                         if (selectedId) {
@@ -2430,13 +2584,17 @@
                             }) || state.selectedSeason;
                         }
                         renderSeasonMappings();
+                        renderMappingExplorer();
                         finderState.textContent = state.seasonMappings.length + ' seasons loaded.';
+                        return state.seasonMappings;
                     }).catch(function (err) {
                         state.finderLoading = false;
                         seasonList.innerHTML = '';
                         appendEmptyState(seasonList, 'Season mappings failed to load', getErrorMessage(err));
+                        renderMappingExplorer();
                         finderState.textContent = 'Failed to load season mappings.';
                         Dashboard.alert({ title: 'Season Finder Error', message: getErrorMessage(err) });
+                        return [];
                     });
                 }
 
@@ -2510,6 +2668,78 @@
                     } else {
                         finderState.textContent = 'Ready. Use Search to refresh candidates.';
                     }
+                }
+
+                function openFinderForSeasonGroup(group) {
+                    var targetGroup = resolveFinderTargetGroup(group);
+                    if (!targetGroup) {
+                        return;
+                    }
+
+                    var seasonItemId = value(targetGroup, 'SeasonItemId', 'seasonItemId') || value(targetGroup, 'ItemId', 'itemId');
+                    if (!seasonItemId) {
+                        return;
+                    }
+
+                    var targetStatus = String(value(targetGroup, 'Status', 'status') || '').toLowerCase();
+                    seasonFilter.value = targetStatus === 'unmatched' ? 'unmatched' : 'all';
+                    syncSeasonFilterButtons();
+                    setActiveTab('finder');
+                    loadSeasonMappings().then(function (rows) {
+                        var row = (rows || []).find(function (candidate) {
+                            return String(seasonRowId(candidate)) === String(seasonItemId);
+                        });
+                        if (!row) {
+                            finderState.textContent = 'Season was not found in Season Finder.';
+                            return;
+                        }
+
+                        selectSeason(row);
+                    }).catch(function () {
+                        // loadSeasonMappings already surfaced the error.
+                    });
+                }
+
+                function resolveFinderTargetGroup(group) {
+                    group = group || activeGroup();
+                    if (!group) return null;
+                    if (String(value(group, 'Type', 'type')) === 'Season') {
+                        return group;
+                    }
+
+                    if (String(value(group, 'Type', 'type')) !== 'Series') {
+                        return null;
+                    }
+
+                    var groups = getGroups().filter(function (candidate) {
+                        return String(value(candidate, 'Type', 'type')) === 'Season';
+                    });
+                    return groups.find(function (candidate) {
+                        return Number(value(candidate, 'SeasonNumber', 'seasonNumber')) === 1;
+                    }) || groups[0] || null;
+                }
+
+                function isFinderMatchActionAvailable(group) {
+                    var targetGroup = resolveFinderTargetGroup(group);
+                    if (!targetGroup) return false;
+                    return String(value(targetGroup, 'Status', 'status') || '').toLowerCase() === 'unmatched';
+                }
+
+                function appendEmptyMatchAction(container, group) {
+                    if (!isFinderMatchActionAvailable(group)) return;
+                    var actions = document.createElement('div');
+                    actions.className = 'ats-empty-actions';
+                    var button = createButton('Match in Season Finder', false, 'link');
+                    button.addEventListener('click', function () {
+                        openFinderForSeasonGroup(group);
+                    });
+                    actions.appendChild(button);
+                    container.appendChild(actions);
+                }
+
+                function syncMatchInFinderButton() {
+                    if (!matchInFinderButton) return;
+                    matchInFinderButton.disabled = !resolveFinderTargetGroup(activeGroup());
                 }
 
                 function scheduleAnimeThemesSearch(delay) {
@@ -2755,15 +2985,368 @@
 
                 function renderSummary(summary) {
                     summaryItems.textContent = text(value(summary, 'Items', 'items'));
+                    summarySeriesItems.textContent = text(value(summary, 'SeriesItems', 'seriesItems'));
+                    summaryMovieItems.textContent = text(value(summary, 'MovieItems', 'movieItems'));
+                    summarySeasonItems.textContent = text(value(summary, 'SeasonItems', 'seasonItems'));
+                    summarySavedItems.textContent = text(value(summary, 'SavedItems', 'savedItems'));
                     summaryVideos.textContent = text(value(summary, 'ThemeVideos', 'themeVideos'));
                     summarySongs.textContent = text(value(summary, 'ThemeSongs', 'themeSongs'));
                     summaryExtras.textContent = text(value(summary, 'Extras', 'extras'));
                     summaryBytes.textContent = formatBytes(value(summary, 'TotalBytes', 'totalBytes'));
+                    summaryManualSeasonMappings.textContent = text(value(summary, 'ManualSeasonMappings', 'manualSeasonMappings'));
+                    summaryAutoSeasonMappings.textContent = text(value(summary, 'AutoSeasonMappings', 'autoSeasonMappings'));
+                    summaryDirectSeasonMappings.textContent = text(value(summary, 'DirectSeasonMappings', 'directSeasonMappings'));
+                    summarySeriesSharedSeasons.textContent = text(value(summary, 'SeriesSharedSeasons', 'seriesSharedSeasons'));
+                    summaryUnmatchedSeasons.textContent = text(value(summary, 'UnmatchedSeasons', 'unmatchedSeasons'));
+                }
+
+                function setImportState(message) {
+                    if (importState) {
+                        importState.textContent = message || 'Ready.';
+                    }
+                }
+
+                function renderImportPreview(config) {
+                    importPreview.textContent = [
+                        'Ready to import settings.',
+                        'ConfigurationVersion: ' + text(value(config, 'ConfigurationVersion', 'configurationVersion')),
+                        'Downloads: ' + (value(config, 'ThemeDownloadingEnabled', 'themeDownloadingEnabled') ? 'enabled' : 'disabled'),
+                        'Season downloads: ' + (value(config, 'SeasonThemeDownloadsEnabled', 'seasonThemeDownloadsEnabled') ? 'enabled' : 'disabled')
+                    ].join('\n');
+                }
+
+                function parseImportJson(showAlerts) {
+                    var raw = importJsonInput.value.trim();
+                    state.importConfig = null;
+                    importApplyButton.disabled = true;
+                    if (!raw) {
+                        importPreview.textContent = 'No import loaded.';
+                        setImportState('Ready.');
+                        return null;
+                    }
+
+                    try {
+                        var parsed = JSON.parse(raw);
+                        if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+                            throw new Error('PluginConfiguration JSON must be an object.');
+                        }
+
+                        var normalized = canonicalizeFullSettings(parsed);
+                        removeLegacySettings(normalized);
+                        state.importConfig = normalized;
+                        importJsonInput.value = serializeFullSettings(normalized);
+                        renderImportPreview(normalized);
+                        importApplyButton.disabled = false;
+                        setImportState('Import ready.');
+                        return normalized;
+                    } catch (err) {
+                        importPreview.textContent = 'Import error: ' + getErrorMessage(err);
+                        setImportState('Import invalid.');
+                        if (showAlerts) {
+                            Dashboard.alert({ title: 'Import Error', message: getErrorMessage(err) });
+                        }
+                        return null;
+                    }
+                }
+
+                function loadCurrentConfigForImport() {
+                    setImportState('Loading current configuration...');
+                    ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                        var normalized = canonicalizeFullSettings(config || {});
+                        importJsonInput.value = serializeFullSettings(normalized);
+                        parseImportJson(false);
+                    }).catch(function (err) {
+                        setImportState('Failed to load configuration.');
+                        Dashboard.alert({ title: 'Import Error', message: getErrorMessage(err) });
+                    });
+                }
+
+                function downloadJsonFile(fileName, content) {
+                    var blob = new Blob([content], { type: 'application/json' });
+                    var url = URL.createObjectURL(blob);
+                    var link = document.createElement('a');
+                    link.href = url;
+                    link.download = fileName;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                }
+
+                function exportConfig() {
+                    setImportState('Exporting settings...');
+                    ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                        var content = serializeFullSettings(config || {});
+                        importJsonInput.value = content;
+                        parseImportJson(false);
+                        downloadJsonFile('animethemes-sync-settings.json', content);
+                        setImportState('Settings exported.');
+                    }).catch(function (err) {
+                        setImportState('Export failed.');
+                        Dashboard.alert({ title: 'Export Error', message: getErrorMessage(err) });
+                    });
+                }
+
+                function applyImportConfig() {
+                    var config = state.importConfig || parseImportJson(true);
+                    if (!config) return;
+                    setImportState('Saving imported settings...');
+                    ApiClient.getPluginConfiguration(pluginUniqueId).then(function (current) {
+                        current = ensureSettingsConfig(current || {});
+                        Object.keys(config).forEach(function (key) {
+                            if (key !== 'SeasonThemeMappings') {
+                                current[key] = config[key];
+                            }
+                        });
+                        return ApiClient.updatePluginConfiguration(pluginUniqueId, current).then(function (result) {
+                            return { result: result, config: current };
+                        });
+                    }).then(function (saved) {
+                        var result = saved.result;
+                        var config = saved.config;
+                        state.settingsConfig = ensureSettingsConfig(config);
+                        state.settingsLoaded = true;
+                        applySettingsToForm(config || {});
+                        captureSettingsSnapshot();
+                        importApplyButton.disabled = true;
+                        setImportState('Settings import applied.');
+                        loadItems();
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                    }).catch(function (err) {
+                        setImportState('Import save failed.');
+                        Dashboard.alert({ title: 'Import Error', message: getErrorMessage(err) });
+                    });
+                }
+
+                function handleImportFile() {
+                    var file = importFileInput.files && importFileInput.files[0];
+                    if (!file) return;
+                    var reader = new FileReader();
+                    reader.onload = function () {
+                        importJsonInput.value = String(reader.result || '');
+                        parseImportJson(true);
+                    };
+                    reader.onerror = function () {
+                        setImportState('Failed to read file.');
+                        Dashboard.alert({ title: 'Import Error', message: 'Failed to read the selected file.' });
+                    };
+                    reader.readAsText(file);
+                }
+
+                function setMappingsState(message) {
+                    if (mappingsState) {
+                        mappingsState.textContent = message || 'Ready.';
+                    }
+                }
+
+                function mappingImportRowsFromRaw(raw) {
+                    var parsed = JSON.parse(raw);
+                    var rows = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.Mappings) ? parsed.Mappings : null;
+                    if (!rows) {
+                        throw new Error('Mappings JSON must be an array or an object with a Mappings array.');
+                    }
+
+                    return rows.map(function (row) {
+                        return {
+                            SeasonItemId: value(row, 'SeasonItemId', 'seasonItemId'),
+                            AnimeThemesSlug: value(row, 'AnimeThemesSlug', 'animeThemesSlug'),
+                            AniListId: value(row, 'AniListId', 'aniListId'),
+                            MyAnimeListId: value(row, 'MyAnimeListId', 'myAnimeListId'),
+                            Locked: value(row, 'Locked', 'locked') !== false,
+                            Status: value(row, 'Status', 'status')
+                        };
+                    });
+                }
+
+                function parseMappingsJson(showAlerts) {
+                    state.mappingsImportRows = null;
+                    mappingsApplyButton.disabled = true;
+                    var raw = mappingsJsonInput.value.trim();
+                    if (!raw) {
+                        mappingsPreview.textContent = 'No mappings import loaded.';
+                        setMappingsState('Ready.');
+                        return null;
+                    }
+
+                    try {
+                        var rows = mappingImportRowsFromRaw(raw);
+                        var importable = rows.filter(function (row) {
+                            return row.SeasonItemId && (row.AnimeThemesSlug || row.AniListId || row.MyAnimeListId);
+                        });
+                        state.mappingsImportRows = importable;
+                        mappingsPreview.textContent = 'Rows: ' + rows.length + '\nImportable: ' + importable.length + '\nSkipped: ' + (rows.length - importable.length);
+                        mappingsApplyButton.disabled = !importable.length;
+                        setMappingsState('Mappings import ready.');
+                        return importable;
+                    } catch (err) {
+                        mappingsPreview.textContent = 'Mappings import error: ' + getErrorMessage(err);
+                        setMappingsState('Mappings import invalid.');
+                        if (showAlerts) {
+                            Dashboard.alert({ title: 'Mappings Import Error', message: getErrorMessage(err) });
+                        }
+                        return null;
+                    }
+                }
+
+                function exportMappings() {
+                    var doExport = function () {
+                        var rows = (state.seasonMappings || []).filter(seasonMappingHasMatch).map(function (row) {
+                            return {
+                                SeriesItemId: value(row, 'SeriesItemId', 'seriesItemId'),
+                                SeriesName: value(row, 'SeriesName', 'seriesName'),
+                                SeasonItemId: value(row, 'SeasonItemId', 'seasonItemId'),
+                                SeasonName: value(row, 'SeasonName', 'seasonName'),
+                                SeasonNumber: value(row, 'SeasonNumber', 'seasonNumber'),
+                                Status: value(row, 'Status', 'status'),
+                                Source: value(row, 'Source', 'source'),
+                                AnimeName: value(row, 'AnimeName', 'animeName'),
+                                AnimeThemesSlug: value(row, 'AnimeThemesSlug', 'animeThemesSlug'),
+                                AniListId: value(row, 'AniListId', 'aniListId'),
+                                MyAnimeListId: value(row, 'MyAnimeListId', 'myAnimeListId'),
+                                Locked: true
+                            };
+                        });
+                        var content = JSON.stringify({ Mappings: rows }, null, 2);
+                        mappingsJsonInput.value = content;
+                        parseMappingsJson(false);
+                        downloadJsonFile('animethemes-sync-mappings.json', content);
+                        setMappingsState('Mappings exported.');
+                    };
+                    if (!state.seasonMappings.length) {
+                        loadSeasonMappings().then(doExport);
+                    } else {
+                        doExport();
+                    }
+                }
+
+                function exportLibrarySnapshot() {
+                    var doExport = function () {
+                        var content = JSON.stringify({ Rows: state.seasonMappings || [] }, null, 2);
+                        downloadJsonFile('animethemes-sync-library-snapshot.json', content);
+                        setMappingsState('Library snapshot exported.');
+                    };
+                    if (!state.seasonMappings.length) {
+                        loadSeasonMappings().then(doExport);
+                    } else {
+                        doExport();
+                    }
+                }
+
+                function applyMappingsImport() {
+                    var rows = state.mappingsImportRows || parseMappingsJson(true);
+                    if (!rows || !rows.length) return;
+                    setMappingsState('Importing mappings...');
+                    apiPostJson('AnimeThemesSync/SeasonMappings/Import', { Mappings: rows }).then(function (result) {
+                        var imported = value(result, 'Imported', 'imported') || 0;
+                        var skipped = value(result, 'Skipped', 'skipped') || 0;
+                        var errors = value(result, 'Errors', 'errors') || [];
+                        mappingsPreview.textContent = 'Imported: ' + imported + '\nSkipped: ' + skipped + '\nErrors: ' + errors.length + (errors.length ? '\n' + errors.join('\n') : '');
+                        mappingsApplyButton.disabled = true;
+                        setMappingsState('Mappings import complete.');
+                        loadSeasonMappings().catch(function () { });
+                        loadItems();
+                    }).catch(function (err) {
+                        setMappingsState('Mappings import failed.');
+                        Dashboard.alert({ title: 'Mappings Import Error', message: getErrorMessage(err) });
+                    });
+                }
+
+                function handleMappingsFile() {
+                    var file = mappingsFileInput.files && mappingsFileInput.files[0];
+                    if (!file) return;
+                    var reader = new FileReader();
+                    reader.onload = function () {
+                        mappingsJsonInput.value = String(reader.result || '');
+                        parseMappingsJson(true);
+                    };
+                    reader.onerror = function () {
+                        setMappingsState('Failed to read file.');
+                        Dashboard.alert({ title: 'Mappings Import Error', message: 'Failed to read the selected file.' });
+                    };
+                    reader.readAsText(file);
+                }
+
+                function renderMappingExplorer() {
+                    if (!explorerTable) return;
+                    var rows = state.seasonMappings || [];
+                    var query = explorerSearch ? explorerSearch.value.trim().toLowerCase() : '';
+                    var statusFilterValue = explorerStatus ? explorerStatus.value : 'all';
+                    var filtered = rows.filter(function (row) {
+                        var status = String(value(row, 'Status', 'status') || '').toLowerCase();
+                        if (statusFilterValue !== 'all' && status !== statusFilterValue) {
+                            return false;
+                        }
+
+                        if (!query) return true;
+                        var haystack = [
+                            value(row, 'SeriesName', 'seriesName'),
+                            value(row, 'SeasonName', 'seasonName'),
+                            value(row, 'Status', 'status'),
+                            value(row, 'Source', 'source'),
+                            value(row, 'AnimeName', 'animeName'),
+                            value(row, 'AnimeThemesSlug', 'animeThemesSlug'),
+                            value(row, 'AniListId', 'aniListId'),
+                            value(row, 'MyAnimeListId', 'myAnimeListId'),
+                            value(row, 'SeriesPath', 'seriesPath'),
+                            value(row, 'SeasonPath', 'seasonPath')
+                        ].join(' ').toLowerCase();
+                        return haystack.indexOf(query) !== -1;
+                    });
+
+                    explorerTable.innerHTML = '';
+                    if (!filtered.length) {
+                        appendEmptyState(explorerTable, 'No mappings found', rows.length ? 'Adjust the explorer filters.' : 'Refresh mappings to populate the explorer.');
+                        return;
+                    }
+
+                    var table = document.createElement('table');
+                    var thead = document.createElement('thead');
+                    var headRow = document.createElement('tr');
+                    ['Series', 'Season', 'Status', 'Source', 'AnimeThemes', 'AniList', 'MAL', 'Path', 'Action'].forEach(function (label) {
+                        var th = document.createElement('th');
+                        th.textContent = label;
+                        headRow.appendChild(th);
+                    });
+                    thead.appendChild(headRow);
+                    table.appendChild(thead);
+                    var tbody = document.createElement('tbody');
+                    filtered.forEach(function (row) {
+                        var tr = document.createElement('tr');
+                        [
+                            value(row, 'SeriesName', 'seriesName'),
+                            value(row, 'SeasonName', 'seasonName'),
+                            value(row, 'Status', 'status'),
+                            value(row, 'Source', 'source'),
+                            value(row, 'AnimeThemesSlug', 'animeThemesSlug') || value(row, 'AnimeName', 'animeName'),
+                            value(row, 'AniListId', 'aniListId'),
+                            value(row, 'MyAnimeListId', 'myAnimeListId'),
+                            value(row, 'SeasonPath', 'seasonPath') || value(row, 'SeriesPath', 'seriesPath')
+                        ].forEach(function (cellValue) {
+                            var td = document.createElement('td');
+                            td.textContent = text(cellValue);
+                            tr.appendChild(td);
+                        });
+                        var actionCell = document.createElement('td');
+                        var button = createButton('Find match', true);
+                        button.disabled = seasonMappingHasMatch(row);
+                        button.addEventListener('click', function () {
+                            seasonFilter.value = 'unmatched';
+                            syncSeasonFilterButtons();
+                            setActiveTab('finder');
+                            selectSeason(row);
+                        });
+                        actionCell.appendChild(button);
+                        tr.appendChild(actionCell);
+                        tbody.appendChild(tr);
+                    });
+                    table.appendChild(tbody);
+                    explorerTable.appendChild(table);
                 }
 
                 function renderDetailLoading() {
                     detailView.classList.add('ats-detail-loading');
                     downloadItemButton.disabled = true;
+                    if (matchInFinderButton) matchInFinderButton.disabled = true;
                     setBackdrop(null);
                     poster.style.display = 'none';
                     logo.style.display = 'none';
@@ -2794,6 +3377,7 @@
                 function renderDetailError(message) {
                     detailView.classList.remove('ats-detail-loading');
                     downloadItemButton.disabled = true;
+                    if (matchInFinderButton) matchInFinderButton.disabled = true;
                     setBackdrop(null);
                     poster.style.display = 'none';
                     logo.style.display = 'none';
@@ -2871,6 +3455,7 @@
                         link.textContent = 'Open AnimeThemes';
                         meta.appendChild(link);
                     }
+                    syncMatchInFinderButton();
                 }
 
                 function addHeroMetaChip(label) {
@@ -2951,10 +3536,14 @@
                     }
 
                     var group = activeGroup() || {};
-                    var rows = activeRows().filter(rowMatches);
+                    var allRows = activeRows();
+                    var rows = allRows.filter(rowMatches);
                     rowsContainer.innerHTML = '';
                     if (!rows.length) {
                         appendEmptyState(rowsContainer, 'No themes to show', value(group, 'EmptyMessage', 'emptyMessage') || 'Adjust filters or choose another season.');
+                        if (!allRows.length) {
+                            appendEmptyMatchAction(rowsContainer, group);
+                        }
                         return;
                     }
 
@@ -3173,6 +3762,11 @@
                     return config;
                 }
 
+                function normalizeSeasonThemeMappings(config) {
+                    var mappings = getConfigValue(config || {}, 'SeasonThemeMappings', []);
+                    return Array.isArray(mappings) ? mappings : [];
+                }
+
                 function cloneSettings(config) {
                     return JSON.parse(JSON.stringify(config || {}));
                 }
@@ -3214,7 +3808,6 @@
                         TagSeasonSummer: 'Summer',
                         TagSeasonFall: 'Fall',
                         TagSeasonWinter: 'Winter',
-                        SeasonThemeMappings: getConfigValue(existingConfig, 'SeasonThemeMappings', []),
                         Series: defaultMediaConfig(),
                         Movie: defaultMediaConfig()
                     });
@@ -3245,8 +3838,18 @@
                     };
                 }
 
+                function canonicalizeFullSettings(config) {
+                    var full = canonicalizeSettings(config);
+                    delete full.SeasonThemeMappings;
+                    return full;
+                }
+
                 function serializeSettings(config) {
                     return JSON.stringify(canonicalizeSettings(config));
+                }
+
+                function serializeFullSettings(config) {
+                    return JSON.stringify(canonicalizeFullSettings(config), null, 2);
                 }
 
                 function settingsSnapshotFromForm() {
@@ -3830,6 +4433,9 @@
                 });
                 page.querySelector('#AnimeThemesBrowserRefreshItems').addEventListener('click', loadItems);
                 page.querySelector('#AnimeThemesBrowserDownload').addEventListener('click', downloadItem);
+                matchInFinderButton.addEventListener('click', function () {
+                    openFinderForSeasonGroup(activeGroup());
+                });
                 page.querySelector('#AnimeThemesBrowserBack').addEventListener('click', openLibraryView);
                 page.querySelectorAll('.ats-view-mode').forEach(function (button) {
                     button.addEventListener('click', function () {
@@ -3862,6 +4468,25 @@
                 if (settingsFields.CopyCssButton) {
                     settingsFields.CopyCssButton.addEventListener('click', copyCustomCss);
                 }
+                page.querySelector('#AtsExportConfig').addEventListener('click', exportConfig);
+                page.querySelector('#AtsImportLoadCurrent').addEventListener('click', loadCurrentConfigForImport);
+                importApplyButton.addEventListener('click', applyImportConfig);
+                importJsonInput.addEventListener('input', function () {
+                    parseImportJson(false);
+                });
+                importFileInput.addEventListener('change', handleImportFile);
+                page.querySelector('#AtsExportMappings').addEventListener('click', exportMappings);
+                page.querySelector('#AtsLibrarySnapshotExport').addEventListener('click', exportLibrarySnapshot);
+                mappingsApplyButton.addEventListener('click', applyMappingsImport);
+                mappingsJsonInput.addEventListener('input', function () {
+                    parseMappingsJson(false);
+                });
+                mappingsFileInput.addEventListener('change', handleMappingsFile);
+                page.querySelector('#AtsExplorerRefresh').addEventListener('click', function () {
+                    loadSeasonMappings().catch(function () { });
+                });
+                explorerSearch.addEventListener('input', renderMappingExplorer);
+                explorerStatus.addEventListener('change', renderMappingExplorer);
                 page.querySelector('#AnimeThemesBrowserPlayerClose').addEventListener('click', closePlayer);
                 player.addEventListener('click', function (event) {
                     if (event.target === player) closePlayer();

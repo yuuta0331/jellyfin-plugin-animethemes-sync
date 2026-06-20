@@ -98,6 +98,12 @@ public class SaveAnimeThemesSeasonMapping : IReturn<SeasonThemeMappingRow>
     public bool Locked { get; set; }
 }
 
+[Route("/AnimeThemesSync/SeasonMappings/Import", "POST", Summary = "Imports AnimeThemes season mappings.")]
+public class ImportAnimeThemesSeasonMappings : IReturn<SeasonThemeMappingImportResult>
+{
+    public List<ImportSeasonThemeMappingRow> Mappings { get; set; } = [];
+}
+
 [Route("/AnimeThemesSync/SeasonMappings/{SeasonItemId}", "DELETE", Summary = "Deletes an AnimeThemes season mapping.")]
 public class DeleteAnimeThemesSeasonMapping : IReturn<SeasonThemeMappingRow>
 {
@@ -259,6 +265,23 @@ public class AnimeThemesSyncService : IService
             throw new ArgumentException(ex.Message, nameof(request));
         }
         catch (KeyNotFoundException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
+    }
+
+    public object Post(ImportAnimeThemesSeasonMappings request)
+    {
+        try
+        {
+            return _themeDownloader.ImportSeasonThemeMappingsAsync(
+                new ImportSeasonThemeMappingsRequest
+                {
+                    Mappings = request.Mappings,
+                },
+                CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (InvalidOperationException ex)
         {
             throw new ArgumentException(ex.Message, nameof(request));
         }

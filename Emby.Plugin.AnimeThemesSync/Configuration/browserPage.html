@@ -131,24 +131,54 @@
 
                 <div class="verticalSection ats-manage-view" id="AnimeThemesBrowserManageView" style="display: none;">
                 <div class="ats-summary" id="AnimeThemesBrowserSummary">
-                    <div class="ats-summary-grid">
-                        <div><strong id="AnimeThemesSummaryItems">0</strong><span>Items</span></div>
-                        <div><strong id="AnimeThemesSummaryVideos">0</strong><span>Videos</span></div>
-                        <div><strong id="AnimeThemesSummarySongs">0</strong><span>Songs</span></div>
-                        <div><strong id="AnimeThemesSummaryExtras">0</strong><span>Extras</span></div>
-                        <div><strong id="AnimeThemesSummaryBytes">0 B</strong><span>Size</span></div>
+                    <div class="ats-panel-head"><div><h2 class="sectionTitle">Overview</h2><div class="fieldDescription">Library totals, saved media, and Season Finder matching status.</div></div></div>
+                    <div class="ats-overview-grid">
+                        <div class="ats-overview-section"><h3>Library</h3><div class="ats-summary-grid"><div><strong id="AnimeThemesSummaryItems">0</strong><span>Items</span></div><div><strong id="AnimeThemesSummarySeriesItems">0</strong><span>Series</span></div><div><strong id="AnimeThemesSummaryMovieItems">0</strong><span>Movies</span></div><div><strong id="AnimeThemesSummarySeasonItems">0</strong><span>Seasons</span></div></div></div>
+                        <div class="ats-overview-section"><h3>Matching</h3><div class="ats-summary-grid"><div><strong id="AnimeThemesSummaryManualSeasonMappings">0</strong><span>Manual</span></div><div><strong id="AnimeThemesSummaryAutoSeasonMappings">0</strong><span>Auto</span></div><div><strong id="AnimeThemesSummaryDirectSeasonMappings">0</strong><span>Direct</span></div><div><strong id="AnimeThemesSummarySeriesSharedSeasons">0</strong><span>Series Shared</span></div><div><strong id="AnimeThemesSummaryUnmatchedSeasons">0</strong><span>Unmatched</span></div></div></div>
+                        <div class="ats-overview-section"><h3>Local Files</h3><div class="ats-summary-grid"><div><strong id="AnimeThemesSummarySavedItems">0</strong><span>Saved Items</span></div><div><strong id="AnimeThemesSummaryVideos">0</strong><span>Videos</span></div><div><strong id="AnimeThemesSummarySongs">0</strong><span>Songs</span></div><div><strong id="AnimeThemesSummaryExtras">0</strong><span>Extras</span></div></div></div>
+                        <div class="ats-overview-section"><h3>Storage & Actions</h3><div class="ats-summary-grid"><div><strong id="AnimeThemesSummaryBytes">0 B</strong><span>Size</span></div></div><div class="ats-toolbar-actions"><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="audio"><i class="md-icon ats-icon" aria-hidden="true">&#xE440;</i><span>Delete Songs</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="video"><i class="md-icon ats-icon" aria-hidden="true">&#xEB87;</i><span>Delete Videos</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="all"><i class="md-icon ats-icon" aria-hidden="true">&#xE872;</i><span>Delete All</span></button></div></div>
                     </div>
-                    <div class="ats-toolbar-actions">
-                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="audio">
-                            <i class="md-icon ats-icon" aria-hidden="true">&#xE440;</i><span>Delete Songs</span>
-                        </button>
-                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="video">
-                            <i class="md-icon ats-icon" aria-hidden="true">&#xEB87;</i><span>Delete Videos</span>
-                        </button>
-                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="all">
-                            <i class="md-icon ats-icon" aria-hidden="true">&#xE872;</i><span>Delete All</span>
-                        </button>
+                </div>
+                <div class="ats-finder-panel ats-import-panel"><div class="ats-panel-head"><div><h3>Data Model</h3><div class="fieldDescription">Series and Season items are stored in the media server library. Provider IDs are stored on each media item. Manual/imported Season matches are stored in <code>PluginConfiguration.SeasonThemeMappings</code>. Season Finder rows are regenerated from the library and mappings.</div></div></div></div>
+                <div class="ats-finder-panel ats-import-panel">
+                    <div class="ats-panel-head"><div><h3>Settings Import / Export</h3><div class="fieldDescription">Downloads, naming, tags, and profile settings only. Season mappings are handled separately.</div></div><div id="AtsImportState" class="ats-finder-state">Ready.</div></div>
+                    <div class="ats-import-grid"><div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsImportFile">Settings JSON file</label><input id="AtsImportFile" type="file" accept="application/json,.json" /></div><div class="ats-toolbar-actions"><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsExportConfig"><i class="md-icon ats-icon" aria-hidden="true">&#xE2C4;</i><span>Export Settings</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsImportLoadCurrent"><i class="md-icon ats-icon" aria-hidden="true">&#xE14F;</i><span>Load Current</span></button><button is="emby-button" type="button" class="raised emby-button ats-action-button ats-icon-button-text" id="AtsImportApply" disabled><i class="md-icon ats-icon" aria-hidden="true">&#xE2C6;</i><span>Apply Settings</span></button></div></div>
+                    <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsImportJson">Settings JSON</label><textarea id="AtsImportJson" is="emby-textarea" rows="8"></textarea></div>
+                    <div id="AtsImportPreview" class="ats-import-preview fieldDescription">No settings import loaded.</div>
+                </div>
+                <div class="ats-finder-panel ats-import-panel">
+                    <div class="ats-panel-head"><div><h3>Mappings Import / Export</h3><div class="fieldDescription">Season Finder resolved rows. Import stores rows with AnimeThemes, AniList, or MAL IDs into SeasonThemeMappings.</div></div><div id="AtsMappingsState" class="ats-finder-state">Ready.</div></div>
+                    <div class="ats-import-grid"><div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsMappingsFile">Mappings JSON file</label><input id="AtsMappingsFile" type="file" accept="application/json,.json" /></div><div class="ats-toolbar-actions"><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsExportMappings"><i class="md-icon ats-icon" aria-hidden="true">&#xE2C4;</i><span>Export Mappings</span></button><button is="emby-button" type="button" class="raised emby-button ats-action-button ats-icon-button-text" id="AtsMappingsApply" disabled><i class="md-icon ats-icon" aria-hidden="true">&#xE2C6;</i><span>Apply Mappings</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsLibrarySnapshotExport"><i class="md-icon ats-icon" aria-hidden="true">&#xE1B1;</i><span>Export Library Snapshot</span></button></div></div>
+                    <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsMappingsJson">Mappings JSON</label><textarea id="AtsMappingsJson" is="emby-textarea" rows="8"></textarea></div>
+                    <div id="AtsMappingsPreview" class="ats-import-preview fieldDescription">No mappings import loaded.</div>
+                </div>
+                <div class="ats-finder-panel ats-explorer-panel">
+                    <div class="ats-panel-head">
+                        <div>
+                            <h3>Mapping Explorer</h3>
+                            <div class="fieldDescription">Explore SeasonThemeMappings and their resolved Season Finder status.</div>
+                        </div>
+                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsExplorerRefresh"><i class="md-icon ats-icon" aria-hidden="true">&#xE5D5;</i><span>Refresh</span></button>
                     </div>
+                    <div class="ats-explorer-controls">
+                        <div class="inputContainer ats-clearable">
+                            <label class="inputLabel inputLabelUnfocused" for="AtsExplorerSearch">Search mappings</label>
+                            <input id="AtsExplorerSearch" type="text" is="emby-input" autocomplete="off" />
+                            <button type="button" class="ats-clear-input" data-clear-target="AtsExplorerSearch" aria-label="Clear mapping search">x</button>
+                        </div>
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="AtsExplorerStatus">Status</label>
+                            <select is="emby-select" id="AtsExplorerStatus" class="emby-select-withcolor emby-select">
+                                <option value="all">All</option>
+                                <option value="manual">Manual</option>
+                                <option value="auto">Auto</option>
+                                <option value="direct">Direct</option>
+                                <option value="series">Series</option>
+                                <option value="unmatched">Unmatched</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="AtsExplorerTable" class="ats-explorer-table"></div>
                 </div>
                 </div>
 
@@ -396,6 +426,9 @@
                         </button>
                     </div>
                     <div class="ats-detail-action-right">
+                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesBrowserMatchInFinder">
+                            <i class="md-icon ats-icon" aria-hidden="true">&#xE2DB;</i><span>Match in Season Finder</span>
+                        </button>
                         <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-icon-button-text" id="AnimeThemesBrowserDownload">
                             <i class="md-icon ats-icon" aria-hidden="true">&#xE2C4;</i><span>Download Item</span>
                         </button>
@@ -532,6 +565,13 @@
             #AnimeThemesBrowserPage .ats-empty-detail {
                 opacity: .72;
                 overflow-wrap: anywhere;
+            }
+
+            #AnimeThemesBrowserPage .ats-empty-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: .5rem;
+                margin-top: .65rem;
             }
 
             @keyframes atsFadeIn {
@@ -677,9 +717,27 @@
 
             #AnimeThemesBrowserPage .ats-summary-grid {
                 display: grid;
-                grid-template-columns: repeat(5, minmax(6rem, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
                 gap: .75rem;
                 margin-bottom: .75rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-overview-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+                gap: .85rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-overview-section {
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius-sm);
+                padding: .75rem;
+                background: rgba(127, 127, 127, .055);
+                min-width: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-overview-section h3 {
+                margin: 0 0 .6rem;
             }
 
             #AnimeThemesBrowserPage .ats-summary-grid div {
@@ -726,6 +784,52 @@
             #AnimeThemesBrowserPage .ats-manage-view {
                 display: grid;
                 gap: 1rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-import-grid,
+            #AnimeThemesBrowserPage .ats-explorer-controls {
+                display: grid;
+                grid-template-columns: minmax(14rem, 1fr) auto;
+                gap: .75rem;
+                align-items: end;
+            }
+
+            #AnimeThemesBrowserPage .ats-import-preview {
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+            }
+
+            #AnimeThemesBrowserPage .ats-explorer-table {
+                max-height: 28rem;
+                overflow: auto;
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius-sm);
+            }
+
+            #AnimeThemesBrowserPage .ats-explorer-table table {
+                width: 100%;
+                border-collapse: collapse;
+                min-width: 58rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-explorer-table th,
+            #AnimeThemesBrowserPage .ats-explorer-table td {
+                padding: .55rem .65rem;
+                border-bottom: 1px solid var(--ats-border);
+                text-align: left;
+                vertical-align: top;
+                overflow-wrap: anywhere;
+            }
+
+            #AnimeThemesBrowserPage .ats-explorer-table th {
+                font-weight: 700;
+                opacity: 1;
+                position: sticky;
+                top: 0;
+                z-index: 1;
+                background: #202124;
+                color: #fff;
+                box-shadow: 0 1px 0 var(--ats-border), 0 2px 8px rgba(0, 0, 0, .22);
             }
 
             #AnimeThemesBrowserPage .ats-item-grid {
@@ -885,6 +989,8 @@
             #AnimeThemesBrowserPage .ats-detail-action-left,
             #AnimeThemesBrowserPage .ats-detail-action-right {
                 display: flex;
+                gap: .5rem;
+                flex-wrap: wrap;
                 min-width: 0;
             }
 
