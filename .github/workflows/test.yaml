@@ -18,9 +18,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  call:
-    uses: jellyfin/jellyfin-meta-plugins/.github/workflows/test.yaml@master
-    with:
-      dotnet-version: |
-        8.0.x
-        9.0.x
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+      - name: Restore
+        run: dotnet restore Jellyfin.Plugin.AnimeThemesSync.sln -nologo /p:NuGetAudit=false
+      - name: Build
+        run: dotnet build Jellyfin.Plugin.AnimeThemesSync.sln --configuration Release --no-restore -nologo /p:NuGetAudit=false
+      - name: Test
+        run: dotnet test Jellyfin.Plugin.AnimeThemesSync.Tests/Jellyfin.Plugin.AnimeThemesSync.Tests.csproj --configuration Release --no-build --verbosity normal
