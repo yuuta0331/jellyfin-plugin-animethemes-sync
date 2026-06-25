@@ -37,10 +37,47 @@ public sealed class AnimeThemesSyncController : ControllerBase
     /// </summary>
     /// <returns>The library items.</returns>
     [HttpGet("Items")]
-    [ProducesResponseType(typeof(IReadOnlyList<ThemeBrowserLibraryItem>), StatusCodes.Status200OK)]
-    public ActionResult<IReadOnlyList<ThemeBrowserLibraryItem>> GetItems()
+    [ProducesResponseType(typeof(ThemeBrowserItemsPage), StatusCodes.Status200OK)]
+    public ActionResult<ThemeBrowserItemsPage> GetItems(
+        [FromQuery] string? libraryId,
+        [FromQuery] int? startIndex,
+        [FromQuery] int? limit,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortOrder,
+        [FromQuery] string? searchTerm,
+        [FromQuery] string? itemType,
+        [FromQuery] string? linkFilter,
+        [FromQuery] string? savedFilter)
     {
-        return Ok(_themeDownloader.GetBrowserItems());
+        return Ok(_themeDownloader.GetBrowserItems(libraryId, startIndex, limit, sortBy, sortOrder, searchTerm, itemType, linkFilter, savedFilter));
+    }
+
+    [HttpGet("Storage")]
+    [ProducesResponseType(typeof(AnimeThemesStorageStatus), StatusCodes.Status200OK)]
+    public ActionResult<AnimeThemesStorageStatus> GetStorage()
+    {
+        return Ok(_themeDownloader.GetStorageStatus());
+    }
+
+    [HttpPost("BrowserCache/Rebuild")]
+    [ProducesResponseType(typeof(AnimeThemesMaintenanceResult), StatusCodes.Status200OK)]
+    public ActionResult<AnimeThemesMaintenanceResult> RebuildBrowserCache()
+    {
+        return Ok(_themeDownloader.StartBrowserCacheRebuild());
+    }
+
+    [HttpPost("BrowserCache/Clear")]
+    [ProducesResponseType(typeof(AnimeThemesMaintenanceResult), StatusCodes.Status200OK)]
+    public ActionResult<AnimeThemesMaintenanceResult> ClearBrowserCache()
+    {
+        return Ok(_themeDownloader.ClearBrowserCache());
+    }
+
+    [HttpPost("Extras/ImportLegacyManifests")]
+    [ProducesResponseType(typeof(LegacyExtrasImportResult), StatusCodes.Status200OK)]
+    public ActionResult<LegacyExtrasImportResult> ImportLegacyExtrasManifests()
+    {
+        return Ok(_themeDownloader.ImportLegacyExtrasManifests());
     }
 
     [HttpGet("Summary")]
@@ -160,6 +197,34 @@ public sealed class AnimeThemesSyncController : ControllerBase
         try
         {
             return Ok(_themeDownloader.DeleteThemeFiles(scope));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("ThemeFiles/DeleteFile")]
+    [ProducesResponseType(typeof(ThemeDeleteResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ThemeDeleteResult>> DeleteIndividualThemeFile(
+        [FromQuery] Guid itemId,
+        [FromQuery] string rowId,
+        [FromQuery] string target,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _themeDownloader.DeleteIndividualThemeFileAsync(itemId, rowId, target, cancellationToken).ConfigureAwait(false));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (System.IO.FileNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

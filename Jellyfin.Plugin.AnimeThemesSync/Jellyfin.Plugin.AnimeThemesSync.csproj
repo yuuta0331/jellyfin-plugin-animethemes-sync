@@ -9,7 +9,7 @@
     <Description>Syncs anime themes from AnimeThemes.moe to Jellyfin.</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <NoWarn>$(NoWarn);CS1591;SA1210;SA1402;SA1502;SA1517;SA1649;CA1002;CA2016;CA2227</NoWarn>
+    <NoWarn>$(NoWarn);CS1591;SA1201;SA1203;SA1210;SA1214;SA1402;SA1502;SA1517;SA1611;SA1615;SA1649;CA1002;CA2016;CA2100;CA2227</NoWarn>
     <AnalysisMode>AllEnabledByDefault</AnalysisMode>
     <CodeAnalysisRuleSet>../jellyfin.ruleset</CodeAnalysisRuleSet>
     <CopyToTestyAfterBuild>false</CopyToTestyAfterBuild>

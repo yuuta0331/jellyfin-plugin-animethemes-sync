@@ -1,5 +1,6 @@
 using System.Net.Http;
 using AnimeThemesSync.Shared;
+using AnimeThemesSync.Shared.Interfaces;
 using AnimeThemesSync.Shared.Services;
 using Jellyfin.Plugin.AnimeThemesSync.ExternalIds;
 using Jellyfin.Plugin.AnimeThemesSync.ScheduledTasks;
@@ -7,6 +8,7 @@ using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.AnimeThemesSync;
@@ -26,7 +28,19 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<IExternalId, AnimeThemesSlugExternalId>();
         serviceCollection.AddSingleton<IExternalId, AnimeThemesIdExternalId>();
         serviceCollection.AddSingleton<IExternalUrlProvider, AnimeThemesExternalUrlProvider>();
+        serviceCollection.AddSingleton<IAnimeThemesDataPathProvider, JellyfinAnimeThemesDataPathProvider>();
+        serviceCollection.AddSingleton<IAnimeThemesServerIdentityProvider, JellyfinAnimeThemesServerIdentityProvider>();
+        serviceCollection.AddSingleton(provider =>
+        {
+            var store = new AnimeThemesDataStore(
+                provider.GetRequiredService<IAnimeThemesDataPathProvider>(),
+                provider.GetRequiredService<IAnimeThemesServerIdentityProvider>());
+            store.EnsureInitialized();
+            ThemeExtrasManifestService.ConfigureStore(store);
+            return store;
+        });
         serviceCollection.AddSingleton<ThemeDownloader>();
+        serviceCollection.AddHostedService<BrowserCacheWarmupService>();
 
         // Register AniListService as Singleton
         serviceCollection.AddSingleton(provider =>

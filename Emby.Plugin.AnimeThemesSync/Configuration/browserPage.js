@@ -1,4 +1,4 @@
-define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 'emby-textarea', 'emby-scroller'], function (BaseView) {
+define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 'emby-textarea', 'emby-scroller'], function () {
     'use strict';
 
     function setup(view) {
@@ -38,7 +38,15 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             settingsConfig: null,
             settingsLoaded: false,
             settingsSnapshot: '',
-            settingsApplying: false
+            settingsApplying: false,
+            browserStartIndex: 0,
+            browserLimit: 80,
+            browserTotalRecordCount: 0,
+            browserCacheVersion: '',
+            browserCacheReady: false,
+            browserRebuildRunning: false,
+            browserRefreshTimer: null,
+            librarySearchTimer: null
         };
         var browserToolbar = page.querySelector('.ats-browser-toolbar');
         var itemSelect = page.querySelector('#AnimeThemesBrowserItemSelect');
@@ -48,6 +56,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         var finderView = page.querySelector('#AnimeThemesSeasonFinderView');
         var settingsView = page.querySelector('#AnimeThemesBrowserSettingsView');
         var itemGrid = page.querySelector('#AnimeThemesBrowserItemGrid');
+        var itemPager = page.querySelector('#AnimeThemesBrowserPager');
         var libraryCount = page.querySelector('#AnimeThemesBrowserLibraryCount');
         var rowsContainer = page.querySelector('#AnimeThemesBrowserRows');
         var seasonGroups = page.querySelector('#AnimeThemesBrowserSeasonGroups');
@@ -86,6 +95,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         var summarySongs = page.querySelector('#AnimeThemesSummarySongs');
         var summaryExtras = page.querySelector('#AnimeThemesSummaryExtras');
         var summaryBytes = page.querySelector('#AnimeThemesSummaryBytes');
+        var cacheBytes = page.querySelector('#AnimeThemesCacheBytes');
+        var cacheItems = page.querySelector('#AnimeThemesCacheItems');
+        var cacheState = page.querySelector('#AnimeThemesCacheState');
+        var cachePath = page.querySelector('#AnimeThemesCachePath');
         var summaryManualSeasonMappings = page.querySelector('#AnimeThemesSummaryManualSeasonMappings');
         var summaryAutoSeasonMappings = page.querySelector('#AnimeThemesSummaryAutoSeasonMappings');
         var summaryDirectSeasonMappings = page.querySelector('#AnimeThemesSummaryDirectSeasonMappings');
@@ -445,7 +458,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
 
         function renderItemOptions() {
             var previous = itemSelect.value;
-            state.filteredItems = state.items.filter(itemMatchesSearch).sort(compareItems);
+            state.filteredItems = state.items.slice();
             itemSelect.innerHTML = '';
             state.filteredItems.forEach(function (item) {
                 var option = document.createElement('option');
@@ -479,6 +492,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         function renderLibrarySkeleton() {
             itemGrid.className = 'ats-item-grid ' + state.viewMode + ' size-' + state.viewSize + ' ' + (state.showLibraryDetails ? 'show-details' : 'hide-details');
             itemGrid.innerHTML = '';
+            if (itemPager) itemPager.innerHTML = '';
             libraryCount.textContent = 'Loading library...';
             for (var i = 0; i < 12; i++) {
                 var card = document.createElement('div');
@@ -497,11 +511,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         function renderSummarySkeleton() {
             [
                 summaryItems, summarySeriesItems, summaryMovieItems, summarySeasonItems, summarySavedItems,
-                summaryVideos, summarySongs, summaryExtras, summaryBytes,
+                summaryVideos, summarySongs, summaryExtras, summaryBytes, cacheBytes, cacheItems, cacheState,
                 summaryManualSeasonMappings, summaryAutoSeasonMappings, summaryDirectSeasonMappings,
                 summarySeriesSharedSeasons, summaryUnmatchedSeasons
             ].forEach(function (node) {
-                node.innerHTML = '<span class="ats-skeleton ats-skeleton-text"></span>';
+                if (node) node.innerHTML = '<span class="ats-skeleton ats-skeleton-text"></span>';
             });
         }
 
@@ -526,15 +540,30 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
 
             itemGrid.className = 'ats-item-grid ' + state.viewMode + ' size-' + state.viewSize + ' ' + (state.showLibraryDetails ? 'show-details' : 'hide-details');
             itemGrid.innerHTML = '';
-            libraryCount.textContent = state.filteredItems.length + ' / ' + state.items.length + ' items';
+            if (itemPager) itemPager.innerHTML = '';
+            libraryCount.textContent = state.items.length + ' / ' + state.browserTotalRecordCount + ' items' + (state.browserRebuildRunning ? ' | updating' : '');
             if (!state.filteredItems.length) {
-                appendEmptyState(itemGrid, 'No library items found', 'Try a different search or refresh the library list.');
+                appendEmptyState(
+                    itemGrid,
+                    state.browserCacheReady ? 'No library items found' : 'Updating library...',
+                    state.browserCacheReady ? 'Try a different search or refresh the library.' : 'The library view will update automatically.');
                 return;
             }
 
             state.filteredItems.forEach(function (item) {
                 itemGrid.appendChild(createItemCard(item));
             });
+
+            if (state.items.length < state.browserTotalRecordCount) {
+                var more = document.createElement('button');
+                more.type = 'button';
+                more.className = 'raised emby-button ats-action-button ats-icon-button-text';
+                more.textContent = 'Load more';
+                more.addEventListener('click', function () {
+                    loadItems(true);
+                });
+                (itemPager || itemGrid).appendChild(more);
+            }
         }
 
         function createItemCard(item) {
@@ -672,20 +701,56 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             loadThemes(state.detailToken);
         }
 
-        function loadItems() {
+        function browserSortBy() {
+            var sort = librarySort ? librarySort.value : 'name';
+            if (sort === 'type') return 'ItemType';
+            if (sort === 'saved') return 'saved';
+            if (sort === 'size') return 'ThemeBytes';
+            if (sort === 'link') return 'LinkStatus';
+            if (sort === 'itemAdded') return 'DateCreatedUtc';
+            if (sort === 'latestEpisodeAdded') return 'LatestEpisodeDateUtc';
+            return 'SortName';
+        }
+
+        function browserItemsPath(startIndex) {
+            var params = [
+                ['startIndex', startIndex || 0],
+                ['limit', state.browserLimit],
+                ['sortBy', browserSortBy()],
+                ['sortOrder', librarySortDirection && librarySortDirection.value === 'desc' ? 'Descending' : 'Ascending'],
+                ['searchTerm', searchInput.value.trim()],
+                ['itemType', libraryTypeFilter ? libraryTypeFilter.value : 'all'],
+                ['linkFilter', libraryLinkFilter ? libraryLinkFilter.value : 'all'],
+                ['savedFilter', librarySavedFilter ? librarySavedFilter.value : 'all']
+            ].filter(function (pair) { return pair[1] !== null && pair[1] !== undefined && String(pair[1]).length; });
+            return 'AnimeThemesSync/Items?' + params.map(function (pair) {
+                return encodeURIComponent(pair[0]) + '=' + encodeURIComponent(pair[1]);
+            }).join('&');
+        }
+
+        function loadItems(append) {
+            var startIndex = append ? state.items.length : 0;
             state.itemsLoading = true;
             state.summaryLoading = true;
-            renderLibrarySkeleton();
+            if (!append) renderLibrarySkeleton();
             renderSummarySkeleton();
             Dashboard.showLoadingMsg();
-            Promise.all([apiGet('AnimeThemesSync/Items'), apiGet('AnimeThemesSync/Summary')]).then(function (results) {
-                var items = results[0];
+            Promise.all([apiGet(browserItemsPath(startIndex)), apiGet('AnimeThemesSync/Summary'), apiGet('AnimeThemesSync/Storage')]).then(function (results) {
+                var page = results[0] || {};
+                var items = value(page, 'Items', 'items') || (Array.isArray(page) ? page : []);
                 var summary = results[1] || {};
-                state.items = items || [];
+                var storage = results[2] || {};
+                state.items = append ? state.items.concat(items || []) : (items || []);
+                state.browserTotalRecordCount = Number(value(page, 'TotalRecordCount', 'totalRecordCount') || state.items.length || 0);
+                state.browserCacheVersion = String(value(page, 'CacheVersion', 'cacheVersion') || '');
+                state.browserCacheReady = !!value(page, 'CacheReady', 'cacheReady');
+                state.browserRebuildRunning = !!value(storage, 'RebuildRunning', 'rebuildRunning');
                 state.itemsLoading = false;
                 state.summaryLoading = false;
                 renderItemOptions();
                 renderSummary(summary);
+                renderStorage(storage);
+                scheduleBrowserRefresh();
                 Dashboard.hideLoadingMsg();
             }).catch(function (err) {
                 state.itemsLoading = false;
@@ -695,6 +760,41 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
                 Dashboard.hideLoadingMsg();
                 Dashboard.alert({ title: 'Browser Error', message: 'Failed to load items: ' + err });
             });
+        }
+
+        function scheduleLoadItems() {
+            if (state.librarySearchTimer) {
+                clearTimeout(state.librarySearchTimer);
+            }
+
+            state.librarySearchTimer = setTimeout(function () {
+                loadItems(false);
+            }, 250);
+        }
+
+        function postMaintenance(path, title) {
+            Dashboard.showLoadingMsg();
+            apiPost(path).then(function (result) {
+                Dashboard.hideLoadingMsg();
+                Dashboard.alert({ title: title, message: value(result || {}, 'Message', 'message') || 'Done.' });
+                loadItems(false);
+            }).catch(function (err) {
+                Dashboard.hideLoadingMsg();
+                Dashboard.alert({ title: title, message: getErrorMessage(err) });
+            });
+        }
+
+        function scheduleBrowserRefresh() {
+            if (state.browserRefreshTimer) {
+                clearTimeout(state.browserRefreshTimer);
+                state.browserRefreshTimer = null;
+            }
+
+            if (state.browserRebuildRunning || !state.browserCacheReady) {
+                state.browserRefreshTimer = setTimeout(function () {
+                    loadItems(false);
+                }, 3000);
+            }
         }
 
         function seasonRowId(row) {
@@ -1149,6 +1249,20 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             summaryDirectSeasonMappings.textContent = text(value(summary, 'DirectSeasonMappings', 'directSeasonMappings'));
             summarySeriesSharedSeasons.textContent = text(value(summary, 'SeriesSharedSeasons', 'seriesSharedSeasons'));
             summaryUnmatchedSeasons.textContent = text(value(summary, 'UnmatchedSeasons', 'unmatchedSeasons'));
+        }
+
+        function renderStorage(storage) {
+            if (!storage) return;
+            var ready = !!value(storage, 'CacheReady', 'cacheReady');
+            var rebuilding = !!value(storage, 'RebuildRunning', 'rebuildRunning');
+            if (cacheBytes) cacheBytes.textContent = formatBytes(value(storage, 'DatabaseBytes', 'databaseBytes'));
+            if (cacheItems) cacheItems.textContent = text(value(storage, 'BrowserItemCount', 'browserItemCount'));
+            if (cacheState) cacheState.textContent = rebuilding ? 'Updating' : (ready ? 'Ready' : 'Starting');
+            if (cachePath) {
+                var path = value(storage, 'DatabasePath', 'databasePath');
+                var lastError = value(storage, 'LastError', 'lastError');
+                cachePath.textContent = lastError ? ('Cache file: ' + path + ' | Last error: ' + lastError) : ('Cache file: ' + path);
+            }
         }
 
         function setImportState(message) {
@@ -1740,6 +1854,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             addDownloadButton(actions, row);
             addLocalVideoButton(actions, row);
             addPlayButton(actions, row, 'audio', 'Play Audio', value(row, 'SavedAudioPlayable', 'savedAudioPlayable'));
+            addDeleteFileButton(actions, row, 'video', 'Delete Video', value(row, 'BackdropExists', 'backdropExists'));
+            addDeleteFileButton(actions, row, 'audio', 'Delete Audio', value(row, 'ThemeMusicExists', 'themeMusicExists'));
+            addDeleteFileButton(actions, row, 'extra', 'Delete Extras', value(row, 'ExtraExists', 'extraExists'));
             addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'));
             side.appendChild(actions);
             card.appendChild(side);
@@ -2488,6 +2605,39 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             });
         }
 
+        function addDeleteFileButton(container, row, target, label, exists) {
+            if (!exists) return;
+            var button = createButton(label, true, 'danger');
+            button.addEventListener('click', function () {
+                deleteIndividualThemeFile(row, target);
+            });
+            container.appendChild(button);
+        }
+
+        function deleteIndividualThemeFile(row, target) {
+            var itemId = activeGroupItemId();
+            var rowId = value(row, 'RowId', 'rowId');
+            if (!itemId || !rowId) return;
+
+            var label = target === 'audio' ? 'theme song' : target === 'video' ? 'theme video' : 'extras file';
+            if (!window.confirm('Delete this local ' + label + '?')) {
+                return;
+            }
+
+            setProgress(true, 'Deleting ' + label + '...', 0);
+            apiPost('AnimeThemesSync/ThemeFiles/DeleteFile?ItemId=' + encodeURIComponent(itemId) + '&RowId=' + encodeURIComponent(rowId) + '&Target=' + encodeURIComponent(target)).then(function (result) {
+                var files = value(result, 'FilesDeleted', 'filesDeleted') || 0;
+                var bytes = value(result, 'BytesDeleted', 'bytesDeleted') || 0;
+                setProgress(true, 'Deleted ' + files + ' files (' + formatBytes(bytes) + ')', 100);
+                loadItems();
+                loadThemes();
+                setTimeout(function () { setProgress(false, '', 0); }, 1800);
+            }).catch(function (err) {
+                setProgress(true, 'Delete failed: ' + getErrorMessage(err), 0);
+                Dashboard.alert({ title: 'Delete Error', message: getErrorMessage(err) });
+            });
+        }
+
         function openPlayer(row, target) {
             var rowId = value(row, 'RowId', 'rowId');
             var itemId = activeGroupItemId();
@@ -2563,11 +2713,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
             finderState.textContent = 'Ready. Use Search to refresh candidates.';
         });
         searchInput.addEventListener('input', function () {
-            renderItemOptions();
+            scheduleLoadItems();
         });
         [libraryTypeFilter, libraryLinkFilter, librarySavedFilter, librarySort, librarySortDirection].forEach(function (control) {
             if (control) {
-                control.addEventListener('change', renderItemOptions);
+                control.addEventListener('change', function () {
+                    loadItems(false);
+                });
             }
         });
         themeSearchInput.addEventListener('input', renderThemes);
@@ -2584,7 +2736,29 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         itemSelect.addEventListener('change', function () {
             if (itemSelect.value) openItemDetail(itemSelect.value);
         });
-        page.querySelector('#AnimeThemesBrowserRefreshItems').addEventListener('click', loadItems);
+        page.querySelector('#AnimeThemesBrowserRefreshItems').addEventListener('click', function () {
+            loadItems(false);
+        });
+        var rebuildButton = page.querySelector('#AnimeThemesBrowserRebuildCache');
+        if (rebuildButton) {
+            rebuildButton.addEventListener('click', function () {
+                postMaintenance('AnimeThemesSync/BrowserCache/Rebuild', 'Browser Cache');
+            });
+        }
+
+        var clearCacheButton = page.querySelector('#AnimeThemesBrowserClearCache');
+        if (clearCacheButton) {
+            clearCacheButton.addEventListener('click', function () {
+                postMaintenance('AnimeThemesSync/BrowserCache/Clear', 'Browser Cache');
+            });
+        }
+
+        var importLegacyButton = page.querySelector('#AnimeThemesImportLegacyManifests');
+        if (importLegacyButton) {
+            importLegacyButton.addEventListener('click', function () {
+                postMaintenance('AnimeThemesSync/Extras/ImportLegacyManifests', 'Legacy Manifests');
+            });
+        }
         page.querySelector('#AnimeThemesBrowserDownload').addEventListener('click', downloadItem);
         matchInFinderButton.addEventListener('click', function () {
             openFinderForSeasonGroup(activeGroup());
@@ -2654,21 +2828,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-select', 'emby
         });
     }
 
-    function View(view) {
-        BaseView.apply(this, arguments);
-        this.view = view;
+    return function (view, params) {
         setup(view);
-    }
 
-    Object.assign(View.prototype, BaseView.prototype);
-
-    View.prototype.onResume = function () {
-        BaseView.prototype.onResume.apply(this, arguments);
-        setup(this.view);
-        var event = document.createEvent('Event');
-        event.initEvent('pageshow', true, true);
-        this.view.dispatchEvent(event);
+        view.addEventListener('viewshow', function () {
+            var event = document.createEvent('Event');
+            event.initEvent('pageshow', true, true);
+            view.dispatchEvent(event);
+        });
     };
-
-    return View;
 });

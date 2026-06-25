@@ -62,9 +62,22 @@ jobs:
 
           cat release-notes.md
 
-      - name: Update build.yaml Version
+      - name: Validate build.yaml Version
         run: |
-          sed -i "s/version: .*/version: \"${{ env.VERSION }}\"/" build.yaml
+          BUILD_VERSION="$(python - <<'PY'
+          from pathlib import Path
+          for line in Path("build.yaml").read_text(encoding="utf-8").splitlines():
+              if line.startswith("version:"):
+                  print(line.split(":", 1)[1].strip().strip('"').strip("'"))
+                  break
+          else:
+              raise SystemExit("build.yaml version was not found")
+          PY
+          )"
+          if [ "${BUILD_VERSION}" != "${VERSION}" ]; then
+            echo "build.yaml version (${BUILD_VERSION}) must match tag version (${VERSION})."
+            exit 1
+          fi
           cat build.yaml
 
       - name: Build Jellyfin

@@ -5,6 +5,7 @@ using System.Threading;
 using AnimeThemesSync.Shared.Models;
 using AnimeThemesSync.Shared.Services;
 using Emby.Plugin.AnimeThemesSync.ScheduledTasks;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Model.IO;
@@ -56,7 +57,36 @@ public class DownloadAnimeThemesThemeRow : IReturn<ThemeDownloadExecutionResult>
 /// Request to list AnimeThemes-enabled library items.
 /// </summary>
 [Route("/AnimeThemesSync/Items", "GET", Summary = "Gets AnimeThemes-enabled library items.")]
-public class GetAnimeThemesItems : IReturn<IReadOnlyList<ThemeBrowserLibraryItem>>
+public class GetAnimeThemesItems : IReturn<ThemeBrowserItemsPage>
+{
+    public string? LibraryId { get; set; }
+    public int? StartIndex { get; set; }
+    public int? Limit { get; set; }
+    public string? SortBy { get; set; }
+    public string? SortOrder { get; set; }
+    public string? SearchTerm { get; set; }
+    public string? ItemType { get; set; }
+    public string? LinkFilter { get; set; }
+    public string? SavedFilter { get; set; }
+}
+
+[Route("/AnimeThemesSync/Storage", "GET", Summary = "Gets AnimeThemes Sync storage status.")]
+public class GetAnimeThemesStorage : IReturn<AnimeThemesStorageStatus>
+{
+}
+
+[Route("/AnimeThemesSync/BrowserCache/Rebuild", "POST", Summary = "Starts a Browser cache rebuild.")]
+public class RebuildAnimeThemesBrowserCache : IReturn<AnimeThemesMaintenanceResult>
+{
+}
+
+[Route("/AnimeThemesSync/BrowserCache/Clear", "POST", Summary = "Clears the Browser cache.")]
+public class ClearAnimeThemesBrowserCache : IReturn<AnimeThemesMaintenanceResult>
+{
+}
+
+[Route("/AnimeThemesSync/Extras/ImportLegacyManifests", "POST", Summary = "Imports legacy extras manifests.")]
+public class ImportAnimeThemesLegacyExtrasManifests : IReturn<LegacyExtrasImportResult>
 {
 }
 
@@ -115,6 +145,15 @@ public class DeleteAnimeThemesFiles : IReturn<ThemeDeleteResult>
 {
     public string Scope { get; set; } = "all";
 }
+
+[Route("/AnimeThemesSync/ThemeFiles/DeleteFile", "POST", Summary = "Deletes a specific local AnimeThemes file for an item.")]
+public class DeleteAnimeThemesFile : IReturn<ThemeDeleteResult>
+{
+    public Guid ItemId { get; set; }
+    public string RowId { get; set; } = string.Empty;
+    public string Target { get; set; } = string.Empty;
+}
+
 
 /// <summary>
 /// Request to get AnimeThemes Browser rows for one item.
@@ -192,9 +231,10 @@ public class AnimeThemesSyncService : IService
         ILibraryManager libraryManager,
         IFileSystem fileSystem,
         ILogManager logManager,
-        IMediaEncoder mediaEncoder)
+        IMediaEncoder mediaEncoder,
+        IApplicationPaths applicationPaths)
     {
-        _themeDownloader = new ThemeDownloader(libraryManager, fileSystem, logManager, mediaEncoder);
+        _themeDownloader = new ThemeDownloader(libraryManager, fileSystem, logManager, mediaEncoder, applicationPaths);
     }
 
     /// <summary>
@@ -204,7 +244,36 @@ public class AnimeThemesSyncService : IService
     /// <returns>The library items.</returns>
     public object Get(GetAnimeThemesItems request)
     {
-        return _themeDownloader.GetBrowserItems();
+        return _themeDownloader.GetBrowserItems(
+            request.LibraryId,
+            request.StartIndex,
+            request.Limit,
+            request.SortBy,
+            request.SortOrder,
+            request.SearchTerm,
+            request.ItemType,
+            request.LinkFilter,
+            request.SavedFilter);
+    }
+
+    public object Get(GetAnimeThemesStorage request)
+    {
+        return _themeDownloader.GetStorageStatus();
+    }
+
+    public object Post(RebuildAnimeThemesBrowserCache request)
+    {
+        return _themeDownloader.StartBrowserCacheRebuild();
+    }
+
+    public object Post(ClearAnimeThemesBrowserCache request)
+    {
+        return _themeDownloader.ClearBrowserCache();
+    }
+
+    public object Post(ImportAnimeThemesLegacyExtrasManifests request)
+    {
+        return _themeDownloader.ImportLegacyExtrasManifests();
     }
 
     public object Get(GetAnimeThemesBrowserSummary request)
@@ -308,6 +377,26 @@ public class AnimeThemesSyncService : IService
         try
         {
             return _themeDownloader.DeleteThemeFiles(request.Scope);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
+    }
+
+    public object Post(DeleteAnimeThemesFile request)
+    {
+        try
+        {
+            return _themeDownloader.DeleteIndividualThemeFileAsync(request.ItemId, request.RowId, request.Target, CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (System.IO.FileNotFoundException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
         }
         catch (InvalidOperationException ex)
         {

@@ -37,6 +37,8 @@ public class ThemeDownloader : IScheduledTask
     private readonly IMediaEncoder _mediaEncoder;
     private readonly AnimeThemesService _animeThemesService;
     private readonly AniListService _aniListService;
+    private readonly AnimeThemesDataStore _dataStore;
+    private int _browserCacheRebuildRunning;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ThemeDownloader"/> class.
@@ -48,6 +50,7 @@ public class ThemeDownloader : IScheduledTask
     /// <param name="mediaEncoder">The media encoder.</param>
     /// <param name="animeThemesService">The AnimeThemes service.</param>
     /// <param name="aniListService">The AniList service.</param>
+    /// <param name="dataStore">The AnimeThemes data store.</param>
     public ThemeDownloader(
         ILibraryManager libraryManager,
         IFileSystem fileSystem,
@@ -55,7 +58,8 @@ public class ThemeDownloader : IScheduledTask
         IHttpClientFactory httpClientFactory,
         IMediaEncoder mediaEncoder,
         AnimeThemesService animeThemesService,
-        AniListService aniListService)
+        AniListService aniListService,
+        AnimeThemesDataStore dataStore)
     {
         _libraryManager = libraryManager;
         _fileSystem = fileSystem;
@@ -64,6 +68,8 @@ public class ThemeDownloader : IScheduledTask
         _mediaEncoder = mediaEncoder;
         _animeThemesService = animeThemesService;
         _aniListService = aniListService;
+        _dataStore = dataStore;
+        ThemeExtrasManifestService.ConfigureStore(_dataStore);
     }
 
     /// <inheritdoc />
@@ -94,6 +100,7 @@ public class ThemeDownloader : IScheduledTask
         _logger.LogInformation("Found {Count} items to process.", items.Count);
 
         var result = await ProcessItems(items, config, config.ForceRedownload, progress, cancellationToken).ConfigureAwait(false);
+        await RebuildBrowserCacheAsync(cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Anime Themes Download Task Completed. Downloaded {Count} files.", result.DownloadsCompleted);
     }
 
@@ -130,19 +137,199 @@ public class ThemeDownloader : IScheduledTask
         EnsureSeasonThemeDownloadsAllowed(item, config);
 
         _logger.LogInformation("Starting Anime Themes on-demand download for {ItemName} ({ItemId})...", item.Name, itemId);
-        return await ProcessItems(new[] { item }, config, forceRedownload || config.ForceRedownload, progress, cancellationToken).ConfigureAwait(false);
+        var result = await ProcessItems(new[] { item }, config, forceRedownload || config.ForceRedownload, progress, cancellationToken).ConfigureAwait(false);
+        RefreshBrowserCacheForItem(item);
+        return result;
     }
 
     /// <summary>
     /// Gets browser candidates from AnimeThemes-enabled libraries.
     /// </summary>
     /// <returns>The candidate items.</returns>
-    public IReadOnlyList<ThemeBrowserLibraryItem> GetBrowserItems()
+    public ThemeBrowserItemsPage GetBrowserItems(
+        string? libraryId,
+        int? startIndex,
+        int? limit,
+        string? sortBy,
+        string? sortOrder,
+        string? searchTerm,
+        string? itemType,
+        string? linkFilter,
+        string? savedFilter)
     {
-        return GetEnabledLibraryItems()
-            .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(BuildBrowserLibraryItem)
-            .ToList();
+        EnsureBrowserCacheRebuildStarted();
+        return _dataStore.QueryBrowserItems(libraryId, startIndex, limit, sortBy, sortOrder, searchTerm, itemType, linkFilter, savedFilter);
+    }
+
+    public AnimeThemesStorageStatus GetStorageStatus()
+    {
+        EnsureBrowserCacheRebuildStarted();
+        return _dataStore.GetStorageStatus(IsBrowserCacheRebuildRunning);
+    }
+
+    public AnimeThemesMaintenanceResult ClearBrowserCache()
+    {
+        _dataStore.ClearBrowserCache();
+        return new AnimeThemesMaintenanceResult(true, "Browser cache cleared.");
+    }
+
+    public AnimeThemesMaintenanceResult StartBrowserCacheRebuild()
+    {
+        if (Interlocked.CompareExchange(ref _browserCacheRebuildRunning, 1, 0) != 0)
+        {
+            return new AnimeThemesMaintenanceResult(false, "Browser cache rebuild is already running.");
+        }
+
+        _dataStore.SetBrowserCacheRebuildError(null);
+        _ = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await RebuildBrowserCacheCoreAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _dataStore.SetBrowserCacheRebuildError(ex.Message);
+                    _logger.LogError(ex, "Browser cache rebuild failed.");
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _browserCacheRebuildRunning, 0);
+                }
+            });
+        return new AnimeThemesMaintenanceResult(true, "Browser cache rebuild started.");
+    }
+
+    public async Task RebuildBrowserCacheAsync(CancellationToken cancellationToken)
+    {
+        if (Interlocked.CompareExchange(ref _browserCacheRebuildRunning, 1, 0) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _dataStore.SetBrowserCacheRebuildError(null);
+            await RebuildBrowserCacheCoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _dataStore.SetBrowserCacheRebuildError(ex.Message);
+            throw;
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _browserCacheRebuildRunning, 0);
+        }
+    }
+
+    public LegacyExtrasImportResult ImportLegacyExtrasManifests()
+    {
+        var manifests = 0;
+        var files = 0;
+        foreach (var item in GetEnabledLibraryItems())
+        {
+            ImportLegacyExtrasManifestForPath(item.Path, ref manifests, ref files);
+            if (item is Series series)
+            {
+                foreach (var season in GetSeasonItems(series))
+                {
+                    ImportLegacyExtrasManifestForPath(season.Path, ref manifests, ref files);
+                }
+            }
+        }
+
+        return new LegacyExtrasImportResult(manifests, files);
+    }
+
+    private bool IsBrowserCacheRebuildRunning => Volatile.Read(ref _browserCacheRebuildRunning) != 0;
+
+    public void EnsureBrowserCacheRebuildStarted()
+    {
+        if (!_dataStore.IsBrowserCacheReady())
+        {
+            _ = StartBrowserCacheRebuild();
+        }
+    }
+
+    private Task RebuildBrowserCacheCoreAsync(CancellationToken cancellationToken)
+    {
+        var records = new List<BrowserItemRecord>();
+        var libraryCounts = new Dictionary<Guid, (string? Name, int Count)>();
+        foreach (var entry in GetEnabledLibraryItemsWithLibraries())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            records.Add(BuildBrowserItemRecord(entry.Item, entry.LibraryId));
+            libraryCounts.TryGetValue(entry.LibraryId, out var current);
+            libraryCounts[entry.LibraryId] = (entry.LibraryName, current.Count + 1);
+        }
+
+        _dataStore.ReplaceBrowserItems(
+            records,
+            libraryCounts.Select(pair => (pair.Key.ToString("D"), pair.Value.Name, pair.Value.Count)));
+        _logger.LogInformation("Rebuilt AnimeThemes Browser cache. Items={Count}", records.Count);
+        return Task.CompletedTask;
+    }
+
+    private void RefreshBrowserCacheForItem(BaseItem item)
+    {
+        if (item is not Series and not Movie)
+        {
+            return;
+        }
+
+        var libraryId = ResolveLibraryId(item);
+        _dataStore.UpsertBrowserItem(BuildBrowserItemRecord(item, libraryId));
+    }
+
+    private void ImportLegacyExtrasManifestForPath(string? itemPath, ref int manifests, ref int files)
+    {
+        if (string.IsNullOrWhiteSpace(itemPath))
+        {
+            return;
+        }
+
+        var result = _dataStore.ImportLegacyExtrasManifest(Path.Combine(itemPath, "extras"));
+        manifests += result.ManifestsImported;
+        files += result.FilesImported;
+    }
+
+    private BrowserItemRecord BuildBrowserItemRecord(BaseItem item, Guid? libraryId)
+    {
+        var (videos, songs, extras, bytes) = CountLocalThemeFilesForBrowserItem(item);
+        var directLink = item.ProviderIds.TryGetValue(Constants.AnimeThemesProviderId, out var slug) && !string.IsNullOrWhiteSpace(slug);
+        var seasonLinkStatus = GetSeasonLinkStatus(item);
+        var linkStatus = directLink ? "Direct" : seasonLinkStatus;
+        return new BrowserItemRecord
+        {
+            ItemId = item.Id.ToString("D"),
+            LibraryId = libraryId?.ToString("D"),
+            ItemType = item is Series ? "Series" : "Movie",
+            Name = item.Name ?? "Unknown",
+            SortName = item.SortName ?? item.Name ?? "Unknown",
+            ProductionYear = item.ProductionYear,
+            AnimeThemesSlug = directLink ? slug : null,
+            AniListId = item.ProviderIds.TryGetValue(Constants.AniListProviderId, out var aniListId) ? aniListId : null,
+            MyAnimeListId = item.ProviderIds.TryGetValue(Constants.MyAnimeListProviderId, out var malId) ? malId : null,
+            LinkStatus = linkStatus,
+            PrimaryImageTag = GetImageTag(item, ImageType.Primary),
+            LogoImageTag = GetImageTag(item, ImageType.Logo),
+            BackdropImageTag = GetImageTag(item, ImageType.Backdrop),
+            ThumbImageTag = GetImageTag(item, ImageType.Thumb),
+            PrimaryImageUrl = BuildImageUrl(item, ImageType.Primary, "Primary"),
+            LogoImageUrl = BuildImageUrl(item, ImageType.Logo, "Logo"),
+            BackdropImageUrl = BuildImageUrl(item, ImageType.Backdrop, "Backdrop/0"),
+            ThumbImageUrl = BuildImageUrl(item, ImageType.Thumb, "Thumb"),
+            ThemeVideoCount = videos,
+            ThemeSongCount = songs,
+            ThemeExtraCount = extras,
+            ThemeBytes = bytes,
+            HasLocalThemes = videos + songs + extras > 0,
+            DateCreatedUtc = new DateTimeOffset(DateTime.SpecifyKind(item.DateCreated, DateTimeKind.Local)).ToUniversalTime(),
+            LatestEpisodeDateUtc = item is Series series ? GetLatestEpisodeDateCreated(series)?.ToUniversalTime() : null,
+            LastRefreshedUtc = DateTimeOffset.UtcNow
+        };
     }
 
     private ThemeBrowserLibraryItem BuildBrowserLibraryItem(BaseItem item)
@@ -245,106 +432,8 @@ public class ThemeDownloader : IScheduledTask
 
     public ThemeBrowserSummary GetBrowserSummary()
     {
-        var items = GetEnabledLibraryItems();
-        var videos = 0;
-        var songs = 0;
-        var extras = 0;
-        var savedItems = 0;
-        var seriesItems = 0;
-        var movieItems = 0;
-        var seasonItems = 0;
-        var manualSeasonMappings = 0;
-        var autoSeasonMappings = 0;
-        var directSeasonMappings = 0;
-        var seriesSharedSeasons = 0;
-        var unmatchedSeasons = 0;
-        long bytes = 0;
-
-        foreach (var item in items)
-        {
-            if (item is Series)
-            {
-                seriesItems++;
-            }
-            else if (item is Movie)
-            {
-                movieItems++;
-            }
-
-            var itemVideos = 0;
-            var itemSongs = 0;
-            var itemExtras = 0;
-            long itemBytes = 0;
-            AccumulateLocalThemeDirectories(item.Path, ref itemVideos, ref itemSongs, ref itemExtras, ref itemBytes);
-            if (item is Series series)
-            {
-                foreach (var season in GetSeasonItems(series).Where(IsSeasonEligibleForThemeMatching))
-                {
-                    if (string.IsNullOrWhiteSpace(season.Path))
-                    {
-                        continue;
-                    }
-
-                    seasonItems++;
-                    var state = BuildSeasonThemeMatchState(series, season, null);
-                    switch (state.Status)
-                    {
-                        case "Manual":
-                            manualSeasonMappings++;
-                            break;
-                        case "Auto":
-                            autoSeasonMappings++;
-                            break;
-                        case "Direct":
-                            directSeasonMappings++;
-                            break;
-                        case "Series":
-                            seriesSharedSeasons++;
-                            break;
-                        default:
-                            unmatchedSeasons++;
-                            break;
-                    }
-                }
-
-                if (IsSeasonThemeDownloadsEnabled())
-                {
-                    foreach (var season in GetSeasonItems(series))
-                    {
-                        if (!string.IsNullOrWhiteSpace(season.Path))
-                        {
-                            AccumulateLocalThemeDirectories(season.Path, ref itemVideos, ref itemSongs, ref itemExtras, ref itemBytes);
-                        }
-                    }
-                }
-            }
-
-            if (itemVideos + itemSongs + itemExtras > 0)
-            {
-                savedItems++;
-            }
-
-            videos += itemVideos;
-            songs += itemSongs;
-            extras += itemExtras;
-            bytes += itemBytes;
-        }
-
-        return new ThemeBrowserSummary(
-            items.Count,
-            videos,
-            songs,
-            extras,
-            bytes,
-            seriesItems,
-            movieItems,
-            seasonItems,
-            savedItems,
-            manualSeasonMappings,
-            autoSeasonMappings,
-            directSeasonMappings,
-            seriesSharedSeasons,
-            unmatchedSeasons);
+        EnsureBrowserCacheRebuildStarted();
+        return _dataStore.GetBrowserSummary();
     }
 
     public Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync(CancellationToken cancellationToken)
@@ -578,7 +667,53 @@ public class ThemeDownloader : IScheduledTask
         }
 
         _logger.LogInformation("Deleted AnimeThemes local files. Scope={Scope}, Files={Files}, Bytes={Bytes}", normalizedScope, filesDeleted, bytesDeleted);
+        _ = StartBrowserCacheRebuild();
         return new ThemeDeleteResult(filesDeleted, bytesDeleted);
+    }
+
+    public async Task<ThemeDeleteResult> DeleteIndividualThemeFileAsync(
+        Guid itemId,
+        string rowId,
+        string target,
+        CancellationToken cancellationToken)
+    {
+        var item = GetSupportedItem(itemId);
+        var result = await GetThemeBrowserItemAsync(itemId, cancellationToken).ConfigureAwait(false);
+        var row = result.Themes.FirstOrDefault(r => string.Equals(r.RowId, rowId, StringComparison.OrdinalIgnoreCase))
+            ?? throw new KeyNotFoundException("The requested theme row was not found.");
+
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            throw new InvalidOperationException("Local media target is required.");
+        }
+
+        var path = target.ToLowerInvariant() switch
+        {
+            "video" => row.BackdropExists ? row.BackdropPath : null,
+            "audio" => row.ThemeMusicExists ? row.ThemeMusicPath : null,
+            "extra" => row.ExtraExists ? row.ExtraPath : null,
+            _ => throw new InvalidOperationException("Unsupported local media target.")
+        };
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new FileNotFoundException("The requested local theme media was not found.");
+        }
+
+        ValidateLocalMediaPath(item.Path, path);
+
+        var fileExists = _fileSystem.FileExists(path);
+        if (!fileExists)
+        {
+            throw new FileNotFoundException("The requested local theme media file does not exist on disk.");
+        }
+
+        var bytesDeleted = new FileInfo(path).Length;
+        _fileSystem.DeleteFile(path);
+        RefreshBrowserCacheForItem(item is Season season ? FindSeriesForSeason(season) ?? item : item);
+
+        _logger.LogInformation("Deleted specific local theme file for {ItemName} ({ItemId}, RowId={RowId}, Target={Target}). File={Path}, Bytes={Bytes}", item.Name, itemId, rowId, target, path, bytesDeleted);
+        return new ThemeDeleteResult(1, bytesDeleted);
     }
 
     private void DeleteThemeFilesForPath(
@@ -672,6 +807,7 @@ public class ThemeDownloader : IScheduledTask
 
             _logger.LogInformation("Downloading AnimeThemes row media [{ItemName}] {Filename}", item.Name, Path.GetFileName(file.Path));
             await DownloadFile(file.Url, file.Path, file.IsVideo ? videoConfig.Volume : audioConfig.Volume, cancellationToken).ConfigureAwait(false);
+            _dataStore.UpsertThemeFile(item.Id.ToString("D"), file.ThemeKey, file.IsVideo ? "video" : "audio", file.Path);
             downloadsCompleted++;
             finishedSteps++;
             progress?.Report(20 + ((double)finishedSteps / totalSteps * 75));
@@ -696,6 +832,7 @@ public class ThemeDownloader : IScheduledTask
                 }
 
                 ThemeExtrasManifestService.UpdateExtraFile(extra);
+                _dataStore.UpsertThemeFile(item.Id.ToString("D"), extra.Key, "extra", extra.TargetPath);
                 extrasCompleted++;
                 _logger.LogInformation(
                     "Extras {Action} [{ItemName}] {Filename} (HardLinkVerified={HardLinkVerified}, LinkCount={LinkCount}, FallbackReason={FallbackReason})",
@@ -717,6 +854,7 @@ public class ThemeDownloader : IScheduledTask
         }
 
         progress?.Report(100);
+        RefreshBrowserCacheForItem(item is Season seasonItem ? FindSeriesForSeason(seasonItem) ?? item : item);
         return new ThemeDownloadExecutionResult(1, downloadsPlanned, downloadsCompleted, extrasPlanned, extrasCompleted, extraFailures);
     }
 
@@ -762,6 +900,17 @@ public class ThemeDownloader : IScheduledTask
         return item.HasImage(imageType, 0)
             ? string.Format(CultureInfo.InvariantCulture, "Items/{0}/Images/{1}", item.Id, imagePath)
             : null;
+    }
+
+    private static string? GetImageTag(BaseItem item, ImageType imageType)
+    {
+        return item.HasImage(imageType, 0) ? StringComparer.Ordinal.GetHashCode(item.GetImageInfo(imageType, 0).Path ?? string.Empty).ToString(CultureInfo.InvariantCulture) : null;
+    }
+
+    private Guid? ResolveLibraryId(BaseItem item)
+    {
+        var folder = _libraryManager.GetCollectionFolders(item).FirstOrDefault();
+        return folder?.Id;
     }
 
     private void AccumulateLocalThemeDirectory(string directory, ref int count, ref long bytes)
@@ -1131,8 +1280,8 @@ public class ThemeDownloader : IScheduledTask
         // ── Phase 1: Resolve all items sequentially (API calls are rate-limited) ──
         _logger.LogInformation("=== Phase 1: Resolving themes for {Count} items ===", items.Count);
 
-        var allDownloads = new List<(ThemeFilePlan File, int Volume, string ItemName)>();
-        var allExtras = new List<(ThemeExtraPlan Extra, string ItemName)>();
+        var allDownloads = new List<(ThemeFilePlan File, int Volume, string ItemName, Guid ItemId)>();
+        var allExtras = new List<(ThemeExtraPlan Extra, string ItemName, Guid ItemId)>();
         var cleanupTasks = new List<(string Directory, HashSet<string> DesiredFiles, List<AnimeThemesTheme> Themes)>();
 
         for (var i = 0; i < items.Count; i++)
@@ -1160,7 +1309,7 @@ public class ThemeDownloader : IScheduledTask
                         var volume = file.IsVideo ? videoConfig.Volume : audioConfig.Volume;
                         if (forceRedownload || !_fileSystem.FileExists(file.Path))
                         {
-                            allDownloads.Add((file, volume, itemName));
+                            allDownloads.Add((file, volume, itemName, item.Id));
                         }
                     }
 
@@ -1168,7 +1317,7 @@ public class ThemeDownloader : IScheduledTask
                     {
                         if (forceRedownload || config.ForceRedownload || !_fileSystem.FileExists(extra.TargetPath))
                         {
-                            allExtras.Add((extra, itemName));
+                            allExtras.Add((extra, itemName, item.Id));
                         }
                     }
                 }
@@ -1230,6 +1379,7 @@ public class ThemeDownloader : IScheduledTask
                                 {
                                     _logger.LogDebug("Downloading [{ItemName}] {Filename}...", dl.ItemName, Path.GetFileName(dl.File.Path));
                                     await DownloadFile(dl.File.Url, dl.File.Path, dl.Volume, cancellationToken).ConfigureAwait(false);
+                                    _dataStore.UpsertThemeFile(dl.ItemId.ToString("D"), dl.File.ThemeKey, dl.File.IsVideo ? "video" : "audio", dl.File.Path);
                                     _ = Interlocked.Increment(ref completedDownloads);
                                     _logger.LogInformation("Downloaded [{ItemName}] {Filename}", dl.ItemName, Path.GetFileName(dl.File.Path));
                                     break;
@@ -1279,6 +1429,7 @@ public class ThemeDownloader : IScheduledTask
                     config.ForceRedownload);
 
                 ThemeExtrasManifestService.UpdateExtraFile(extra.Extra);
+                _dataStore.UpsertThemeFile(extra.ItemId.ToString("D"), extra.Extra.Key, "extra", extra.Extra.TargetPath);
                 _logger.LogInformation(
                     "Extras {Action} [{ItemName}] {Filename} (HardLinkVerified={HardLinkVerified}, LinkCount={LinkCount}, FallbackReason={FallbackReason})",
                     result.Action,
@@ -1302,6 +1453,11 @@ public class ThemeDownloader : IScheduledTask
             CleanupDirectory(cleanup.Directory, cleanup.DesiredFiles, cleanup.Themes);
         }
 
+        foreach (var item in items)
+        {
+            RefreshBrowserCacheForItem(item);
+        }
+
         return new ThemeDownloadExecutionResult(items.Count, allDownloads.Count, completedDownloads, allExtras.Count, completedExtras, failedExtras);
     }
 
@@ -1323,8 +1479,15 @@ public class ThemeDownloader : IScheduledTask
     /// </summary>
     private List<BaseItem> GetEnabledLibraryItems()
     {
+        return GetEnabledLibraryItemsWithLibraries()
+            .Select(i => i.Item)
+            .ToList();
+    }
+
+    private List<(BaseItem Item, Guid LibraryId, string? LibraryName)> GetEnabledLibraryItemsWithLibraries()
+    {
         var root = _libraryManager.RootFolder;
-        var enabledFolderIds = new HashSet<Guid>();
+        var enabledFolders = new Dictionary<Guid, string?>();
 
         foreach (var child in root.Children)
         {
@@ -1357,7 +1520,7 @@ public class ThemeDownloader : IScheduledTask
                 if (isEnabled)
                 {
                     _logger.LogInformation("AnimeThemesSync is enabled for library: {LibraryName}", folder.Name);
-                    enabledFolderIds.Add(folder.Id);
+                    enabledFolders[folder.Id] = folder.Name;
                 }
                 else
                 {
@@ -1366,19 +1529,19 @@ public class ThemeDownloader : IScheduledTask
             }
         }
 
-        var items = new List<BaseItem>();
-        foreach (var folderId in enabledFolderIds)
+        var items = new List<(BaseItem Item, Guid LibraryId, string? LibraryName)>();
+        foreach (var folder in enabledFolders)
         {
-            var folder = _libraryManager.GetItemById(folderId) as Folder;
-            if (folder != null)
+            var library = _libraryManager.GetItemById(folder.Key) as Folder;
+            if (library != null)
             {
                 var folderItems = _libraryManager.GetItemList(new InternalItemsQuery
                 {
                     IncludeItemTypes = new[] { BaseItemKind.Series, BaseItemKind.Movie },
                     Recursive = true,
-                    Parent = folder
+                    Parent = library
                 });
-                items.AddRange(folderItems);
+                items.AddRange(folderItems.Select(item => (item, folder.Key, folder.Value)));
             }
         }
 

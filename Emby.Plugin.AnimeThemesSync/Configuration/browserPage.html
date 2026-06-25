@@ -1,8 +1,8 @@
-<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260620a" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260626a" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.06.20-a.</div>
+                <div class="fieldDescription">UI version: 2026.06.26-a.</div>
 
                 <div class="verticalSection ats-tabs" id="AnimeThemesBrowserTabs">
                     <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-tab active" id="AnimeThemesBrowserLibraryTab" data-ats-tab="library">
@@ -127,6 +127,7 @@
                         </div>
                     </div>
                     <div id="AnimeThemesBrowserItemGrid" class="ats-item-grid poster size-medium"></div>
+                    <div id="AnimeThemesBrowserPager" class="ats-library-pager"></div>
                 </div>
 
                 <div class="verticalSection ats-manage-view" id="AnimeThemesBrowserManageView" style="display: none;">
@@ -136,7 +137,7 @@
                         <div class="ats-overview-section"><h3>Library</h3><div class="ats-summary-grid"><div><strong id="AnimeThemesSummaryItems">0</strong><span>Items</span></div><div><strong id="AnimeThemesSummarySeriesItems">0</strong><span>Series</span></div><div><strong id="AnimeThemesSummaryMovieItems">0</strong><span>Movies</span></div><div><strong id="AnimeThemesSummarySeasonItems">0</strong><span>Seasons</span></div></div></div>
                         <div class="ats-overview-section"><h3>Matching</h3><div class="ats-summary-grid"><div><strong id="AnimeThemesSummaryManualSeasonMappings">0</strong><span>Manual</span></div><div><strong id="AnimeThemesSummaryAutoSeasonMappings">0</strong><span>Auto</span></div><div><strong id="AnimeThemesSummaryDirectSeasonMappings">0</strong><span>Direct</span></div><div><strong id="AnimeThemesSummarySeriesSharedSeasons">0</strong><span>Series Shared</span></div><div><strong id="AnimeThemesSummaryUnmatchedSeasons">0</strong><span>Unmatched</span></div></div></div>
                         <div class="ats-overview-section"><h3>Local Files</h3><div class="ats-summary-grid"><div><strong id="AnimeThemesSummarySavedItems">0</strong><span>Saved Items</span></div><div><strong id="AnimeThemesSummaryVideos">0</strong><span>Videos</span></div><div><strong id="AnimeThemesSummarySongs">0</strong><span>Songs</span></div><div><strong id="AnimeThemesSummaryExtras">0</strong><span>Extras</span></div></div></div>
-                        <div class="ats-overview-section"><h3>Storage & Actions</h3><div class="ats-summary-grid"><div><strong id="AnimeThemesSummaryBytes">0 B</strong><span>Size</span></div></div><div class="ats-toolbar-actions"><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="audio"><i class="md-icon ats-icon" aria-hidden="true">&#xE440;</i><span>Delete Songs</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="video"><i class="md-icon ats-icon" aria-hidden="true">&#xEB87;</i><span>Delete Videos</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="all"><i class="md-icon ats-icon" aria-hidden="true">&#xE872;</i><span>Delete All</span></button></div></div>
+                        <div class="ats-overview-section"><h3>Storage & Cache</h3><div class="ats-summary-grid"><div><strong id="AnimeThemesSummaryBytes">0 B</strong><span>Theme Size</span></div><div><strong id="AnimeThemesCacheBytes">0 B</strong><span>Cache Size</span></div><div><strong id="AnimeThemesCacheItems">0</strong><span>Cache Items</span></div><div><strong id="AnimeThemesCacheState">Ready</strong><span>Status</span></div></div><div id="AnimeThemesCachePath" class="fieldDescription"></div><div class="ats-toolbar-actions"><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesBrowserRebuildCache"><i class="md-icon ats-icon" aria-hidden="true">&#xE863;</i><span>Rebuild Cache</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesBrowserClearCache"><i class="md-icon ats-icon" aria-hidden="true">&#xE872;</i><span>Clear Cache</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesImportLegacyManifests"><i class="md-icon ats-icon" aria-hidden="true">&#xE2C3;</i><span>Import Legacy</span></button></div><div class="ats-toolbar-actions"><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="audio"><i class="md-icon ats-icon" aria-hidden="true">&#xE440;</i><span>Delete Songs</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="video"><i class="md-icon ats-icon" aria-hidden="true">&#xEB87;</i><span>Delete Videos</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" data-delete-scope="all"><i class="md-icon ats-icon" aria-hidden="true">&#xE872;</i><span>Delete All</span></button></div></div>
                     </div>
                 </div>
                 <div class="ats-finder-panel ats-import-panel"><div class="ats-panel-head"><div><h3>Data Model</h3><div class="fieldDescription">Series and Season items are stored in the media server library. Provider IDs are stored on each media item. Manual/imported Season matches are stored in <code>PluginConfiguration.SeasonThemeMappings</code>. Season Finder rows are regenerated from the library and mappings.</div></div></div></div>
@@ -678,6 +679,10 @@
 
             #AnimeThemesBrowserPage .ats-tabs {
                 display: flex;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
                 gap: 0;
                 align-items: flex-end;
                 border-bottom: 1px solid var(--ats-border);
@@ -685,7 +690,12 @@
                 margin-bottom: 1rem;
             }
 
+            #AnimeThemesBrowserPage .ats-tabs::-webkit-scrollbar {
+                display: none;
+            }
+
             #AnimeThemesBrowserPage .ats-tab.emby-button {
+                flex: 0 0 auto;
                 min-height: 2.75rem;
                 margin: 0;
                 padding: .55rem 1rem;
@@ -752,6 +762,18 @@
 
             #AnimeThemesBrowserPage .ats-summary-grid span {
                 opacity: .75;
+            }
+
+            #AnimeThemesBrowserPage .ats-library-pager {
+                display: flex;
+                justify-content: center;
+                margin: 1.25rem 0 0;
+                min-height: 2.75rem;
+            }
+
+            #AnimeThemesBrowserPage #AnimeThemesCachePath {
+                margin-top: .75rem;
+                overflow-wrap: anywhere;
             }
 
             #AnimeThemesBrowserPage .ats-library-header {
@@ -1738,17 +1760,55 @@
                 }
 
                 #AnimeThemesBrowserPage .ats-settings-actions-bar {
+                    position: fixed;
+                    left: 1rem;
+                    right: 1rem;
+                    bottom: max(.75rem, env(safe-area-inset-bottom));
+                    top: auto;
+                    width: auto;
+                    margin: 0;
+                    z-index: 100;
                     display: flex;
+                    flex-direction: column;
+                    align-items: stretch;
+                    box-shadow: 0 -.2rem 1.2rem rgba(0, 0, 0, .24);
+                }
+
+                #AnimeThemesBrowserPage .ats-settings-actions-bar .ats-settings-actions-copy {
+                    display: none;
+                }
+
+                #AnimeThemesBrowserPage .ats-settings-actions-bar .ats-actions {
+                    display: flex;
+                    flex-direction: row;
                     flex-wrap: wrap;
-                    gap: .65rem;
+                    gap: .5rem;
                     width: 100%;
-                    margin-left: 0;
+                }
+
+                #AnimeThemesBrowserPage .ats-settings-actions-bar .ats-actions button {
+                    flex: 1 1 9rem;
+                    margin: 0;
+                }
+
+                #AnimeThemesBrowserPage #AnimeThemesBrowserSettingsView {
+                    padding-bottom: 5.5rem;
                 }
 
                 #AnimeThemesBrowserPage .ats-detail-actions {
+                    position: fixed;
+                    left: 1rem;
+                    right: 1rem;
                     bottom: max(.75rem, env(safe-area-inset-bottom));
                     top: auto;
                     align-items: stretch;
+                    z-index: 100;
+                    margin: 0;
+                    box-shadow: 0 -.2rem 1.2rem rgba(0, 0, 0, .24);
+                }
+
+                #AnimeThemesBrowserPage #AnimeThemesBrowserDetailView {
+                    padding-bottom: 5.5rem;
                 }
 
                 #AnimeThemesBrowserPage .ats-detail-action-left,

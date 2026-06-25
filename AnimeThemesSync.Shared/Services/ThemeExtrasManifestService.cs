@@ -12,11 +12,22 @@ namespace AnimeThemesSync.Shared.Services;
 public static class ThemeExtrasManifestService
 {
     public const string ManifestFileName = ".animethemes-sync-extras.json";
+    private static AnimeThemesDataStore? _store;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true
     };
+
+    public static void ConfigureStore(AnimeThemesDataStore store)
+    {
+        _store = store;
+    }
+
+    internal static void ResetStoreForTests()
+    {
+        _store = null;
+    }
 
     public static ThemeExtraFileResult MigrateExtraFile(ThemeExtraPlan plan, bool overwrite)
     {
@@ -69,16 +80,27 @@ public static class ThemeExtrasManifestService
             return;
         }
 
-        var manifest = LoadManifest(directory);
-        manifest.Files[plan.Key] = fileName;
-        SaveManifest(directory, manifest);
+        _store?.UpdateExtraFile(plan);
     }
 
     private static string? FindPreviousPath(ThemeExtraPlan plan)
     {
         var directory = Path.GetDirectoryName(plan.TargetPath);
+        var storePath = _store?.FindPreviousExtraPath(plan);
+        if (!string.IsNullOrWhiteSpace(storePath) && File.Exists(storePath))
+        {
+            return storePath;
+        }
+
         if (!string.IsNullOrWhiteSpace(directory))
         {
+            _ = _store?.ImportLegacyExtrasManifest(directory);
+            storePath = _store?.FindPreviousExtraPath(plan);
+            if (!string.IsNullOrWhiteSpace(storePath) && File.Exists(storePath))
+            {
+                return storePath;
+            }
+
             var manifest = LoadManifest(directory);
             if (manifest.Files.TryGetValue(plan.Key, out var fileName) && !string.IsNullOrWhiteSpace(fileName))
             {
@@ -123,13 +145,6 @@ public static class ThemeExtrasManifestService
         {
             return new ExtrasManifest();
         }
-    }
-
-    private static void SaveManifest(string directory, ExtrasManifest manifest)
-    {
-        Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, ManifestFileName);
-        File.WriteAllText(path, JsonSerializer.Serialize(manifest, JsonOptions));
     }
 
     private sealed class ExtrasManifest

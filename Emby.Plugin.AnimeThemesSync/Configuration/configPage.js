@@ -1,12 +1,7 @@
-define(['baseView'], function (BaseView) {
+define([], function () {
     'use strict';
 
-    function View(view) {
-        BaseView.apply(this, arguments);
-        this.view = view;
-    }
-
-    Object.assign(View.prototype, BaseView.prototype);
-
-    return View;
+    return function (view, params) {
+        // Redirect config page has no logic
+    };
 });

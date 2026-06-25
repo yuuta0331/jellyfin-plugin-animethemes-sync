@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using AnimeThemesSync.Shared.Configuration;
+using AnimeThemesSync.Shared.Interfaces;
 using AnimeThemesSync.Shared.Models;
 using AnimeThemesSync.Shared.Services;
 using Xunit;
@@ -211,7 +212,10 @@ public class ThemeFilePlannerTests
     public void ExtrasManifest_RenamesLegacyAndPreviouslyTrackedExtras()
     {
         var directory = Path.Combine(Path.GetTempPath(), "ats-extras-" + Guid.NewGuid().ToString("N"));
+        var dbDirectory = Path.Combine(Path.GetTempPath(), "ats-db-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
+        var store = new AnimeThemesDataStore(new TestDataPathProvider(dbDirectory), new TestServerIdentityProvider());
+        ThemeExtrasManifestService.ConfigureStore(store);
 
         try
         {
@@ -242,11 +246,17 @@ public class ThemeFilePlannerTests
             Assert.Equal("renamed", secondResult.Action);
             Assert.False(File.Exists(firstTargetPath));
             Assert.True(File.Exists(secondTargetPath));
-            Assert.True(File.Exists(Path.Combine(directory, ThemeExtrasManifestService.ManifestFileName)));
+            Assert.False(File.Exists(Path.Combine(directory, ThemeExtrasManifestService.ManifestFileName)));
+            Assert.True(File.Exists(store.DatabasePath));
         }
         finally
         {
+            ThemeExtrasManifestService.ResetStoreForTests();
             Directory.Delete(directory, recursive: true);
+            if (Directory.Exists(dbDirectory))
+            {
+                Directory.Delete(dbDirectory, recursive: true);
+            }
         }
     }
 
@@ -474,7 +484,9 @@ public class ThemeFilePlannerTests
             Assert.Contains("Library</h3>", content, StringComparison.Ordinal);
             Assert.Contains("Matching</h3>", content, StringComparison.Ordinal);
             Assert.Contains("Local Files</h3>", content, StringComparison.Ordinal);
-            Assert.Contains("Storage & Actions</h3>", content, StringComparison.Ordinal);
+            Assert.Contains("Storage & Cache</h3>", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesCacheBytes", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesBrowserRebuildCache", content, StringComparison.Ordinal);
             Assert.Contains("max-height: 28rem;", content, StringComparison.Ordinal);
             Assert.Contains("overflow: auto;", content, StringComparison.Ordinal);
             Assert.Contains("position: sticky;", content, StringComparison.Ordinal);
@@ -610,10 +622,9 @@ public class ThemeFilePlannerTests
         Assert.Contains("Uses series-level themes", embyDownloader, StringComparison.Ordinal);
         Assert.Contains("SeasonThemeDownloadsDisabled", jellyfinDownloader, StringComparison.Ordinal);
         Assert.Contains("SeasonThemeDownloadsDisabled", embyDownloader, StringComparison.Ordinal);
-        Assert.Contains("manualSeasonMappings", jellyfinDownloader, StringComparison.Ordinal);
-        Assert.Contains("manualSeasonMappings", embyDownloader, StringComparison.Ordinal);
-        Assert.Contains("seriesSharedSeasons", jellyfinDownloader, StringComparison.Ordinal);
-        Assert.Contains("seriesSharedSeasons", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("GetBrowserSummary()", jellyfinDownloader, StringComparison.Ordinal);
+        Assert.Contains("GetBrowserSummary()", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("ThemeBrowserSummary", dtoFile, StringComparison.Ordinal);
         Assert.True(jellyfinDownloader.Split("new BrowserAnimeResolution(seriesAnime, \"Series\", \"SeriesLevel\", false)").Length >= 3);
         Assert.True(embyDownloader.Split("new BrowserAnimeResolution(seriesAnime, \"Series\", \"SeriesLevel\", false)").Length >= 3);
         Assert.Contains("ImportSeasonThemeMappingsAsync", jellyfinDownloader, StringComparison.Ordinal);
