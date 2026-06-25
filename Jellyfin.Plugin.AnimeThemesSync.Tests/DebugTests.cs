@@ -19,7 +19,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             _output = output;
         }
 
-        [Fact]
+        [Fact(Skip = "Live debug test; run manually when needed.")]
         public async Task Test_GetAnimeByExternalId_Live()
         {
             // Setup real dependencies
@@ -101,7 +101,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             }
         }
 
-        [Fact]
+        [Fact(Skip = "Live debug test; run manually when needed.")]
         public async Task Test_GetAnimeByExternalId_WithIncludes_Manual()
         {
             var client = new SimpleHttpClientFactory().CreateClient("AnimeThemes");
@@ -128,7 +128,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             }
         }
 
-        [Fact]
+        [Fact(Skip = "Live debug test; run manually when needed.")]
         public async Task Test_GetAnime_ViaFilter_WithIncludes()
         {
             var client = new SimpleHttpClientFactory().CreateClient("AnimeThemes");
@@ -156,7 +156,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             }
         }
 
-        [Fact]
+        [Fact(Skip = "Live debug test; run manually when needed.")]
         public async Task Test_GetResource_With_AnimeThemes_Include()
         {
             var client = new SimpleHttpClientFactory().CreateClient("AnimeThemes");
@@ -182,7 +182,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             }
         }
 
-        [Fact]
+        [Fact(Skip = "Live debug test; run manually when needed.")]
         public async Task Test_GetAnimeBySlug_Includes_Debug()
         {
             var client = new SimpleHttpClientFactory().CreateClient("AnimeThemes");
@@ -207,7 +207,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             _output.WriteLine($"Status: {response3.StatusCode}");
         }
 
-        [Fact]
+        [Fact(Skip = "Live debug test; run manually when needed.")]
         public async Task Test_AniListSearch_WithYear_Live()
         {
             var httpClientFactory = new SimpleHttpClientFactory();
