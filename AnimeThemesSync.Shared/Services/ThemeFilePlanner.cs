@@ -18,6 +18,7 @@ public static class ThemeFilePlanner
 {
     public const string DefaultExtrasFileNameFormat = "{Order}. {Theme} - {Song}";
     private const int MaxExtrasFileNameLength = 180;
+    private static readonly HashSet<char> CrossPlatformInvalidFileNameChars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
     private static readonly Regex LegacyPluginFileRegex = new(@"^(OP|ED)\d+v?\d*(-video)?\.(webm|mp3)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex CanonicalPluginFileRegex = new(@"^\d{2}-(OP|ED)\d+v?\d*( - .+)?\.(webm|mp3)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -613,7 +614,7 @@ public static class ThemeFilePlanner
         }
 
         var invalid = Path.GetInvalidFileNameChars();
-        var chars = value.Trim().Select(c => invalid.Contains(c) || c == '/' || c == '\\' ? ' ' : c).ToArray();
+        var chars = value.Trim().Select(c => invalid.Contains(c) || CrossPlatformInvalidFileNameChars.Contains(c) ? ' ' : c).ToArray();
         var sanitized = WhitespaceRegex.Replace(new string(chars), " ").Trim(' ', '.');
         return string.IsNullOrWhiteSpace(sanitized) ? fallback : sanitized;
     }
