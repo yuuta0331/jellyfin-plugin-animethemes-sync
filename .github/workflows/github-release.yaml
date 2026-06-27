@@ -13,7 +13,84 @@ permissions:
   contents: write
 
 jobs:
+  check-and-sync-version:
+    runs-on: ubuntu-latest
+    outputs:
+      synced: ${{ steps.sync_version.outputs.synced }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract Version
+        id: get_version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Extracted version: $VERSION"
+
+      - name: Sync and Validate build.yaml Version
+        id: sync_version
+        run: |
+          set -euo pipefail
+          
+          # build.yaml の現在のバージョンを取得
+          BUILD_VERSION="$(python - <<'PY'
+          from pathlib import Path
+          for line in Path("build.yaml").read_text(encoding="utf-8").splitlines():
+              if line.startswith("version:"):
+                  print(line.split(":", 1)[1].strip().strip('"').strip("'"))
+                  break
+          else:
+              raise SystemExit("build.yaml version was not found")
+          PY
+          )"
+          
+          echo "build.yaml version: ${BUILD_VERSION}"
+          echo "Tag version: ${VERSION}"
+          
+          if [ "${BUILD_VERSION}" != "${VERSION}" ]; then
+            echo "Version mismatch detected. Updating build.yaml to version ${VERSION}..."
+            
+            # build.yaml を更新
+            python -c "
+          import os
+          from pathlib import Path
+          p = Path('build.yaml')
+          content = p.read_text(encoding='utf-8')
+          lines = []
+          for line in content.splitlines():
+              if line.startswith('version:'):
+                  lines.append('version: \"' + '${{ env.VERSION }}' + '\"')
+              else:
+                  lines.append(line)
+          p.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          "
+            
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            
+            git add build.yaml
+            git commit -m "chore: auto-bump version to ${VERSION} in build.yaml [skip ci]"
+            
+            # main ブランチへプッシュ
+            git push origin HEAD:main
+            
+            # タグを新しいコミットに移動して force push
+            git tag -f "v${VERSION}"
+            git push origin "v${VERSION}" --force
+            
+            echo "Successfully updated build.yaml and moved tag v${VERSION}."
+            echo "synced=true" >> $GITHUB_OUTPUT
+          else
+            echo "Versions match. Proceeding with build."
+            echo "synced=false" >> $GITHUB_OUTPUT
+          fi
+
   build-and-release:
+    needs: check-and-sync-version
+    if: needs.check-and-sync-version.outputs.synced == 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -32,7 +109,6 @@ jobs:
         run: dotnet restore Jellyfin.Plugin.AnimeThemesSync.sln -nologo /p:NuGetAudit=false
 
       - name: Extract Version
-        id: get_version
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
@@ -61,24 +137,6 @@ jobs:
           fi
 
           cat release-notes.md
-
-      - name: Validate build.yaml Version
-        run: |
-          BUILD_VERSION="$(python - <<'PY'
-          from pathlib import Path
-          for line in Path("build.yaml").read_text(encoding="utf-8").splitlines():
-              if line.startswith("version:"):
-                  print(line.split(":", 1)[1].strip().strip('"').strip("'"))
-                  break
-          else:
-              raise SystemExit("build.yaml version was not found")
-          PY
-          )"
-          if [ "${BUILD_VERSION}" != "${VERSION}" ]; then
-            echo "build.yaml version (${BUILD_VERSION}) must match tag version (${VERSION})."
-            exit 1
-          fi
-          cat build.yaml
 
       - name: Build Jellyfin
         run: dotnet build Jellyfin.Plugin.AnimeThemesSync/Jellyfin.Plugin.AnimeThemesSync.csproj -c Release --no-restore -p:Version=${{ env.VERSION }} -p:ContinuousIntegrationBuild=true -nologo /p:NuGetAudit=false
