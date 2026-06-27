@@ -13,15 +13,23 @@ permissions:
   contents: write
 
 jobs:
-  check-and-sync-version:
+  build-and-release:
     runs-on: ubuntu-latest
-    outputs:
-      synced: ${{ steps.sync_version.outputs.synced }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Restore
+        run: dotnet restore Jellyfin.Plugin.AnimeThemesSync.sln -nologo /p:NuGetAudit=false
 
       - name: Extract Version
         id: get_version
@@ -30,8 +38,7 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Extracted version: $VERSION"
 
-      - name: Sync and Validate build.yaml Version
-        id: sync_version
+      - name: Sync build.yaml Version
         run: |
           set -euo pipefail
           
@@ -51,7 +58,7 @@ jobs:
           echo "Tag version: ${VERSION}"
           
           if [ "${BUILD_VERSION}" != "${VERSION}" ]; then
-            echo "Version mismatch detected. Updating build.yaml to version ${VERSION}..."
+            echo "Updating build.yaml to version ${VERSION}..."
             
             # build.yaml を更新
             python -c "
@@ -76,43 +83,7 @@ jobs:
             
             # main ブランチへプッシュ
             git push origin HEAD:main
-            
-            # タグを新しいコミットに移動して force push
-            git tag -f "v${VERSION}"
-            git push origin "v${VERSION}" --force
-            
-            echo "Successfully updated build.yaml and moved tag v${VERSION}."
-            echo "synced=true" >> $GITHUB_OUTPUT
-          else
-            echo "Versions match. Proceeding with build."
-            echo "synced=false" >> $GITHUB_OUTPUT
           fi
-
-  build-and-release:
-    needs: check-and-sync-version
-    if: needs.check-and-sync-version.outputs.synced == 'false'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: |
-            8.0.x
-            9.0.x
-
-      - name: Restore
-        run: dotnet restore Jellyfin.Plugin.AnimeThemesSync.sln -nologo /p:NuGetAudit=false
-
-      - name: Extract Version
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Extracted version: $VERSION"
 
       - name: Generate Release Notes
         run: |
