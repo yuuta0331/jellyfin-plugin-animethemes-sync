@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+#pragma warning disable SA1117
+
 namespace AnimeThemesSync.Shared.Models;
 
 /// <summary>
@@ -15,6 +17,37 @@ public sealed record ThemeBrowserItemsPage(
     bool CacheReady);
 
 /// <summary>
+/// Paged Season Finder result.
+/// </summary>
+public sealed record SeasonFinderItemsPage(
+    IReadOnlyList<SeasonThemeMappingRow> Items,
+    int TotalRecordCount,
+    int StartIndex,
+    int Limit,
+    string CacheVersion,
+    bool CacheReady);
+
+/// <summary>
+/// Persistent Season Finder display row.
+/// </summary>
+public sealed class SeasonFinderRowRecord
+{
+    public string? LibraryId { get; set; }
+
+    public SeasonThemeMappingRow Row { get; set; } = new(
+        Guid.Empty, string.Empty, null, Guid.Empty, string.Empty, null, null,
+        "Unmatched", "None", false, null, null, null, null, null, null, null);
+
+    public string? OutputRootItemId { get; set; }
+
+    public string? OutputRootPath { get; set; }
+
+    public string? OutputScope { get; set; }
+
+    public string? UpdatedAtUtc { get; set; }
+}
+
+/// <summary>
 /// Plugin storage and cache status.
 /// </summary>
 public sealed record AnimeThemesStorageStatus(
@@ -24,6 +57,19 @@ public sealed record AnimeThemesStorageStatus(
     int BrowserItemCount,
     string? CacheVersion,
     bool RebuildRunning,
+    bool CacheReady,
+    string? LastFullScanUtc,
+    string? LastError,
+    SeasonFinderStorageStatus? SeasonFinder = null);
+
+/// <summary>
+/// Season Finder SQLite status.
+/// </summary>
+public sealed record SeasonFinderStorageStatus(
+    string DatabasePath,
+    long DatabaseBytes,
+    int ItemCount,
+    string CacheVersion,
     bool CacheReady,
     string? LastFullScanUtc,
     string? LastError);
@@ -105,3 +151,5 @@ public sealed class BrowserItemRecord
 
     public DateTimeOffset LastRefreshedUtc { get; set; }
 }
+
+#pragma warning restore SA1117

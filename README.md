@@ -93,7 +93,7 @@ If a season is unmatched or mapped incorrectly, open `AnimeThemes Browser` -> `S
 2. Search AnimeThemes by title and optional year.
 3. Select a candidate, preview the OP/ED rows, then choose `Save mapping` or `Save & Download`.
 
-`Save & Download` stores the mapping and runs an on-demand download for that season item. Season 1 (and an unnumbered normal season) writes `backdrops`, `theme-music`, and `extras` to the parent Series folder; Season 2 and later write to their Season folder. When Season 1 is explicitly mapped to an AnimeThemes entry different from the Series entry, its filenames use a `Season 01 - ` prefix to avoid collisions. Existing files under a Season 1 folder are not moved or deleted automatically. The plugin still supports `SeasonThemeMappings` JSON in the configuration page as an advanced fallback.
+`Save & Download` stores the mapping in `animethemes-sync.db` and runs an on-demand download for that season item. Season 1 (and an unnumbered normal season) writes `backdrops`, `theme-music`, and `extras` to the parent Series folder; Season 2 and later write to their Season folder. When Season 1 is explicitly mapped to an AnimeThemes entry different from the Series entry, its filenames use a `Season 01 - ` prefix to avoid collisions. Existing files under a Season 1 folder are not moved or deleted automatically. Existing `SeasonThemeMappings` configuration JSON is imported into SQLite once for compatibility; use the Mappings import/export controls for subsequent changes.
 If `Enable Season Theme Downloads` is disabled, mappings remain saved but season output and season on-demand downloads are skipped until the option is enabled again.
 
 ```json

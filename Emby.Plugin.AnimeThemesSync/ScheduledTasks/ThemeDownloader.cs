@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AnimeThemesSync.Shared;
 using AnimeThemesSync.Shared.Configuration;
+using AnimeThemesSync.Shared.Interfaces;
 using AnimeThemesSync.Shared.Models;
 using AnimeThemesSync.Shared.Services;
 using Emby.Plugin.AnimeThemesSync.Extensions;
@@ -45,6 +46,7 @@ public class ThemeDownloader : IScheduledTask
     private readonly AnimeThemesService _animeThemesService;
     private readonly AniListService _aniListService;
     private readonly AnimeThemesDataStore _dataStore;
+    private readonly ISeasonFinderDataStore _seasonFinderStore;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ThemeDownloader"/> class.
@@ -65,17 +67,20 @@ public class ThemeDownloader : IScheduledTask
         _logger = logManager.GetLogger(nameof(ThemeDownloader));
         _httpClientFactory = new StaticHttpClientFactory();
         _mediaEncoder = mediaEncoder;
+        var pathProvider = new EmbyAnimeThemesDataPathProvider(applicationPaths);
+        var serverIdentity = new EmbyAnimeThemesServerIdentityProvider();
+        _dataStore = new AnimeThemesDataStore(pathProvider, serverIdentity);
+        _dataStore.EnsureInitialized();
+        _seasonFinderStore = new EmbySeasonFinderDataStore(pathProvider, serverIdentity);
+        _seasonFinderStore.EnsureInitialized();
+        _seasonFinderStore.MigrateLegacyMappings(Plugin.Instance?.Configuration?.SeasonThemeMappings);
         var aniListLogger = new EmbyLoggerAdapter<AniListService>(new EmbyLoggerAdapter(logManager.GetLogger(nameof(AniListService))));
         var rateLimiterLogger = new EmbyLoggerAdapter(logManager.GetLogger(nameof(RateLimiter)));
         var animeThemesLogger = new EmbyLoggerAdapter<AnimeThemesService>(new EmbyLoggerAdapter(logManager.GetLogger(nameof(AnimeThemesService))));
         var aniListRateLimiter = new RateLimiter(new EmbyLoggerAdapter(logManager.GetLogger("AniListRateLimiter")), Constants.AniListHttpClientName, 90);
         var rateLimiter = new RateLimiter(rateLimiterLogger, Constants.AnimeThemesHttpClientName, 80);
         _aniListService = new AniListService(_httpClientFactory, aniListLogger, aniListRateLimiter);
-        _animeThemesService = new AnimeThemesService(_httpClientFactory, animeThemesLogger, rateLimiter);
-        _dataStore = new AnimeThemesDataStore(
-            new EmbyAnimeThemesDataPathProvider(applicationPaths),
-            new EmbyAnimeThemesServerIdentityProvider());
-        _dataStore.EnsureInitialized();
+        _animeThemesService = new AnimeThemesService(_httpClientFactory, animeThemesLogger, rateLimiter, _seasonFinderStore);
         ThemeExtrasManifestService.ConfigureStore(_dataStore);
         RegisterLibraryMonitor();
     }
@@ -172,12 +177,14 @@ public class ThemeDownloader : IScheduledTask
     public AnimeThemesStorageStatus GetStorageStatus()
     {
         EnsureBrowserCacheRebuildStarted();
-        return _dataStore.GetStorageStatus(IsBrowserCacheRebuildRunning);
+        return _dataStore.GetStorageStatus(IsBrowserCacheRebuildRunning) with { SeasonFinder = _seasonFinderStore.GetStorageStatus() };
     }
 
     public AnimeThemesMaintenanceResult ClearBrowserCache()
     {
         _dataStore.ClearBrowserCache();
+        _seasonFinderStore.ClearCache();
+        _animeThemesService.ClearSearchCache();
         return new AnimeThemesMaintenanceResult(true, "Browser cache cleared.");
     }
 
@@ -189,6 +196,7 @@ public class ThemeDownloader : IScheduledTask
         }
 
         _dataStore.SetBrowserCacheRebuildError(null);
+        _seasonFinderStore.SetRebuildError(null);
         _ = Task.Run(
             async () =>
             {
@@ -199,6 +207,7 @@ public class ThemeDownloader : IScheduledTask
                 catch (Exception ex)
                 {
                     _dataStore.SetBrowserCacheRebuildError(ex.Message);
+                    _seasonFinderStore.SetRebuildError(ex.Message);
                     _logger.LogError(ex, "Browser cache rebuild failed.");
                 }
                 finally
@@ -219,11 +228,13 @@ public class ThemeDownloader : IScheduledTask
         try
         {
             _dataStore.SetBrowserCacheRebuildError(null);
+            _seasonFinderStore.SetRebuildError(null);
             await RebuildBrowserCacheCoreAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _dataStore.SetBrowserCacheRebuildError(ex.Message);
+            _seasonFinderStore.SetRebuildError(ex.Message);
             throw;
         }
         finally
@@ -255,7 +266,7 @@ public class ThemeDownloader : IScheduledTask
 
     public void EnsureBrowserCacheRebuildStarted()
     {
-        if (!_dataStore.IsBrowserCacheReady())
+        if (!_dataStore.IsBrowserCacheReady() || !_seasonFinderStore.IsCacheReady())
         {
             _ = StartBrowserCacheRebuild();
         }
@@ -303,11 +314,19 @@ public class ThemeDownloader : IScheduledTask
     private Task RebuildBrowserCacheCoreAsync(CancellationToken cancellationToken)
     {
         var records = new List<BrowserItemRecord>();
+        var seasonRecords = new List<SeasonFinderRowRecord>();
         var libraryCounts = new Dictionary<Guid, (string? Name, int Count)>();
         foreach (var entry in GetEnabledLibraryItemsWithLibraries())
         {
             cancellationToken.ThrowIfCancellationRequested();
             records.Add(BuildBrowserItemRecord(entry.Item, entry.LibraryId));
+            if (entry.Item is Series series)
+            {
+                seasonRecords.AddRange(GetSeasonItems(series)
+                    .Where(IsSeasonEligibleForThemeMatching)
+                    .Where(season => !string.IsNullOrWhiteSpace(season.Path))
+                    .Select(season => BuildSeasonFinderRecord(series, season, entry.LibraryId)));
+            }
             libraryCounts.TryGetValue(entry.LibraryId, out var current);
             libraryCounts[entry.LibraryId] = (entry.LibraryName, current.Count + 1);
         }
@@ -315,7 +334,8 @@ public class ThemeDownloader : IScheduledTask
         _dataStore.ReplaceBrowserItems(
             records,
             libraryCounts.Select(pair => (pair.Key.ToString("D"), pair.Value.Name, pair.Value.Count)));
-        _logger.LogInformation("Rebuilt AnimeThemes Browser cache. Items={Count}", records.Count);
+        _seasonFinderStore.ReplaceRows(seasonRecords);
+        _logger.LogInformation("Rebuilt AnimeThemes Browser cache. Items={0}, Seasons={1}", records.Count, seasonRecords.Count);
         return Task.CompletedTask;
     }
 
@@ -443,8 +463,8 @@ public class ThemeDownloader : IScheduledTask
             return "Unlinked";
         }
 
-        var mappings = Plugin.Instance?.Configuration?.SeasonThemeMappings;
-        if (mappings == null || mappings.Count == 0)
+        var mappings = _seasonFinderStore.GetSeasonThemeMappings();
+        if (mappings.Count == 0)
         {
             return "Unlinked";
         }
@@ -492,27 +512,22 @@ public class ThemeDownloader : IScheduledTask
 
     public Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync(CancellationToken cancellationToken)
     {
-        var rows = new List<SeasonThemeMappingRow>();
-        foreach (var series in GetEnabledLibraryItems().OfType<Series>().OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
+        cancellationToken.ThrowIfCancellationRequested();
+        EnsureBrowserCacheRebuildStarted();
+        return Task.FromResult(_seasonFinderStore.GetAllRows());
+    }
 
-            var seasons = GetSeasonItems(series)
-                .Where(IsSeasonEligibleForThemeMatching)
-                .ToList();
-
-            foreach (var season in seasons)
-            {
-                if (string.IsNullOrWhiteSpace(season.Path))
-                {
-                    continue;
-                }
-
-                rows.Add(BuildSeasonMappingRow(series, season));
-            }
-        }
-
-        return Task.FromResult<IReadOnlyList<SeasonThemeMappingRow>>(rows);
+    public SeasonFinderItemsPage GetSeasonFinderItems(
+        string? libraryId,
+        int? startIndex,
+        int? limit,
+        string? searchTerm,
+        string? status,
+        string? sortBy,
+        string? sortOrder)
+    {
+        EnsureBrowserCacheRebuildStarted();
+        return _seasonFinderStore.QueryRows(libraryId, startIndex, limit, searchTerm, status, sortBy, sortOrder);
     }
 
     public async Task<IReadOnlyList<ThemeFinderSearchResult>> SearchThemeFinderAnimeAsync(
@@ -526,13 +541,14 @@ public class ThemeDownloader : IScheduledTask
         }
 
         var candidates = await _animeThemesService.SearchAnimeByTitle(query, year, cancellationToken).ConfigureAwait(false);
-        return candidates
+        var results = candidates
             .Where(a => !string.IsNullOrWhiteSpace(a.Slug))
             .GroupBy(a => !string.IsNullOrWhiteSpace(a.Slug) ? a.Slug! : a.Id.ToString(CultureInfo.InvariantCulture), StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .Take(15)
             .Select(a => ToThemeFinderSearchResult(a, ScoreSearchCandidate(a, query, year), GetAnimePrimaryImageUrl(a), query))
             .ToList();
+        return results;
     }
 
     public async Task<ThemeBrowserItemResult> GetAnimeThemePreviewAsync(string slug, CancellationToken cancellationToken)
@@ -569,7 +585,7 @@ public class ThemeDownloader : IScheduledTask
         SaveSeasonThemeMappingRequest request,
         CancellationToken cancellationToken)
     {
-        var config = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
+        _ = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
         if (request.SeasonItemId == Guid.Empty)
         {
             throw new InvalidOperationException("Season item id is required.");
@@ -585,9 +601,9 @@ public class ThemeDownloader : IScheduledTask
         var series = FindSeriesForSeason(season)
             ?? throw new InvalidOperationException("The parent series for the requested season was not found.");
 
-        config.SeasonThemeMappings ??= [];
-        RemoveSeasonMappings(config.SeasonThemeMappings, series, season);
-        config.SeasonThemeMappings.Add(new SeasonThemeMapping
+        var mappings = _seasonFinderStore.GetSeasonThemeMappings();
+        RemoveSeasonMappings(mappings, series, season);
+        mappings.Add(new SeasonThemeMapping
         {
             Enabled = true,
             SeriesItemId = series.Id.ToString("D"),
@@ -600,37 +616,40 @@ public class ThemeDownloader : IScheduledTask
             MyAnimeListId = request.MyAnimeListId,
             Locked = request.Locked,
         });
-        Plugin.Instance.UpdateConfiguration(config);
-
-        return await Task.FromResult(BuildSeasonMappingRow(series, season)).ConfigureAwait(false);
+        _seasonFinderStore.ReplaceSeasonThemeMappings(mappings, request.Locked ? "Manual" : "Auto");
+        var result = BuildSeasonMappingRow(series, season);
+        _seasonFinderStore.UpsertRow(BuildSeasonFinderRecord(series, season, ResolveLibraryId(series)));
+        return await Task.FromResult(result).ConfigureAwait(false);
     }
 
     public async Task<SeasonThemeMappingRow> DeleteSeasonThemeMappingAsync(Guid seasonItemId, CancellationToken cancellationToken)
     {
-        var config = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
+        _ = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
         var season = _libraryManager.GetItemById(seasonItemId) as Season
             ?? throw new KeyNotFoundException("The requested season was not found.");
         var series = FindSeriesForSeason(season)
             ?? throw new InvalidOperationException("The parent series for the requested season was not found.");
 
-        config.SeasonThemeMappings ??= [];
-        RemoveSeasonMappings(config.SeasonThemeMappings, series, season);
-        Plugin.Instance.UpdateConfiguration(config);
-
-        return await Task.FromResult(BuildSeasonMappingRow(series, season)).ConfigureAwait(false);
+        var mappings = _seasonFinderStore.GetSeasonThemeMappings();
+        RemoveSeasonMappings(mappings, series, season);
+        _seasonFinderStore.ReplaceSeasonThemeMappings(mappings, "Delete");
+        var result = BuildSeasonMappingRow(series, season);
+        _seasonFinderStore.UpsertRow(BuildSeasonFinderRecord(series, season, ResolveLibraryId(series)));
+        return await Task.FromResult(result).ConfigureAwait(false);
     }
 
     public async Task<SeasonThemeMappingImportResult> ImportSeasonThemeMappingsAsync(
         ImportSeasonThemeMappingsRequest request,
         CancellationToken cancellationToken)
     {
-        var config = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
+        _ = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
         var rows = request?.Mappings ?? [];
         var imported = 0;
         var skipped = 0;
         var errors = new List<string>();
 
-        config.SeasonThemeMappings ??= [];
+        var mappings = _seasonFinderStore.GetSeasonThemeMappings();
+        var changedSeasons = new List<(Series Series, Season Season)>();
         foreach (var row in rows)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -660,8 +679,8 @@ public class ThemeDownloader : IScheduledTask
                 continue;
             }
 
-            RemoveSeasonMappings(config.SeasonThemeMappings, series, season);
-            config.SeasonThemeMappings.Add(new SeasonThemeMapping
+            RemoveSeasonMappings(mappings, series, season);
+            mappings.Add(new SeasonThemeMapping
             {
                 Enabled = true,
                 SeriesItemId = series.Id.ToString("D"),
@@ -674,10 +693,15 @@ public class ThemeDownloader : IScheduledTask
                 MyAnimeListId = row.MyAnimeListId,
                 Locked = row.Locked ?? true,
             });
+            changedSeasons.Add((series, season));
             imported++;
         }
 
-        Plugin.Instance.UpdateConfiguration(config);
+        _seasonFinderStore.ReplaceSeasonThemeMappings(mappings, "Import");
+        foreach (var changed in changedSeasons)
+        {
+            _seasonFinderStore.UpsertRow(BuildSeasonFinderRecord(changed.Series, changed.Season, ResolveLibraryId(changed.Series)));
+        }
         return await Task.FromResult(new SeasonThemeMappingImportResult(imported, skipped, errors)).ConfigureAwait(false);
     }
 
@@ -1914,6 +1938,19 @@ public class ThemeDownloader : IScheduledTask
             BuildImageUrl(season, ImageType.Primary, "Primary") ?? BuildImageUrl(series, ImageType.Primary, "Primary"));
     }
 
+    private SeasonFinderRowRecord BuildSeasonFinderRecord(Series series, Season season, Guid? libraryId)
+    {
+        var target = ResolveThemeOutputTarget(season, series);
+        return new SeasonFinderRowRecord
+        {
+            LibraryId = libraryId?.ToString("D"),
+            Row = BuildSeasonMappingRow(series, season),
+            OutputRootItemId = target?.OutputRootItemId.ToString("D"),
+            OutputRootPath = target?.OutputRootPath,
+            OutputScope = target?.Scope.ToString(),
+        };
+    }
+
     private SeasonThemeMatchState BuildSeasonThemeMatchState(
         Series series,
         Season season,
@@ -2041,22 +2078,20 @@ public class ThemeDownloader : IScheduledTask
         return map;
     }
 
-    private static void SaveAutomaticSeasonThemeMapping(Series series, Season season, AnimeThemesAnime anime)
+    private void SaveAutomaticSeasonThemeMapping(Series series, Season season, AnimeThemesAnime anime)
     {
         if (!IsSeasonEligibleForThemeMatching(season))
         {
             return;
         }
 
-        var plugin = Plugin.Instance;
-        var config = plugin?.Configuration;
-        if (config == null)
+        if (Plugin.Instance?.Configuration == null)
         {
             return;
         }
 
-        config.SeasonThemeMappings ??= [];
-        var existing = FindSeasonThemeMapping(config.SeasonThemeMappings, series, season);
+        var mappings = _seasonFinderStore.GetSeasonThemeMappings();
+        var existing = FindSeasonThemeMapping(mappings, series, season);
         if (existing?.Locked == true)
         {
             return;
@@ -2080,8 +2115,8 @@ public class ThemeDownloader : IScheduledTask
             return;
         }
 
-        RemoveSeasonMappings(config.SeasonThemeMappings, series, season);
-        config.SeasonThemeMappings.Add(new SeasonThemeMapping
+        RemoveSeasonMappings(mappings, series, season);
+        mappings.Add(new SeasonThemeMapping
         {
             Enabled = true,
             SeriesItemId = series.Id.ToString("D"),
@@ -2094,7 +2129,8 @@ public class ThemeDownloader : IScheduledTask
             MyAnimeListId = myAnimeListId,
             Locked = false,
         });
-        plugin!.UpdateConfiguration(config);
+        _seasonFinderStore.ReplaceSeasonThemeMappings(mappings, "Auto");
+        _seasonFinderStore.UpsertRow(BuildSeasonFinderRecord(series, season, ResolveLibraryId(series)));
     }
 
     private static string? GetAnimePrimaryImageUrl(AnimeThemesAnime? anime)
@@ -2440,8 +2476,8 @@ public class ThemeDownloader : IScheduledTask
 
     private SeasonThemeMapping? FindSeasonThemeMapping(Series? series, BaseItem season)
     {
-        var mappings = Plugin.Instance?.Configuration?.SeasonThemeMappings;
-        if (mappings == null || mappings.Count == 0)
+        var mappings = _seasonFinderStore.GetSeasonThemeMappings();
+        if (mappings.Count == 0)
         {
             return null;
         }

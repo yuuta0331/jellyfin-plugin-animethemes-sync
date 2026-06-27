@@ -459,6 +459,22 @@ public class ThemeFilePlannerTests
     }
 
     [Fact]
+    public void HostSpecificSqliteProviders_AreSeparated()
+    {
+        var root = FindRepositoryRoot();
+        var jellyfinProject = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Jellyfin.Plugin.AnimeThemesSync.csproj"));
+        var embyProject = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Emby.Plugin.AnimeThemesSync.csproj"));
+        var embyStore = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "ScheduledTasks", "EmbySeasonFinderDataStore.cs"));
+
+        Assert.Contains("Microsoft.Data.Sqlite\" Version=\"9.0.11", jellyfinProject, StringComparison.Ordinal);
+        Assert.Contains("SQLitePCL.pretty.core\" Version=\"1.2.2\" IncludeAssets=\"compile", embyProject, StringComparison.Ordinal);
+        Assert.Contains("Services\\SeasonFinderDataStore.cs", embyProject, StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.Data.Sqlite", embyProject, StringComparison.Ordinal);
+        Assert.Contains("SQLite3.Open", embyStore, StringComparison.Ordinal);
+        Assert.DoesNotContain("using Microsoft.Data.Sqlite", embyStore, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BrowserPages_UseAuthenticatedLocalMediaUrls()
     {
         var root = FindRepositoryRoot();
@@ -898,15 +914,17 @@ public class ThemeFilePlannerTests
             Assert.Contains("public Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync", content, StringComparison.Ordinal);
             Assert.Contains("private SeasonThemeMappingRow BuildSeasonMappingRow(", content, StringComparison.Ordinal);
             Assert.Contains("private SeasonThemeMatchState BuildSeasonThemeMatchState(", content, StringComparison.Ordinal);
-            Assert.Contains("Task.FromResult<IReadOnlyList<SeasonThemeMappingRow>>(rows)", content, StringComparison.Ordinal);
+            Assert.Contains("_seasonFinderStore.GetAllRows()", content, StringComparison.Ordinal);
+            Assert.Contains("public SeasonFinderItemsPage GetSeasonFinderItems(", content, StringComparison.Ordinal);
 
             var start = content.IndexOf("public Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync", StringComparison.Ordinal);
             var end = content.IndexOf("public async Task<IReadOnlyList<ThemeFinderSearchResult>> SearchThemeFinderAnimeAsync", StringComparison.Ordinal);
             Assert.True(start >= 0 && end > start);
 
             var mappingsMethod = content[start..end];
-            Assert.Contains("BuildSeasonMappingRow(series, season)", mappingsMethod, StringComparison.Ordinal);
-            Assert.Contains(".Where(IsSeasonEligibleForThemeMatching)", mappingsMethod, StringComparison.Ordinal);
+            Assert.Contains("_seasonFinderStore.GetAllRows()", mappingsMethod, StringComparison.Ordinal);
+            Assert.Contains("_seasonFinderStore.QueryRows", mappingsMethod, StringComparison.Ordinal);
+            Assert.DoesNotContain("GetEnabledLibraryItems", mappingsMethod, StringComparison.Ordinal);
             Assert.DoesNotContain("ResolveAnime(series", mappingsMethod, StringComparison.Ordinal);
             Assert.DoesNotContain("BuildAutomaticSeasonAnimeMapAsync", mappingsMethod, StringComparison.Ordinal);
 
@@ -943,6 +961,10 @@ public class ThemeFilePlannerTests
             Assert.Contains("value(row, 'AniListId', 'aniListId')", content, StringComparison.Ordinal);
             Assert.Contains("value(row, 'MyAnimeListId', 'myAnimeListId')", content, StringComparison.Ordinal);
             Assert.Contains("if (!hasMatch) addChip(chips, 'Needs match', 'missing');", content, StringComparison.Ordinal);
+            Assert.Contains("IntersectionObserver", content, StringComparison.Ordinal);
+            Assert.Contains("rootMargin: '300px 0px'", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesSync/SeasonFinder?", content, StringComparison.Ordinal);
+            Assert.Contains("finderRequestToken", content, StringComparison.Ordinal);
             Assert.DoesNotContain("function resolveSeasonMappings(rows)", content, StringComparison.Ordinal);
             Assert.DoesNotContain("seasonMappingResolveToken", content, StringComparison.Ordinal);
             Assert.DoesNotContain("groupHasContent", content, StringComparison.Ordinal);

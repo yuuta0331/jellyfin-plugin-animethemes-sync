@@ -94,6 +94,27 @@ public sealed class AnimeThemesSyncController : ControllerBase
         return Ok(await _themeDownloader.GetSeasonThemeMappingsAsync(cancellationToken).ConfigureAwait(false));
     }
 
+    [HttpGet("SeasonFinder")]
+    [ProducesResponseType(typeof(SeasonFinderItemsPage), StatusCodes.Status200OK)]
+    public ActionResult<SeasonFinderItemsPage> GetSeasonFinder(
+        [FromQuery] string? libraryId,
+        [FromQuery] int? startIndex,
+        [FromQuery] int? limit,
+        [FromQuery] string? searchTerm,
+        [FromQuery] string? status,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortOrder)
+    {
+        return Ok(_themeDownloader.GetSeasonFinderItems(libraryId, startIndex, limit, searchTerm, status, sortBy, sortOrder));
+    }
+
+    [HttpPost("SeasonFinder/Rebuild")]
+    [ProducesResponseType(typeof(AnimeThemesMaintenanceResult), StatusCodes.Status200OK)]
+    public ActionResult<AnimeThemesMaintenanceResult> RebuildSeasonFinder()
+    {
+        return Ok(_themeDownloader.StartBrowserCacheRebuild());
+    }
+
     [HttpGet("Search")]
     [ProducesResponseType(typeof(IReadOnlyList<ThemeFinderSearchResult>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

@@ -106,6 +106,29 @@ public class GetAnimeThemesSeasonMappings : IReturn<IReadOnlyList<SeasonThemeMap
 {
 }
 
+[Route("/AnimeThemesSync/SeasonFinder", "GET", Summary = "Gets a cached page of Season Finder rows.")]
+public class GetAnimeThemesSeasonFinder : IReturn<SeasonFinderItemsPage>
+{
+    public string? LibraryId { get; set; }
+
+    public int? StartIndex { get; set; }
+
+    public int? Limit { get; set; }
+
+    public string? SearchTerm { get; set; }
+
+    public string? Status { get; set; }
+
+    public string? SortBy { get; set; }
+
+    public string? SortOrder { get; set; }
+}
+
+[Route("/AnimeThemesSync/SeasonFinder/Rebuild", "POST", Summary = "Starts a Season Finder cache rebuild.")]
+public class RebuildAnimeThemesSeasonFinder : IReturn<AnimeThemesMaintenanceResult>
+{
+}
+
 [Route("/AnimeThemesSync/Search", "GET", Summary = "Searches AnimeThemes anime candidates.")]
 public class SearchAnimeThemesAnime : IReturn<IReadOnlyList<ThemeFinderSearchResult>>
 {
@@ -296,6 +319,23 @@ public class AnimeThemesSyncService : IService
     public object Get(GetAnimeThemesSeasonMappings request)
     {
         return _themeDownloader.GetSeasonThemeMappingsAsync(CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    public object Get(GetAnimeThemesSeasonFinder request)
+    {
+        return _themeDownloader.GetSeasonFinderItems(
+            request.LibraryId,
+            request.StartIndex,
+            request.Limit,
+            request.SearchTerm,
+            request.Status,
+            request.SortBy,
+            request.SortOrder);
+    }
+
+    public object Post(RebuildAnimeThemesSeasonFinder request)
+    {
+        return _themeDownloader.StartBrowserCacheRebuild();
     }
 
     public object Get(SearchAnimeThemesAnime request)

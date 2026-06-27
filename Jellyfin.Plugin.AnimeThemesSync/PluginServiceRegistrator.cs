@@ -39,6 +39,14 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
             ThemeExtrasManifestService.ConfigureStore(store);
             return store;
         });
+        serviceCollection.AddSingleton<ISeasonFinderDataStore>(provider =>
+        {
+            var store = new SeasonFinderDataStore(
+                provider.GetRequiredService<IAnimeThemesDataPathProvider>(),
+                provider.GetRequiredService<IAnimeThemesServerIdentityProvider>());
+            store.EnsureInitialized();
+            return store;
+        });
         serviceCollection.AddSingleton<ThemeDownloader>();
         serviceCollection.AddHostedService<BrowserCacheWarmupService>();
 
@@ -57,7 +65,11 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
             var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
             var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
             var rateLimiter = new RateLimiter(loggerFactory.CreateLogger<RateLimiter>(), Constants.AnimeThemesHttpClientName, 80);
-            return new AnimeThemesService(httpClientFactory, loggerFactory.CreateLogger<AnimeThemesService>(), rateLimiter);
+            return new AnimeThemesService(
+                httpClientFactory,
+                loggerFactory.CreateLogger<AnimeThemesService>(),
+                rateLimiter,
+                provider.GetRequiredService<ISeasonFinderDataStore>());
         });
     }
 }

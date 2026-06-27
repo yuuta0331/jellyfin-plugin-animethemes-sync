@@ -27,12 +27,21 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             showLibraryDetails: false,
             activeTab: 'library',
             seasonMappings: [],
+            mappingExplorerRows: [],
             selectedSeason: null,
             selectedAnime: null,
             finderPreview: null,
             finderSearchTimer: null,
             finderSearchToken: 0,
             finderAutoSearched: {},
+            finderTotalRecordCount: 0,
+            finderLimit: 80,
+            finderRequestToken: 0,
+            finderLoadError: null,
+            finderObserver: null,
+            finderListSearchTimer: null,
+            finderPollTimer: null,
+            finderScrollTop: 0,
             importConfig: null,
             mappingsImportRows: null,
             settingsConfig: null,
@@ -114,6 +123,9 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         var summaryUnmatchedSeasons = page.querySelector('#AnimeThemesSummaryUnmatchedSeasons');
         var seasonFilter = page.querySelector('#AnimeThemesSeasonFilter');
         var seasonList = page.querySelector('#AnimeThemesSeasonList');
+        var seasonSearch = page.querySelector('#AnimeThemesSeasonSearch');
+        var seasonSort = page.querySelector('#AnimeThemesSeasonSort');
+        var seasonSortDirection = page.querySelector('#AnimeThemesSeasonSortDirection');
         var finderSearchInput = page.querySelector('#AnimeThemesFinderSearchInput');
         var finderYear = page.querySelector('#AnimeThemesFinderYear');
         var finderResults = page.querySelector('#AnimeThemesFinderResults');
@@ -667,11 +679,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             } else if (manageActive) {
                 libraryView.style.display = 'none';
                 detailView.style.display = 'none';
-                if (!state.finderLoading && !state.seasonMappings.length) {
-                    loadSeasonMappings().catch(function () { });
-                } else {
-                    renderMappingExplorer();
-                }
+                if (!state.mappingExplorerRows.length) loadAllSeasonMappings().catch(function () { });
+                else renderMappingExplorer();
             } else if (settingsActive) {
                 libraryView.style.display = 'none';
                 detailView.style.display = 'none';
@@ -826,61 +835,123 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 state.seasonMappings.push(row);
             }
             state.selectedSeason = row;
+            state.mappingExplorerRows = [];
             renderSeasonMappings();
             renderMappingExplorer();
         }
 
-        function loadSeasonMappings() {
+        function seasonFinderPath(startIndex) {
+            var params = [
+                ['startIndex', startIndex || 0],
+                ['limit', state.finderLimit],
+                ['searchTerm', seasonSearch.value.trim()],
+                ['status', seasonFilter.value || 'unmatched'],
+                ['sortBy', seasonSort.value || 'seriesName'],
+                ['sortOrder', seasonSortDirection.value || 'asc']
+            ].filter(function (pair) { return String(pair[1] === null || pair[1] === undefined ? '' : pair[1]).length; });
+            return 'AnimeThemesSync/SeasonFinder?' + params.map(function (pair) {
+                return encodeURIComponent(pair[0]) + '=' + encodeURIComponent(pair[1]);
+            }).join('&');
+        }
+
+        function loadSeasonMappings(append) {
+            if (state.finderLoading && append) return Promise.resolve(state.seasonMappings);
             var selectedId = state.selectedSeason ? seasonRowId(state.selectedSeason) : null;
+            var startIndex = append ? state.seasonMappings.length : 0;
+            var token = append ? state.finderRequestToken : ++state.finderRequestToken;
             state.finderLoading = true;
-            finderState.textContent = 'Loading season mappings...';
-            renderFinderSkeleton(seasonList);
-            return apiGet('AnimeThemesSync/SeasonMappings').then(function (rows) {
+            state.finderLoadError = null;
+            finderState.textContent = append ? 'Loading more seasons...' : 'Loading season mappings...';
+            if (!append) {
+                state.finderScrollTop = 0;
+                renderFinderSkeleton(seasonList);
+            }
+            return apiGet(seasonFinderPath(startIndex)).then(function (result) {
+                if (token !== state.finderRequestToken) return state.seasonMappings;
+                var rows = value(result, 'Items', 'items') || [];
                 state.finderLoading = false;
-                state.seasonMappings = rows || [];
+                state.finderTotalRecordCount = Number(value(result, 'TotalRecordCount', 'totalRecordCount') || 0);
+                state.browserCacheReady = value(result, 'CacheReady', 'cacheReady') !== false;
+                state.seasonMappings = append ? state.seasonMappings.concat(rows) : rows;
                 if (selectedId) {
                     state.selectedSeason = state.seasonMappings.find(function (row) {
                         return String(seasonRowId(row)) === String(selectedId);
                     }) || state.selectedSeason;
                 }
-                renderSeasonMappings();
-                renderMappingExplorer();
-                finderState.textContent = state.seasonMappings.length + ' seasons loaded.';
+                renderSeasonMappings(append ? startIndex : null);
+                finderState.textContent = state.seasonMappings.length + ' of ' + state.finderTotalRecordCount + ' seasons loaded.';
+                if (!state.browserCacheReady) scheduleFinderPoll();
                 return state.seasonMappings;
             }).catch(function (err) {
+                if (token !== state.finderRequestToken) return state.seasonMappings;
                 state.finderLoading = false;
-                seasonList.innerHTML = '';
-                appendEmptyState(seasonList, 'Season mappings failed to load', getErrorMessage(err));
-                renderMappingExplorer();
+                state.finderLoadError = err;
+                renderSeasonMappings();
                 finderState.textContent = 'Failed to load season mappings.';
-                Dashboard.alert({ title: 'Season Finder Error', message: getErrorMessage(err) });
-                return [];
+                return state.seasonMappings;
             });
         }
 
-        function renderSeasonMappings() {
-            if (state.finderLoading) {
+        function loadAllSeasonMappings() {
+            return apiGet('AnimeThemesSync/SeasonMappings').then(function (rows) {
+                state.mappingExplorerRows = rows || [];
+                renderMappingExplorer();
+                return state.mappingExplorerRows;
+            });
+        }
+
+        function scheduleFinderPoll() {
+            if (state.finderPollTimer || state.activeTab !== 'finder') return;
+            state.finderPollTimer = setTimeout(function () {
+                state.finderPollTimer = null;
+                if (state.activeTab === 'finder') loadSeasonMappings(false);
+            }, 2000);
+        }
+
+        function observeFinderSentinel(sentinel) {
+            if (state.finderObserver) state.finderObserver.disconnect();
+            if (!sentinel || state.seasonMappings.length >= state.finderTotalRecordCount) return;
+            state.finderObserver = new IntersectionObserver(function (entries) {
+                if (entries.some(function (entry) { return entry.isIntersecting; }) && !state.finderLoading) {
+                    loadSeasonMappings(true);
+                }
+            }, { root: seasonList, rootMargin: '300px 0px' });
+            state.finderObserver.observe(sentinel);
+        }
+
+        function renderSeasonMappings(appendFrom) {
+            syncSeasonFilterButtons();
+            var scrollTop = state.finderScrollTop;
+            if (appendFrom === null || appendFrom === undefined) {
+                seasonList.innerHTML = '';
+            } else {
+                var previousTail = seasonList.querySelector('.ats-finder-sentinel, .ats-finder-retry');
+                if (previousTail) previousTail.remove();
+            }
+            if (!state.seasonMappings.length && state.finderLoading) {
                 renderFinderSkeleton(seasonList);
                 return;
             }
-
-            var filter = seasonFilter.value || 'unmatched';
-            syncSeasonFilterButtons();
-            var rows = state.seasonMappings.filter(function (row) {
-                var status = String(value(row, 'Status', 'status') || '').toLowerCase();
-                if (filter === 'all') return true;
-                if (filter === 'auto') return status === 'auto' || status === 'direct' || status === 'series';
-                return status === filter;
-            });
-            seasonList.innerHTML = '';
-            if (!rows.length) {
+            if (!state.seasonMappings.length && !state.finderLoadError) {
                 appendEmptyState(seasonList, 'No seasons match this filter', 'Switch filters or refresh season mappings.');
                 return;
             }
-
-            rows.forEach(function (row) {
+            state.seasonMappings.slice(appendFrom || 0).forEach(function (row) {
                 seasonList.appendChild(createSeasonCard(row));
             });
+            if (state.finderLoadError) {
+                var retry = createButton('Retry loading seasons', true);
+                retry.classList.add('ats-finder-retry');
+                retry.addEventListener('click', function () { loadSeasonMappings(state.seasonMappings.length > 0); });
+                seasonList.appendChild(retry);
+            } else if (state.seasonMappings.length < state.finderTotalRecordCount) {
+                var sentinel = document.createElement('div');
+                sentinel.className = 'ats-finder-sentinel';
+                sentinel.setAttribute('aria-label', 'Loading more seasons');
+                seasonList.appendChild(sentinel);
+                observeFinderSentinel(sentinel);
+            }
+            requestAnimationFrame(function () { seasonList.scrollTop = scrollTop; });
         }
 
         function createSeasonCard(row) {
@@ -945,7 +1016,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             seasonFilter.value = targetStatus === 'unmatched' ? 'unmatched' : 'all';
             syncSeasonFilterButtons();
             setActiveTab('finder');
-            loadSeasonMappings().then(function (rows) {
+            loadAllSeasonMappings().then(function (rows) {
                 var row = (rows || []).find(function (candidate) {
                     return String(seasonRowId(candidate)) === String(seasonItemId);
                 });
@@ -953,7 +1024,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                     finderState.textContent = 'Season was not found in Season Finder.';
                     return;
                 }
-
+                if (!state.seasonMappings.some(function (candidate) { return String(seasonRowId(candidate)) === String(seasonItemId); })) {
+                    state.seasonMappings.unshift(row);
+                    state.finderTotalRecordCount = Math.max(state.finderTotalRecordCount, state.seasonMappings.length);
+                }
                 selectSeason(row);
             }).catch(function () {
                 // loadSeasonMappings already surfaced the error.
@@ -1269,13 +1343,15 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             if (!storage) return;
             var ready = !!value(storage, 'CacheReady', 'cacheReady');
             var rebuilding = !!value(storage, 'RebuildRunning', 'rebuildRunning');
+            var finderStorage = value(storage, 'SeasonFinder', 'seasonFinder');
             if (cacheBytes) cacheBytes.textContent = formatBytes(value(storage, 'DatabaseBytes', 'databaseBytes'));
-            if (cacheItems) cacheItems.textContent = text(value(storage, 'BrowserItemCount', 'browserItemCount'));
+            if (cacheItems) cacheItems.textContent = text(value(storage, 'BrowserItemCount', 'browserItemCount')) + ' browser / ' + text(value(finderStorage, 'ItemCount', 'itemCount')) + ' seasons';
             if (cacheState) cacheState.textContent = rebuilding ? 'Updating' : (ready ? 'Ready' : 'Starting');
             if (cachePath) {
                 var path = value(storage, 'DatabasePath', 'databasePath');
                 var lastError = value(storage, 'LastError', 'lastError');
-                cachePath.textContent = lastError ? ('Cache file: ' + path + ' | Last error: ' + lastError) : ('Cache file: ' + path);
+                var finderPath = value(finderStorage, 'DatabasePath', 'databasePath');
+                cachePath.textContent = (lastError ? ('Cache file: ' + path + ' | Last error: ' + lastError) : ('Cache file: ' + path)) + (finderPath ? (' | Season Finder DB: ' + finderPath) : '');
             }
         }
 
@@ -1469,7 +1545,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function exportMappings() {
             var doExport = function () {
-                var rows = (state.seasonMappings || []).filter(seasonMappingHasMatch).map(function (row) {
+                var rows = (state.mappingExplorerRows || []).filter(seasonMappingHasMatch).map(function (row) {
                     return {
                         SeriesItemId: value(row, 'SeriesItemId', 'seriesItemId'),
                         SeriesName: value(row, 'SeriesName', 'seriesName'),
@@ -1491,8 +1567,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 downloadJsonFile('animethemes-sync-mappings.json', content);
                 setMappingsState('Mappings exported.');
             };
-            if (!state.seasonMappings.length) {
-                loadSeasonMappings().then(doExport);
+            if (!state.mappingExplorerRows.length) {
+                loadAllSeasonMappings().then(doExport);
             } else {
                 doExport();
             }
@@ -1500,12 +1576,12 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function exportLibrarySnapshot() {
             var doExport = function () {
-                var content = JSON.stringify({ Rows: state.seasonMappings || [] }, null, 2);
+                var content = JSON.stringify({ Rows: state.mappingExplorerRows || [] }, null, 2);
                 downloadJsonFile('animethemes-sync-library-snapshot.json', content);
                 setMappingsState('Library snapshot exported.');
             };
-            if (!state.seasonMappings.length) {
-                loadSeasonMappings().then(doExport);
+            if (!state.mappingExplorerRows.length) {
+                loadAllSeasonMappings().then(doExport);
             } else {
                 doExport();
             }
@@ -1522,7 +1598,9 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 mappingsPreview.textContent = 'Imported: ' + imported + '\nSkipped: ' + skipped + '\nErrors: ' + errors.length + (errors.length ? '\n' + errors.join('\n') : '');
                 mappingsApplyButton.disabled = true;
                 setMappingsState('Mappings import complete.');
-                loadSeasonMappings().catch(function () { });
+                state.mappingExplorerRows = [];
+                loadSeasonMappings(false).catch(function () { });
+                loadAllSeasonMappings().catch(function () { });
                 loadItems();
             }).catch(function (err) {
                 setMappingsState('Mappings import failed.');
@@ -1547,7 +1625,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function renderMappingExplorer() {
             if (!explorerTable) return;
-            var rows = state.seasonMappings || [];
+            var rows = state.mappingExplorerRows || [];
             var query = explorerSearch ? explorerSearch.value.trim().toLowerCase() : '';
             var statusFilterValue = explorerStatus ? explorerStatus.value : 'all';
             var filtered = rows.filter(function (row) {
@@ -2837,17 +2915,38 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 setActiveTab(button.getAttribute('data-ats-tab') || 'library');
             });
         });
-        page.querySelector('#AnimeThemesSeasonRefresh').addEventListener('click', loadSeasonMappings);
+        page.querySelector('#AnimeThemesSeasonRefresh').addEventListener('click', function () {
+            state.finderScrollTop = 0;
+            loadSeasonMappings(false);
+        });
         seasonFilter.addEventListener('change', function () {
             syncSeasonFilterButtons();
-            loadSeasonMappings();
+            state.finderScrollTop = 0;
+            loadSeasonMappings(false);
         });
         page.querySelectorAll('[data-season-filter]').forEach(function (button) {
             button.addEventListener('click', function () {
                 seasonFilter.value = button.getAttribute('data-season-filter') || 'unmatched';
                 syncSeasonFilterButtons();
-                loadSeasonMappings();
+                state.finderScrollTop = 0;
+                loadSeasonMappings(false);
             });
+        });
+        seasonSearch.addEventListener('input', function () {
+            if (state.finderListSearchTimer) clearTimeout(state.finderListSearchTimer);
+            state.finderListSearchTimer = setTimeout(function () {
+                state.finderScrollTop = 0;
+                loadSeasonMappings(false);
+            }, 250);
+        });
+        [seasonSort, seasonSortDirection].forEach(function (control) {
+            control.addEventListener('change', function () {
+                state.finderScrollTop = 0;
+                loadSeasonMappings(false);
+            });
+        });
+        seasonList.addEventListener('scroll', function () {
+            state.finderScrollTop = seasonList.scrollTop;
         });
         page.querySelector('#AnimeThemesFinderSearch').addEventListener('click', function () {
             searchAnimeThemes(false);
@@ -2962,7 +3061,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         });
         mappingsFileInput.addEventListener('change', handleMappingsFile);
         page.querySelector('#AtsExplorerRefresh').addEventListener('click', function () {
-            loadSeasonMappings().catch(function () { });
+            state.mappingExplorerRows = [];
+            loadAllSeasonMappings().catch(function () { });
         });
         explorerSearch.addEventListener('input', renderMappingExplorer);
         explorerStatus.addEventListener('change', renderMappingExplorer);

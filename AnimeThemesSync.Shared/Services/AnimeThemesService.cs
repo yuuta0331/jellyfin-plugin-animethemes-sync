@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using AnimeThemesSync.Shared.Models;
+using AnimeThemesSync.Shared.Interfaces;
 
 namespace AnimeThemesSync.Shared.Services;
 
@@ -26,6 +27,7 @@ public sealed class AnimeThemesService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AnimeThemesService> _logger;
     private readonly RateLimiter _rateLimiter;
+    private readonly ISeasonFinderDataStore? _persistentCache;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AnimeThemesService"/> class.
@@ -33,11 +35,17 @@ public sealed class AnimeThemesService
     /// <param name="httpClientFactory">The HTTP client factory.</param>
     /// <param name="logger">The logger.</param>
     /// <param name="rateLimiter">The rate limiter.</param>
-    public AnimeThemesService(IHttpClientFactory httpClientFactory, ILogger<AnimeThemesService> logger, RateLimiter rateLimiter)
+    /// <param name="persistentCache">The optional persistent search cache.</param>
+    public AnimeThemesService(
+        IHttpClientFactory httpClientFactory,
+        ILogger<AnimeThemesService> logger,
+        RateLimiter rateLimiter,
+        ISeasonFinderDataStore? persistentCache = null)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _rateLimiter = rateLimiter;
+        _persistentCache = persistentCache;
     }
 
     /// <summary>
@@ -135,6 +143,16 @@ public sealed class AnimeThemesService
             return cached;
         }
 
+        if (_persistentCache?.TryGetSearch(query, year, out var cachedJson) == true)
+        {
+            var persisted = JsonSerializer.Deserialize<List<AnimeThemesAnime>>(cachedJson, _jsonOptions);
+            if (persisted != null)
+            {
+                SetCachedSearch(cacheKey, persisted);
+                return persisted;
+            }
+        }
+
         var escapedQuery = Uri.EscapeDataString(query.Trim());
         var url = $"{Constants.AnimeThemesBaseUrl}/anime?q={escapedQuery}" +
                   "&page%5Bsize%5D=15&page%5Bnumber%5D=1" +
@@ -151,7 +169,19 @@ public sealed class AnimeThemesService
         var response = await SendRequestAsync<AnimeThemesAnimeIndexResponse>(url, cancellationToken).ConfigureAwait(false);
         var results = (IReadOnlyList<AnimeThemesAnime>)(response?.Anime ?? []);
         SetCachedSearch(cacheKey, results);
+        _persistentCache?.SetSearch(query, year, JsonSerializer.Serialize(results, _jsonOptions));
         return results;
+    }
+
+    /// <summary>
+    /// Clears the in-memory AnimeThemes search cache.
+    /// </summary>
+    public void ClearSearchCache()
+    {
+        lock (_searchCacheLock)
+        {
+            _searchCache.Clear();
+        }
     }
 
     private static string BuildSearchCacheKey(string query, int? year)
