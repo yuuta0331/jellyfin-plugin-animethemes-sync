@@ -19,6 +19,8 @@ public interface ISeasonFinderDataStore
 
     void ReplaceSeasonThemeMappings(IEnumerable<SeasonThemeMapping> mappings, string source);
 
+    void ApplySeasonThemeMappingChanges(IReadOnlyList<SeasonThemeMappingChange> changes);
+
     void ReplaceRows(IEnumerable<SeasonFinderRowRecord> records);
 
     void UpsertRow(SeasonFinderRowRecord record);

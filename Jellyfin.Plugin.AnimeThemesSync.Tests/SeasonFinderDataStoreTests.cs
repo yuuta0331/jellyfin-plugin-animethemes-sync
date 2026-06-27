@@ -145,6 +145,130 @@ public sealed class SeasonFinderDataStoreTests
         }
     }
 
+    [Fact]
+    public void LegacyMappings_DeduplicateWithLockedMappingPriority()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var locked = CreateMapping("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "locked", true);
+            var laterUnlocked = CreateMapping("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "unlocked", false);
+
+            store.MigrateLegacyMappings(new[] { locked, laterUnlocked });
+
+            var mapping = Assert.Single(store.GetSeasonThemeMappings());
+            Assert.True(mapping.Locked);
+            Assert.Equal("locked", mapping.AnimeThemesSlug);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void MappingChanges_UpdateOnlyTargetAndRemoveAlternateKeys()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var targetId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+            store.ReplaceSeasonThemeMappings(new[]
+            {
+                CreateMapping(targetId, "by-id", false),
+                new SeasonThemeMapping { SeasonPath = "/series/Season 1", AnimeThemesSlug = "by-path", Enabled = true },
+                CreateMapping("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "untouched", true),
+            }, "Test");
+            var replacement = CreateMapping(targetId, "replacement", true);
+            var target = new SeasonThemeMappingTarget(
+                "dddddddd-dddd-dddd-dddd-dddddddddddd", "/series", targetId, "/series/Season 1", "/series", 1);
+
+            store.ApplySeasonThemeMappingChanges([new SeasonThemeMappingChange(target, replacement, "Manual")]);
+
+            var mappings = store.GetSeasonThemeMappings();
+            Assert.Equal(2, mappings.Count);
+            Assert.Contains(mappings, mapping => mapping.AnimeThemesSlug == "replacement");
+            Assert.Contains(mappings, mapping => mapping.AnimeThemesSlug == "untouched");
+            Assert.DoesNotContain(mappings, mapping => mapping.AnimeThemesSlug is "by-id" or "by-path");
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void RowUpsert_BumpsCacheVersionWithoutReplacingOtherRows()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var firstId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+            store.ReplaceRows(new[]
+            {
+                CreateRow(firstId, "Alpha", 1, "Unmatched", null),
+                CreateRow("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "Beta", 2, "Unmatched", null),
+            });
+            var before = store.QueryRows(null, 0, 80, null, "all", "seriesName", "asc").CacheVersion;
+            Thread.Sleep(2);
+
+            store.UpsertRow(CreateRow(firstId, "Alpha", 1, "Manual", "alpha"));
+
+            var after = store.QueryRows(null, 0, 80, null, "all", "seriesName", "asc");
+            Assert.Equal(2, after.TotalRecordCount);
+            Assert.NotEqual(before, after.CacheVersion);
+            Assert.Equal("Manual", after.Items[0].Status);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void ReplaceRows_RollsBackWhenNewRowsCannotBeWritten()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            store.ReplaceRows(new[] { CreateRow("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "Original", 1, "Unmatched", null) });
+            var invalid = new SeasonFinderRowRecord { Row = null! };
+
+            Assert.ThrowsAny<Exception>(() => store.ReplaceRows(new[] { CreateRow("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "New", 1, "Manual", "new"), invalid }));
+
+            Assert.Equal("Original", Assert.Single(store.GetAllRows()).SeriesName);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void SearchCache_SeparatesYearsForNormalizedQuery()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            store.SetSearch(" Example ", 2023, "[2023]");
+            store.SetSearch("example", 2024, "[2024]");
+
+            Assert.True(store.TryGetSearch("EXAMPLE", 2023, out var first));
+            Assert.True(store.TryGetSearch("example", 2024, out var second));
+            Assert.Equal("[2023]", first);
+            Assert.Equal("[2024]", second);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
     private static SeasonFinderDataStore CreateStore(string directory, string serverKind = "Test")
     {
         return new SeasonFinderDataStore(new TestPathProvider(directory), new TestIdentityProvider(serverKind));

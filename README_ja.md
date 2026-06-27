@@ -93,7 +93,7 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 2. タイトルと任意の年でAnimeThemesを検索
 3. 候補を選択してOP/EDをプレビューし、`Save mapping` または `Save & Download` を実行
 
-`Save & Download` はマッピングを `animethemes-sync.db` に保存後、そのSeason itemのオンデマンドダウンロードを実行します。Season 1（および番号なしの通常Season）の `backdrops` / `theme-music` / `extras` は親Seriesフォルダへ、Season 2以降は各Seasonフォルダへ出力します。Season 1がSeriesとは異なるAnimeThemes entryへ明示的に割り当てられた場合は、衝突を避けるためファイル名に `Season 01 - ` prefixを付けます。既存のSeason 1フォルダ内のファイルは自動移動・自動削除しません。既存の `SeasonThemeMappings` 設定JSONは互換性のため初回にSQLiteへ移行され、それ以降の変更にはMappings import/exportを使用します。
+`Save & Download` はマッピングを正規化された `animethemes-sync.db` テーブルへ保存後、そのSeason itemのオンデマンドダウンロードを実行します。Season Finderは一覧末尾付近でSQLiteの次ページを自動取得し、タブ移動やキャッシュ更新後も読込件数、選択Season、スクロール位置を復元します。Season 1（および番号なしの通常Season）の `backdrops` / `theme-music` / `extras` は親Seriesフォルダへ、Season 2以降は各Seasonフォルダへ出力します。Season 1がSeriesとは異なるAnimeThemes entryへ明示的に割り当てられた場合は、衝突を避けるためファイル名に `Season 01 - ` prefixを付けます。既存のSeason 1フォルダ内のファイルは自動移動・自動削除しません。既存の `SeasonThemeMappings` 設定JSONは互換性のため初回にSQLiteへ移行され、それ以降の変更にはMappings import/exportを使用します。
 `Enable Season Theme Downloads` が無効の場合、Seasonマッピングは保存されたままですが、Season出力とSeason itemのオンデマンドダウンロードは再度有効化するまでスキップされます。
 
 ```json

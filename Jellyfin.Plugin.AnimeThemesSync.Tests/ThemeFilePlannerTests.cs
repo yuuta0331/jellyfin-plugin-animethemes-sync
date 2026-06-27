@@ -472,6 +472,14 @@ public class ThemeFilePlannerTests
         Assert.DoesNotContain("Microsoft.Data.Sqlite", embyProject, StringComparison.Ordinal);
         Assert.Contains("SQLite3.Open", embyStore, StringComparison.Ordinal);
         Assert.DoesNotContain("using Microsoft.Data.Sqlite", embyStore, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS SeasonFinderRows", embyStore, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS SeasonThemeMappings", embyStore, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS AnimeSearchCache", embyStore, StringComparison.Ordinal);
+        Assert.Contains("LIMIT $limit OFFSET $start", embyStore, StringComparison.Ordinal);
+        Assert.Contains("MigrateDocumentStore(connection)", embyStore, StringComparison.Ordinal);
+        Assert.Contains("EmbyDocumentStoreMigrated:", embyStore, StringComparison.Ordinal);
+        Assert.DoesNotContain("private StoreDocument? _document", embyStore, StringComparison.Ordinal);
+        Assert.DoesNotContain("IEnumerable<SeasonFinderRowRecord> filtered", embyStore, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -965,10 +973,21 @@ public class ThemeFilePlannerTests
             Assert.Contains("rootMargin: '300px 0px'", content, StringComparison.Ordinal);
             Assert.Contains("AnimeThemesSync/SeasonFinder?", content, StringComparison.Ordinal);
             Assert.Contains("finderRequestToken", content, StringComparison.Ordinal);
+            Assert.Contains("finderCacheVersion", content, StringComparison.Ordinal);
+            Assert.Contains("reloadSeasonMappingsPreservingState", content, StringComparison.Ordinal);
+            Assert.Contains("Math.max(previousCount, state.finderLimit)", content, StringComparison.Ordinal);
+            Assert.Contains("accumulated.length < targetCount", content, StringComparison.Ordinal);
             Assert.DoesNotContain("function resolveSeasonMappings(rows)", content, StringComparison.Ordinal);
             Assert.DoesNotContain("seasonMappingResolveToken", content, StringComparison.Ordinal);
             Assert.DoesNotContain("groupHasContent", content, StringComparison.Ordinal);
             Assert.DoesNotContain("if (!value(row, 'AnimeThemesSlug', 'animeThemesSlug')) addChip(chips, 'Needs match', 'missing');", content, StringComparison.Ordinal);
+        }
+
+        foreach (var file in downloaderFiles)
+        {
+            var content = File.ReadAllText(file);
+            Assert.Contains("ApplySeasonThemeMappingChanges", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("_seasonFinderStore.ReplaceSeasonThemeMappings", content, StringComparison.Ordinal);
         }
     }
 

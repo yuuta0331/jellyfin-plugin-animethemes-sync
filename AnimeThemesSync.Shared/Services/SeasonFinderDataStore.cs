@@ -163,7 +163,7 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
             }
 
             using var transaction = connection.BeginTransaction();
-            foreach (var mapping in mappings)
+            foreach (var mapping in SeasonThemeMappingKeyHelper.Deduplicate(mappings))
             {
                 UpsertMapping(connection, transaction, mapping, "Legacy");
             }
@@ -224,9 +224,43 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
             using var connection = OpenConnection();
             using var transaction = connection.BeginTransaction();
             Execute(connection, transaction, "DELETE FROM SeasonThemeMappings WHERE ServerKind = $serverKind;", ("$serverKind", ServerKind));
-            foreach (var mapping in mappings)
+            foreach (var mapping in SeasonThemeMappingKeyHelper.Deduplicate(mappings))
             {
                 UpsertMapping(connection, transaction, mapping, source);
+            }
+
+            transaction.Commit();
+        }
+    }
+
+    /// <summary>
+    /// Atomically replaces only mappings that identify the supplied seasons.
+    /// </summary>
+    public void ApplySeasonThemeMappingChanges(IReadOnlyList<SeasonThemeMappingChange> changes)
+    {
+        if (changes.Count == 0)
+        {
+            return;
+        }
+
+        lock (_syncRoot)
+        {
+            EnsureInitialized();
+            using var connection = OpenConnection();
+            using var transaction = connection.BeginTransaction();
+            foreach (var change in changes)
+            {
+                foreach (var key in SeasonThemeMappingKeyHelper.BuildTargetKeys(change.Target))
+                {
+                    Execute(connection, transaction,
+                        "DELETE FROM SeasonThemeMappings WHERE ServerKind = $serverKind AND MappingKey = $key;",
+                        ("$serverKind", ServerKind), ("$key", key));
+                }
+
+                if (change.Mapping != null)
+                {
+                    UpsertMapping(connection, transaction, change.Mapping, change.Source);
+                }
             }
 
             transaction.Commit();
@@ -272,6 +306,7 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
             using var connection = OpenConnection();
             using var transaction = connection.BeginTransaction();
             UpsertRow(connection, transaction, record);
+            TouchCacheVersion(connection, transaction);
             transaction.Commit();
         }
     }
@@ -540,7 +575,7 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
 
     private void UpsertMapping(SqliteConnection connection, SqliteTransaction transaction, SeasonThemeMapping mapping, string source)
     {
-        var key = BuildMappingKey(mapping);
+        var key = SeasonThemeMappingKeyHelper.BuildMappingKey(mapping);
         if (key == null)
         {
             return;
@@ -622,27 +657,15 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
         return reader.Read() ? (reader.GetInt64(0) != 0, reader.GetString(1)) : (false, string.Empty);
     }
 
-    private static string? BuildMappingKey(SeasonThemeMapping mapping)
+    private void TouchCacheVersion(SqliteConnection connection, SqliteTransaction transaction)
     {
-        if (!string.IsNullOrWhiteSpace(mapping.SeasonItemId))
-        {
-            return "id:" + NormalizeId(mapping.SeasonItemId);
-        }
-
-        if (!string.IsNullOrWhiteSpace(mapping.SeasonPath))
-        {
-            return "path:" + NormalizePath(mapping.SeasonPath);
-        }
-
-        var series = !string.IsNullOrWhiteSpace(mapping.SeriesItemId)
-            ? "id:" + NormalizeId(mapping.SeriesItemId)
-            : !string.IsNullOrWhiteSpace(mapping.SeriesPath) ? "path:" + NormalizePath(mapping.SeriesPath) : null;
-        return series != null && mapping.SeasonNumber.HasValue ? $"series:{series}:{mapping.SeasonNumber.Value}" : null;
+        var now = FormatDate(DateTimeOffset.UtcNow);
+        Execute(connection, transaction, """
+            UPDATE SeasonFinderCacheState
+            SET CacheVersion = $version, UpdatedAtUtc = $version
+            WHERE ServerKind = $serverKind;
+            """, ("$serverKind", ServerKind), ("$version", now));
     }
-
-    private static string NormalizeId(string value) => Guid.TryParse(value, out var parsed) ? parsed.ToString("D") : value.Trim().ToLowerInvariant();
-
-    private static string NormalizePath(string value) => value.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).ToLowerInvariant();
 
     private static string BuildQueryKey(string query, int? year) => string.Join("|", query.Trim().ToLowerInvariant(), year?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
 

@@ -48,6 +48,25 @@ public sealed class SeasonFinderRowRecord
 }
 
 /// <summary>
+/// Identifies every supported mapping key for one media-server season.
+/// </summary>
+public sealed record SeasonThemeMappingTarget(
+    string? SeriesItemId,
+    string? SeriesPath,
+    string? SeasonItemId,
+    string? SeasonPath,
+    string? SeasonParentPath,
+    int? SeasonNumber);
+
+/// <summary>
+/// Atomic mapping replacement. A null mapping deletes matching entries.
+/// </summary>
+public sealed record SeasonThemeMappingChange(
+    SeasonThemeMappingTarget Target,
+    Configuration.SeasonThemeMapping? Mapping,
+    string Source);
+
+/// <summary>
 /// Plugin storage and cache status.
 /// </summary>
 public sealed record AnimeThemesStorageStatus(

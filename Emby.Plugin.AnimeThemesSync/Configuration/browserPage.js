@@ -37,6 +37,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             finderTotalRecordCount: 0,
             finderLimit: 80,
             finderRequestToken: 0,
+            finderCacheVersion: '',
+            finderCacheReady: false,
             finderLoadError: null,
             finderObserver: null,
             finderListSearchTimer: null,
@@ -819,27 +821,6 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             return value(row, 'SeasonItemId', 'seasonItemId');
         }
 
-        function upsertSeasonMappingRow(row) {
-            if (!row) return;
-            var rowId = seasonRowId(row);
-            var replaced = false;
-            state.seasonMappings = state.seasonMappings.map(function (existing) {
-                if (String(seasonRowId(existing)) === String(rowId)) {
-                    replaced = true;
-                    return row;
-                }
-
-                return existing;
-            });
-            if (!replaced) {
-                state.seasonMappings.push(row);
-            }
-            state.selectedSeason = row;
-            state.mappingExplorerRows = [];
-            renderSeasonMappings();
-            renderMappingExplorer();
-        }
-
         function seasonFinderPath(startIndex) {
             var params = [
                 ['startIndex', startIndex || 0],
@@ -854,33 +835,58 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             }).join('&');
         }
 
-        function loadSeasonMappings(append) {
-            if (state.finderLoading && append) return Promise.resolve(state.seasonMappings);
-            var selectedId = state.selectedSeason ? seasonRowId(state.selectedSeason) : null;
-            var startIndex = append ? state.seasonMappings.length : 0;
+        function loadSeasonMappings(append, options) {
+            options = options || {};
+            if (append && state.finderLoading) return Promise.resolve(state.seasonMappings);
+            var previousCount = state.seasonMappings.length;
+            var preserve = !append && options.preserve === true;
+            var selectedId = options.selectedId || (state.selectedSeason ? seasonRowId(state.selectedSeason) : null);
+            var savedScrollTop = preserve ? state.finderScrollTop : 0;
             var token = append ? state.finderRequestToken : ++state.finderRequestToken;
+            var targetCount = append ? previousCount + state.finderLimit : (preserve ? Math.max(previousCount, state.finderLimit) : state.finderLimit);
+            var accumulated = append ? state.seasonMappings.slice() : [];
+            var appendFrom = append ? previousCount : null;
             state.finderLoading = true;
             state.finderLoadError = null;
-            finderState.textContent = append ? 'Loading more seasons...' : 'Loading season mappings...';
-            if (!append) {
+            if (state.finderObserver) state.finderObserver.disconnect();
+            finderState.textContent = append ? 'Loading more seasons...' : (preserve ? 'Refreshing season mappings...' : 'Loading season mappings...');
+            if (!append && !preserve) {
+                state.seasonMappings = [];
                 state.finderScrollTop = 0;
                 renderFinderSkeleton(seasonList);
             }
-            return apiGet(seasonFinderPath(startIndex)).then(function (result) {
-                if (token !== state.finderRequestToken) return state.seasonMappings;
-                var rows = value(result, 'Items', 'items') || [];
+
+            function fetchNextPage() {
+                return apiGet(seasonFinderPath(accumulated.length)).then(function (result) {
+                    if (token !== state.finderRequestToken) return false;
+                    var rows = value(result, 'Items', 'items') || [];
+                    accumulated = accumulated.concat(rows);
+                    state.finderTotalRecordCount = Number(value(result, 'TotalRecordCount', 'totalRecordCount') || 0);
+                    state.finderCacheVersion = String(value(result, 'CacheVersion', 'cacheVersion') || '');
+                    state.finderCacheReady = value(result, 'CacheReady', 'cacheReady') !== false;
+                    if (rows.length && accumulated.length < targetCount && accumulated.length < state.finderTotalRecordCount) {
+                        return fetchNextPage();
+                    }
+                    return true;
+                });
+            }
+
+            return fetchNextPage().then(function (accepted) {
+                if (!accepted || token !== state.finderRequestToken) return state.seasonMappings;
                 state.finderLoading = false;
-                state.finderTotalRecordCount = Number(value(result, 'TotalRecordCount', 'totalRecordCount') || 0);
-                state.browserCacheReady = value(result, 'CacheReady', 'cacheReady') !== false;
-                state.seasonMappings = append ? state.seasonMappings.concat(rows) : rows;
-                if (selectedId) {
-                    state.selectedSeason = state.seasonMappings.find(function (row) {
-                        return String(seasonRowId(row)) === String(selectedId);
-                    }) || state.selectedSeason;
+                state.seasonMappings = accumulated;
+                state.selectedSeason = selectedId ? state.seasonMappings.find(function (row) {
+                    return String(seasonRowId(row)) === String(selectedId);
+                }) || null : state.selectedSeason;
+                state.finderScrollTop = preserve ? savedScrollTop : state.finderScrollTop;
+                if (!state.finderCacheReady && !state.seasonMappings.length) {
+                    renderFinderSkeleton(seasonList);
+                    finderState.textContent = 'Season Finder cache is being built...';
+                } else {
+                    renderSeasonMappings(appendFrom);
+                    finderState.textContent = state.seasonMappings.length + ' of ' + state.finderTotalRecordCount + ' seasons loaded.';
                 }
-                renderSeasonMappings(append ? startIndex : null);
-                finderState.textContent = state.seasonMappings.length + ' of ' + state.finderTotalRecordCount + ' seasons loaded.';
-                if (!state.browserCacheReady) scheduleFinderPoll();
+                if (!state.finderCacheReady) scheduleFinderPoll();
                 return state.seasonMappings;
             }).catch(function (err) {
                 if (token !== state.finderRequestToken) return state.seasonMappings;
@@ -890,6 +896,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 finderState.textContent = 'Failed to load season mappings.';
                 return state.seasonMappings;
             });
+        }
+
+        function reloadSeasonMappingsPreservingState(selectedId) {
+            return loadSeasonMappings(false, { preserve: true, selectedId: selectedId });
         }
 
         function loadAllSeasonMappings() {
@@ -904,7 +914,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             if (state.finderPollTimer || state.activeTab !== 'finder') return;
             state.finderPollTimer = setTimeout(function () {
                 state.finderPollTimer = null;
-                if (state.activeTab === 'finder') loadSeasonMappings(false);
+                if (state.activeTab === 'finder') reloadSeasonMappingsPreservingState();
             }, 2000);
         }
 
@@ -1285,9 +1295,9 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             finderState.textContent = 'Saving mapping...';
             apiPostJson('AnimeThemesSync/SeasonMappings', payload).then(function (row) {
                 state.selectedSeason = row || state.selectedSeason;
+                state.mappingExplorerRows = [];
                 if (row) {
-                    seasonFilter.value = 'manual';
-                    upsertSeasonMappingRow(row);
+                    reloadSeasonMappingsPreservingState(seasonRowId(row));
                 }
                 if (downloadAfterSave) {
                     startDownloadJob('AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(payload.SeasonItemId) + '&Force=false');
@@ -1306,15 +1316,15 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             finderState.textContent = 'Clearing mapping...';
             apiDelete('AnimeThemesSync/SeasonMappings/' + encodeURIComponent(seasonId)).then(function (row) {
                 state.selectedSeason = row || null;
+                state.mappingExplorerRows = [];
                 state.selectedAnime = null;
                 state.finderPreview = null;
                 finderPreview.className = 'ats-finder-preview fieldDescription';
                 finderPreview.textContent = 'Mapping cleared.';
                 if (row) {
-                    seasonFilter.value = 'unmatched';
-                    upsertSeasonMappingRow(row);
+                    reloadSeasonMappingsPreservingState(seasonRowId(row));
                 } else {
-                    loadSeasonMappings();
+                    reloadSeasonMappingsPreservingState();
                 }
             }).catch(function (err) {
                 finderState.textContent = 'Clear failed.';
@@ -1599,7 +1609,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 mappingsApplyButton.disabled = true;
                 setMappingsState('Mappings import complete.');
                 state.mappingExplorerRows = [];
-                loadSeasonMappings(false).catch(function () { });
+                reloadSeasonMappingsPreservingState().catch(function () { });
                 loadAllSeasonMappings().catch(function () { });
                 loadItems();
             }).catch(function (err) {
@@ -2785,7 +2795,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                         setProgress(true, message, progress);
                         if (status === 'Completed') {
                             if (state.activeTab === 'finder') {
-                                loadSeasonMappings();
+                                reloadSeasonMappingsPreservingState();
                             } else if (state.activeTab === 'library') {
                                 loadThemes();
                             } else if (state.activeTab === 'settings') {
@@ -2916,8 +2926,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             });
         });
         page.querySelector('#AnimeThemesSeasonRefresh').addEventListener('click', function () {
-            state.finderScrollTop = 0;
-            loadSeasonMappings(false);
+            reloadSeasonMappingsPreservingState();
         });
         seasonFilter.addEventListener('change', function () {
             syncSeasonFilterButtons();
