@@ -12,7 +12,7 @@
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.06.26-a.</div>
+                <div class="fieldDescription">UI version: 2026.06.27-c.</div>
 
                 <div class="verticalSection ats-tabs" id="AnimeThemesBrowserTabs">
                     <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-tab active" id="AnimeThemesBrowserLibraryTab" data-ats-tab="library">
@@ -258,7 +258,7 @@
                                 <h3>Extras</h3>
                                 <div class="checkboxContainer checkboxContainer-withDescription">
                                     <label class="emby-checkbox-label"><input id="AtsExtrasEnabled" type="checkbox" is="emby-checkbox" /><span>Create browseable extras</span></label>
-                                    <div class="fieldDescription">Creates rich display names in extras so OP/ED videos can be opened from Extras/Special Features. Theme videos still remain in backdrops.</div>
+                                    <div class="fieldDescription">Creates rich display names in extras so OP/ED videos can be opened from Extras/Special Features. Disable “Use as server theme” for Video to create Extra-only output.</div>
                                 </div>
                                 <div id="AtsExtrasOptions" class="ats-conditional-options">
                                     <div class="selectContainer">
@@ -268,13 +268,23 @@
                                             <option value="1">Hard link only</option>
                                             <option value="2">Copy only</option>
                                         </select>
-                                        <div class="fieldDescription">Hard links save disk space. Copy fallback helps when folders are on file systems that do not support hard links.</div>
+                                        <div class="fieldDescription">Used when the same file is also saved as a theme video. Extra-only files are downloaded directly.</div>
+                                    </div>
+                                    <div class="selectContainer">
+                                        <label class="selectLabel" for="AtsExtrasFileSuffix">Extras filename suffix</label>
+                                        <select is="emby-select" id="AtsExtrasFileSuffix" class="emby-select-withcolor emby-select">
+                                            <option value="1">-other (recommended)</option>
+                                            <option value="2">-short</option>
+                                            <option value="3">-scene</option>
+                                            <option value="0">No suffix</option>
+                                        </select>
+                                        <div class="fieldDescription">Appended immediately before the source extension so Jellyfin and Emby can classify the extra.</div>
                                     </div>
                                     <div class="inputContainer">
                                         <label class="inputLabel inputLabelUnfocused" for="AtsExtrasFileNameFormat">Extras display name format</label>
                                         <input id="AtsExtrasFileNameFormat" type="text" is="emby-input" />
                                         <div class="fieldDescription">Default: <code>{Order}. {Theme} - {Song}</code>. Tokens: <code>{Order}</code>, <code>{Theme}</code>, <code>{Song}</code>, <code>{Artist}</code>, <code>{Episodes}</code>, <code>{Labels}</code>, <code>{Quality}</code>.</div>
-                                        <div class="ats-format-preview"><span class="material-icons ats-icon" aria-hidden="true">visibility</span><span>Preview: </span><strong id="AtsExtrasFormatPreview">01. OP1 - Sample Song.webm</strong></div>
+                                        <div class="ats-format-preview"><span class="material-icons ats-icon" aria-hidden="true">visibility</span><span>Preview: </span><strong id="AtsExtrasFormatPreview">01. OP1 - Sample Song-other.webm</strong></div>
                                     </div>
                                 </div>
                             </div>
@@ -489,8 +499,59 @@
             </div>
         </div>
 
+        <div id="AnimeThemesDownloadDialog" class="ats-player ats-download-dialog" aria-hidden="true">
+            <div class="ats-player-panel ats-download-panel" role="dialog" aria-modal="true" aria-labelledby="AnimeThemesDownloadDialogTitle" aria-describedby="AnimeThemesDownloadDialogDescription">
+                <div class="ats-player-header ats-download-header">
+                    <div class="ats-download-heading">
+                        <span class="material-icons ats-download-heading-icon" aria-hidden="true">download</span>
+                        <div>
+                            <h3 id="AnimeThemesDownloadDialogTitle">Download theme</h3>
+                            <div id="AnimeThemesDownloadDialogTheme" class="ats-download-theme-key"></div>
+                        </div>
+                    </div>
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-download-close" id="AnimeThemesDownloadDialogClose" aria-label="Close download dialog">
+                        <span class="material-icons ats-icon" aria-hidden="true">close</span>
+                    </button>
+                </div>
+                <div class="ats-download-content">
+                    <p id="AnimeThemesDownloadDialogDescription" class="ats-download-description">Choose where this media should be saved. Existing files for unselected outputs will not be deleted.</p>
+                    <div class="ats-download-options" role="group" aria-label="Download outputs">
+                        <div class="ats-download-option">
+                            <span class="material-icons ats-download-option-icon" aria-hidden="true">movie</span>
+                            <span class="ats-download-option-copy"><strong>Theme video</strong><span>Save in <code>backdrops</code> for server theme playback.</span></span>
+                            <label class="emby-checkbox-label ats-download-checkbox">
+                                <input id="AtsDownloadIncludeVideo" type="checkbox" is="emby-checkbox" aria-label="Include theme video" />
+                                <span>Include</span>
+                            </label>
+                        </div>
+                        <div class="ats-download-option">
+                            <span class="material-icons ats-download-option-icon" aria-hidden="true">music_note</span>
+                            <span class="ats-download-option-copy"><strong>Theme song</strong><span>Save in <code>theme-music</code> using the source format.</span></span>
+                            <label class="emby-checkbox-label ats-download-checkbox">
+                                <input id="AtsDownloadIncludeAudio" type="checkbox" is="emby-checkbox" aria-label="Include theme song" />
+                                <span>Include</span>
+                            </label>
+                        </div>
+                        <div class="ats-download-option">
+                            <span class="material-icons ats-download-option-icon" aria-hidden="true">video_library</span>
+                            <span class="ats-download-option-copy"><strong>Browseable Extra</strong><span>Save in <code>extras</code>. This can be selected on its own.</span></span>
+                            <label class="emby-checkbox-label ats-download-checkbox">
+                                <input id="AtsDownloadIncludeExtras" type="checkbox" is="emby-checkbox" aria-label="Include browseable Extra" />
+                                <span>Include</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="AnimeThemesDownloadDialogError" class="ats-download-error" role="alert" hidden>Select at least one output.</div>
+                </div>
+                <div class="ats-download-actions">
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AnimeThemesDownloadDialogCancel"><span>Cancel</span></button>
+                    <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-button-download ats-icon-button-text" id="AnimeThemesDownloadDialogConfirm"><span class="material-icons ats-icon" aria-hidden="true">download</span><span>Download selected</span></button>
+                </div>
+            </div>
+        </div>
+
         <style>
-            #AnimeThemesBrowserPage .content-primary {
+            #AnimeThemesBrowserPage {
                 --ats-radius: 8px;
                 --ats-radius-sm: 6px;
                 --ats-border: rgba(127, 127, 127, .28);
@@ -498,7 +559,11 @@
                 --ats-surface: rgba(127, 127, 127, .07);
                 --ats-surface-raised: rgba(127, 127, 127, .11);
                 --ats-surface-hover: rgba(127, 127, 127, .17);
-                --ats-accent: var(--theme-primary-color, currentColor);
+                --ats-accent: var(--jf-palette-primary-main, var(--theme-accent-text-color, currentColor));
+                --ats-dialog-surface: var(--jf-palette-background-paper, hsl(var(--background-hue, 0), var(--background-saturation, 0%), var(--background-lightness, 24%)));
+            }
+
+            #AnimeThemesBrowserPage .content-primary {
                 box-sizing: border-box;
                 width: min(100%, 112rem);
                 max-width: 100%;
@@ -713,6 +778,8 @@
 
             #AnimeThemesBrowserPage .ats-tab.emby-button {
                 flex: 0 0 auto;
+                flex-shrink: 0 !important;
+                white-space: nowrap !important;
                 min-height: 2.75rem;
                 margin: 0;
                 padding: .55rem 1rem;
@@ -1271,14 +1338,78 @@
             }
 
             #AnimeThemesBrowserPage .ats-theme-side .ats-actions {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+                display: flex;
+                flex-flow: row wrap;
+                align-items: flex-end;
+                justify-content: flex-start;
+                gap: .4rem;
                 width: 100%;
             }
 
             #AnimeThemesBrowserPage .ats-theme-side .ats-actions button {
                 min-width: 0;
-                width: 100%;
+            }
+
+            #AnimeThemesBrowserPage .ats-btn-stack {
+                display: inline-flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 3px;
+                min-width: 7.5rem;
+                position: relative;
+            }
+
+            #AnimeThemesBrowserPage .ats-btn-stack .ats-btn-preview-small.emby-button {
+                font-size: 0.72rem !important;
+                min-height: 1.35rem !important;
+                padding: 1px 6px !important;
+                margin: 0 !important;
+                opacity: 0.78;
+                border: 0 !important;
+                background: rgba(127, 127, 127, 0.15) !important;
+                border-radius: var(--ats-radius-sm) !important;
+                color: inherit;
+                width: auto !important;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            #AnimeThemesBrowserPage .ats-btn-stack .ats-btn-preview-small.emby-button:hover {
+                opacity: 1;
+                background: rgba(127, 127, 127, 0.28) !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-btn-stack .ats-btn-preview-small .ats-icon {
+                font-size: 0.85rem !important;
+                margin-right: 2px !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-btn-stack .ats-btn-play-main.emby-button {
+                width: 100% !important;
+                margin: 0 !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-icon-button-only.emby-button {
+                min-width: 2.25rem !important;
+                width: 2.25rem !important;
+                height: 2.25rem !important;
+                min-height: 2.25rem !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                border-radius: 50% !important;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            #AnimeThemesBrowserPage .ats-icon-button-only.emby-button span:not(.ats-icon),
+            #AnimeThemesBrowserPage .ats-icon-button-only.emby-button i:not(.ats-icon) {
+                display: none !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-actions .ats-button-align-right {
+                margin-left: auto !important;
             }
 
             #AnimeThemesBrowserPage .ats-theme-key {
@@ -1686,7 +1817,7 @@
                 inset: 0;
                 z-index: 9999;
                 padding: 1rem;
-                background: rgba(0, 0, 0, .7);
+                background: rgba(24, 24, 24, .72);
                 align-items: center;
                 justify-content: center;
             }
@@ -1700,7 +1831,8 @@
                 max-height: 92vh;
                 border: 1px solid rgba(127, 127, 127, .45);
                 border-radius: 8px;
-                background: var(--theme-body-background, #202020);
+                background-color: var(--ats-dialog-surface);
+                background-image: none;
                 color: inherit;
                 padding: 1rem;
             }
@@ -1722,6 +1854,161 @@
             #AnimeThemesBrowserPage .ats-player-body audio {
                 width: 100%;
                 max-height: 76vh;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-panel {
+                width: min(40rem, 100%);
+                padding: 0;
+                overflow: hidden;
+                border-color: var(--ats-border-strong);
+                box-shadow: 0 1.25rem 3.5rem rgba(24, 24, 24, .45);
+            }
+
+            #AnimeThemesBrowserPage .ats-download-header {
+                margin: 0;
+                padding: 1rem 1.1rem;
+                border-bottom: 1px solid var(--ats-border);
+                background: var(--ats-surface);
+            }
+
+            #AnimeThemesBrowserPage .ats-download-heading {
+                display: flex;
+                align-items: center;
+                gap: .75rem;
+                min-width: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-heading-icon {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex: 0 0 2.5rem;
+                width: 2.5rem;
+                height: 2.5rem;
+                border-radius: 50%;
+                background: var(--ats-surface-hover);
+                color: var(--ats-accent);
+                font-size: 1.35rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-theme-key {
+                margin-top: .2rem;
+                opacity: .72;
+                overflow-wrap: anywhere;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-close.emby-button {
+                flex: 0 0 2.5rem;
+                width: 2.5rem;
+                min-width: 2.5rem;
+                height: 2.5rem;
+                min-height: 2.5rem;
+                margin: 0;
+                padding: 0;
+                border-radius: 50%;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-content {
+                display: grid;
+                gap: 1rem;
+                padding: 1rem 1.1rem;
+                overflow-y: auto;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-description {
+                margin: 0;
+                opacity: .82;
+                line-height: 1.45;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-options {
+                display: grid;
+                gap: .65rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-option {
+                display: grid;
+                grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+                gap: .75rem;
+                align-items: center;
+                min-width: 0;
+                padding: .85rem;
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius);
+                background: var(--ats-surface);
+                color: inherit;
+                cursor: pointer;
+                transition: border-color .16s ease, background-color .16s ease;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-option:hover,
+            #AnimeThemesBrowserPage .ats-download-option.selected {
+                border-color: var(--ats-accent);
+                background: var(--ats-surface-hover);
+            }
+
+            #AnimeThemesBrowserPage .ats-download-option:focus-within {
+                outline: 2px solid var(--ats-accent);
+                outline-offset: 2px;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-option-icon {
+                color: var(--ats-accent);
+                font-size: 1.45rem;
+                text-align: center;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-option-copy {
+                display: grid;
+                gap: .2rem;
+                min-width: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-option-copy strong {
+                font-size: 1rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-option-copy > span {
+                opacity: .72;
+                line-height: 1.35;
+                overflow-wrap: anywhere;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-option code {
+                color: inherit;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-option input {
+                margin: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-checkbox {
+                width: auto;
+                min-width: 6.5rem;
+                margin: 0;
+                flex-shrink: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-error {
+                padding: .65rem .75rem;
+                border: 1px solid var(--ats-border-strong);
+                border-radius: var(--ats-radius-sm);
+                background: var(--ats-surface-hover);
+                font-weight: 600;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-actions {
+                display: flex;
+                justify-content: flex-end;
+                gap: .65rem;
+                padding: .85rem 1.1rem 1rem;
+                border-top: 1px solid var(--ats-border);
+                background: var(--ats-surface);
+            }
+
+            #AnimeThemesBrowserPage .ats-download-actions .emby-button {
+                min-width: 8.5rem;
+                margin: 0;
             }
 
             #AnimeThemesBrowserPage .ats-progress {
@@ -1776,19 +2063,48 @@
                     grid-template-columns: 1fr;
                 }
 
+                #AnimeThemesBrowserPage .ats-download-dialog {
+                    align-items: flex-end;
+                    padding: 0;
+                }
+
+                #AnimeThemesBrowserPage .ats-download-panel {
+                    width: 100%;
+                    max-height: 94vh;
+                    border-radius: var(--ats-radius) var(--ats-radius) 0 0;
+                }
+
+                #AnimeThemesBrowserPage .ats-download-actions {
+                    flex-direction: column-reverse;
+                    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+                }
+
+                #AnimeThemesBrowserPage .ats-download-actions .emby-button {
+                    width: 100%;
+                }
+
+                #AnimeThemesBrowserPage .ats-download-option {
+                    grid-template-columns: 2.4rem minmax(0, 1fr);
+                }
+
+                #AnimeThemesBrowserPage .ats-download-checkbox {
+                    grid-column: 2;
+                }
+
                 #AnimeThemesBrowserPage .ats-settings-actions-bar {
-                    position: fixed;
-                    left: 1rem;
-                    right: 1rem;
+                    position: sticky;
                     bottom: max(.75rem, env(safe-area-inset-bottom));
                     top: auto;
                     width: auto;
-                    margin: 0;
+                    margin: 1rem 0 0 0;
                     z-index: 100;
                     display: flex;
                     flex-direction: column;
                     align-items: stretch;
                     box-shadow: 0 -.2rem 1.2rem rgba(0, 0, 0, .24);
+                    background: var(--ats-surface) !important;
+                    border: 1px solid var(--ats-border) !important;
+                    border-radius: var(--ats-radius);
                 }
 
                 #AnimeThemesBrowserPage .ats-settings-actions-bar .ats-settings-actions-copy {
@@ -1801,6 +2117,8 @@
                     flex-wrap: wrap;
                     gap: .5rem;
                     width: 100%;
+                    padding: .5rem;
+                    box-sizing: border-box;
                 }
 
                 #AnimeThemesBrowserPage .ats-settings-actions-bar .ats-actions button {
@@ -1809,32 +2127,56 @@
                 }
 
                 #AnimeThemesBrowserPage #AnimeThemesBrowserSettingsView {
-                    padding-bottom: 5.5rem;
+                    padding-bottom: 7.5rem;
                 }
 
                 #AnimeThemesBrowserPage .ats-detail-actions {
-                    position: fixed;
-                    left: 1rem;
-                    right: 1rem;
+                    position: sticky;
                     bottom: max(.75rem, env(safe-area-inset-bottom));
                     top: auto;
                     align-items: stretch;
                     z-index: 100;
-                    margin: 0;
+                    margin: 1rem 0 0 0;
                     box-shadow: 0 -.2rem 1.2rem rgba(0, 0, 0, .24);
+                    background: var(--ats-surface) !important;
+                    border: 1px solid var(--ats-border) !important;
+                    border-radius: var(--ats-radius);
+                    padding: .5rem;
+                    box-sizing: border-box;
                 }
 
                 #AnimeThemesBrowserPage #AnimeThemesBrowserDetailView {
-                    padding-bottom: 5.5rem;
+                    padding-bottom: 7.5rem;
                 }
 
                 #AnimeThemesBrowserPage .ats-detail-action-left,
                 #AnimeThemesBrowserPage .ats-detail-action-right {
                     flex: 1 1 0;
+                    display: flex;
+                    flex-direction: row;
+                    flex-wrap: wrap;
+                    gap: .5rem;
                 }
 
                 #AnimeThemesBrowserPage .ats-detail-actions button {
                     width: 100%;
+                }
+
+                #AnimeThemesBrowserPage .ats-import-grid,
+                #AnimeThemesBrowserPage .ats-explorer-controls {
+                    grid-template-columns: 1fr;
+                }
+
+                #AnimeThemesBrowserPage .ats-toolbar-actions {
+                    width: 100%;
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: .5rem;
+                }
+
+                #AnimeThemesBrowserPage .ats-toolbar-actions button {
+                    flex: 1 1 auto;
+                    margin: 0;
                 }
 
                 #AnimeThemesBrowserPage .ats-finder-topbar,
@@ -1948,6 +2290,7 @@
                     settingsLoaded: false,
                     settingsSnapshot: '',
                     settingsApplying: false,
+                    pendingDownload: null,
                     browserStartIndex: 0,
                     browserLimit: 80,
                     browserTotalRecordCount: 0,
@@ -1991,6 +2334,13 @@
                 var player = page.querySelector('#AnimeThemesBrowserPlayer');
                 var playerBody = page.querySelector('#AnimeThemesBrowserPlayerBody');
                 var playerTitle = page.querySelector('#AnimeThemesBrowserPlayerTitle');
+                var downloadDialog = page.querySelector('#AnimeThemesDownloadDialog');
+                var downloadDialogTheme = page.querySelector('#AnimeThemesDownloadDialogTheme');
+                var downloadDialogError = page.querySelector('#AnimeThemesDownloadDialogError');
+                var downloadIncludeVideo = page.querySelector('#AtsDownloadIncludeVideo');
+                var downloadIncludeAudio = page.querySelector('#AtsDownloadIncludeAudio');
+                var downloadIncludeExtras = page.querySelector('#AtsDownloadIncludeExtras');
+                var downloadDialogConfirm = page.querySelector('#AnimeThemesDownloadDialogConfirm');
                 var progressPanel = page.querySelector('#AnimeThemesBrowserProgress');
                 var progressText = page.querySelector('#AnimeThemesBrowserProgressText');
                 var progressPercent = page.querySelector('#AnimeThemesBrowserProgressPercent');
@@ -2047,6 +2397,7 @@
                     ExtrasEnabled: page.querySelector('#AtsExtrasEnabled'),
                     ExtrasOptions: page.querySelector('#AtsExtrasOptions'),
                     ExtrasLinkMode: page.querySelector('#AtsExtrasLinkMode'),
+                    ExtrasFileSuffix: page.querySelector('#AtsExtrasFileSuffix'),
                     ExtrasFileNameFormat: page.querySelector('#AtsExtrasFileNameFormat'),
                     ExtrasFormatPreview: page.querySelector('#AtsExtrasFormatPreview'),
                     TagsEnabled: page.querySelector('#AtsTagsEnabled'),
@@ -3069,7 +3420,7 @@
                     actions.className = 'ats-actions';
                     addRemotePreviewButton(actions, row, 'video');
                     addRemotePreviewButton(actions, row, 'audio');
-                    addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'));
+                    addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'), true);
                     card.appendChild(actions);
                     return card;
                 }
@@ -3084,9 +3435,14 @@
                     container.appendChild(button);
                 }
 
-                function addRemotePreviewButton(container, row, target) {
+                function addRemotePreviewButton(container, row, target, isSmall) {
                     var url = target === 'audio' ? value(row, 'AudioUrl', 'audioUrl') : value(row, 'VideoUrl', 'videoUrl');
                     var button = createButton(target === 'audio' ? 'Preview Audio' : 'Preview Video', true, 'play');
+                    if (isSmall) {
+                        button.classList.add('ats-btn-preview-small');
+                        var labelSpan = button.querySelector('span:not(.ats-icon)');
+                        if (labelSpan) labelSpan.textContent = 'Preview';
+                    }
                     button.disabled = !url;
                     button.addEventListener('click', function () {
                         if (url) openRemotePlayer(row, target, url);
@@ -3758,15 +4114,44 @@
 
                     var actions = document.createElement('div');
                     actions.className = 'ats-actions';
-                    addRemotePreviewButton(actions, row, 'video');
-                    addRemotePreviewButton(actions, row, 'audio');
-                    addDownloadButton(actions, row);
-                    addLocalVideoButton(actions, row);
-                    addPlayButton(actions, row, 'audio', 'Play Audio', value(row, 'SavedAudioPlayable', 'savedAudioPlayable'));
-                    addDeleteFileButton(actions, row, 'video', 'Delete Video', value(row, 'BackdropExists', 'backdropExists'));
-                    addDeleteFileButton(actions, row, 'audio', 'Delete Audio', value(row, 'ThemeMusicExists', 'themeMusicExists'));
-                    addDeleteFileButton(actions, row, 'extra', 'Delete Extras', value(row, 'ExtraExists', 'extraExists'));
-                    addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'));
+
+                    // 1. AnimeThemes Link (icon-only)
+                    addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'), true);
+
+                    // 2. Play/Preview Video Stack & Individual Delete Video
+                    var hasVideoUrl = !!value(row, 'VideoUrl', 'videoUrl');
+                    var hasVideoLocal = !!value(row, 'SavedVideoPlayable', 'savedVideoPlayable') || !!value(row, 'SavedExtraPlayable', 'savedExtraPlayable');
+                    if (hasVideoUrl || hasVideoLocal) {
+                        var videoStack = document.createElement('div');
+                        videoStack.className = 'ats-btn-stack';
+                        if (hasVideoUrl) {
+                            addRemotePreviewButton(videoStack, row, 'video', true);
+                        }
+                        addLocalVideoButton(videoStack, row);
+                        actions.appendChild(videoStack);
+                    }
+                    addDeleteFileButton(actions, row, 'video', 'Delete Video', value(row, 'BackdropExists', 'backdropExists'), true);
+
+                    // 3. Play/Preview Audio Stack & Individual Delete Audio
+                    var hasAudioUrl = !!value(row, 'AudioUrl', 'audioUrl');
+                    var hasAudioLocal = !!value(row, 'SavedAudioPlayable', 'savedAudioPlayable');
+                    if (hasAudioUrl || hasAudioLocal) {
+                        var audioStack = document.createElement('div');
+                        audioStack.className = 'ats-btn-stack';
+                        if (hasAudioUrl) {
+                            addRemotePreviewButton(audioStack, row, 'audio', true);
+                        }
+                        addPlayButton(audioStack, row, 'audio', 'Play Audio', hasAudioLocal);
+                        actions.appendChild(audioStack);
+                    }
+                    addDeleteFileButton(actions, row, 'audio', 'Delete Audio', value(row, 'ThemeMusicExists', 'themeMusicExists'), true);
+
+                    // 4. Delete Extras
+                    addDeleteFileButton(actions, row, 'extra', 'Delete Extras', value(row, 'ExtraExists', 'extraExists'), true);
+
+                    // 5. Download button (icon-only, aligned to the right)
+                    addDownloadButton(actions, row, true);
+
                     side.appendChild(actions);
                     card.appendChild(side);
                     return card;
@@ -3834,8 +4219,13 @@
                     return button;
                 }
 
-                function addDownloadButton(container, row) {
+                function addDownloadButton(container, row, iconOnly) {
                     var button = createButton('Download', false, 'download');
+                    if (iconOnly) {
+                        button.classList.add('ats-icon-button-only');
+                        button.classList.add('ats-button-align-right');
+                        button.title = 'Download theme';
+                    }
                     button.addEventListener('click', function () {
                         downloadTheme(row);
                     });
@@ -3846,6 +4236,7 @@
                     var hasExtra = !!value(row, 'SavedExtraPlayable', 'savedExtraPlayable');
                     var hasVideo = !!value(row, 'SavedVideoPlayable', 'savedVideoPlayable');
                     var button = createButton('Play Video', true, 'play');
+                    button.classList.add('ats-btn-play-main');
                     button.disabled = !hasExtra && !hasVideo;
                     button.title = hasExtra ? 'Plays the browseable extras file.' : hasVideo ? 'Plays the local theme video file.' : 'No local video has been saved.';
                     button.addEventListener('click', function () {
@@ -3856,6 +4247,7 @@
 
                 function addPlayButton(container, row, target, label, playable) {
                     var button = createButton(label, true, 'play');
+                    button.classList.add('ats-btn-play-main');
                     button.disabled = !playable;
                     button.addEventListener('click', function () {
                         if (!button.disabled) openPlayer(row, target);
@@ -3863,9 +4255,13 @@
                     container.appendChild(button);
                 }
 
-                function addOpenButton(container, label, url) {
+                function addOpenButton(container, label, url, iconOnly) {
                     if (!url) return;
                     var button = createButton(label, true, 'link');
+                    if (iconOnly) {
+                        button.classList.add('ats-icon-button-only');
+                        button.title = 'Open on AnimeThemes';
+                    }
                     button.addEventListener('click', function () {
                         window.open(url, '_blank', 'noopener');
                     });
@@ -3913,6 +4309,7 @@
                 function ensureThemeConfig(config) {
                     config = config || {};
                     return {
+                        UseAsTheme: !!getConfigValue(config, 'UseAsTheme', true),
                         MaxThemes: Math.max(0, parseInt(getConfigValue(config, 'MaxThemes', 1), 10) || 0),
                         Volume: Math.max(0, Math.min(100, parseInt(getConfigValue(config, 'Volume', 100), 10) || 0)),
                         IgnoreOp: !!getConfigValue(config, 'IgnoreOp', false),
@@ -3932,7 +4329,7 @@
 
                 function ensureSettingsConfig(config) {
                     config = config || {};
-                    config.ConfigurationVersion = 2;
+                    config.ConfigurationVersion = 3;
                     config.Series = ensureMediaConfig(getConfigValue(config, 'Series', null));
                     config.Movie = ensureMediaConfig(getConfigValue(config, 'Movie', null));
                     if (!Array.isArray(getConfigValue(config, 'SeasonThemeMappings', []))) {
@@ -3952,6 +4349,7 @@
 
                 function defaultThemeConfig() {
                     return {
+                        UseAsTheme: true,
                         MaxThemes: 1,
                         Volume: 100,
                         IgnoreOp: false,
@@ -3970,7 +4368,7 @@
 
                 function defaultSettingsConfig(existingConfig) {
                     return ensureSettingsConfig({
-                        ConfigurationVersion: 2,
+                        ConfigurationVersion: 3,
                         ThemeDownloadingEnabled: true,
                         MaxConcurrentDownloads: 1,
                         DownloadTimeoutSeconds: 600,
@@ -3980,6 +4378,7 @@
                         SeasonThemeDownloadsEnabled: true,
                         ExtrasEnabled: false,
                         ExtrasLinkMode: 0,
+                        ExtrasFileSuffix: 1,
                         ExtrasFileNameFormat: '{Order}. {Theme} - {Song}',
                         TagsEnabled: true,
                         TagFormat: '{Season} {Year}',
@@ -3995,7 +4394,7 @@
                 function canonicalizeSettings(config) {
                     config = ensureSettingsConfig(cloneSettings(config || {}));
                     return {
-                        ConfigurationVersion: 2,
+                        ConfigurationVersion: 3,
                         ThemeDownloadingEnabled: !!getConfigValue(config, 'ThemeDownloadingEnabled', true),
                         MaxConcurrentDownloads: Math.max(1, parseInt(getConfigValue(config, 'MaxConcurrentDownloads', 1), 10) || 1),
                         DownloadTimeoutSeconds: Math.max(1, parseInt(getConfigValue(config, 'DownloadTimeoutSeconds', 600), 10) || 600),
@@ -4005,6 +4404,7 @@
                         SeasonThemeDownloadsEnabled: !!getConfigValue(config, 'SeasonThemeDownloadsEnabled', true),
                         ExtrasEnabled: !!getConfigValue(config, 'ExtrasEnabled', false),
                         ExtrasLinkMode: parseInt(normalizeExtrasLinkMode(getConfigValue(config, 'ExtrasLinkMode', 0)), 10) || 0,
+                        ExtrasFileSuffix: parseInt(normalizeExtrasFileSuffix(getConfigValue(config, 'ExtrasFileSuffix', 1)), 10),
                         ExtrasFileNameFormat: String(getConfigValue(config, 'ExtrasFileNameFormat', '{Order}. {Theme} - {Song}')),
                         TagsEnabled: !!getConfigValue(config, 'TagsEnabled', true),
                         TagFormat: String(getConfigValue(config, 'TagFormat', '{Season} {Year}')),
@@ -4063,6 +4463,14 @@
                     return String(value || 0);
                 }
 
+                function normalizeExtrasFileSuffix(value) {
+                    if (value === 'None') return '0';
+                    if (value === 'Other') return '1';
+                    if (value === 'Short') return '2';
+                    if (value === 'Scene') return '3';
+                    return String(value === undefined || value === null ? 1 : value);
+                }
+
                 function setSettingsState(message) {
                     settingsState.textContent = message || 'Ready.';
                 }
@@ -4081,6 +4489,7 @@
 
                 function profileFields(profile, media) {
                     return {
+                        UseAsTheme: page.querySelector('#' + profileFieldId(profile, media, 'UseAsTheme')),
                         MaxThemes: page.querySelector('#' + profileFieldId(profile, media, 'MaxThemes')),
                         VolumeSlider: page.querySelector('#' + profileFieldId(profile, media, 'VolumeSlider')),
                         Volume: page.querySelector('#' + profileFieldId(profile, media, 'Volume')),
@@ -4139,6 +4548,10 @@
                     return [
                         '<div class="ats-profile-card">',
                         '<h5>' + title + '</h5>',
+                        '<div class="checkboxContainer checkboxContainer-withDescription">',
+                        '<label class="emby-checkbox-label"><input id="Ats' + profileName + mediaName + 'UseAsTheme" type="checkbox" is="emby-checkbox" /><span>Use as server theme</span></label>',
+                        '<div class="fieldDescription">Save selected media in ' + (mediaName === 'Audio' ? 'theme-music' : 'backdrops') + '. Disable video here while keeping Extras enabled for Extra-only output.</div>',
+                        '</div>',
                         '<div class="inputContainer">',
                         '<label class="inputLabel inputLabelUnfocused" for="Ats' + profileName + mediaName + 'MaxThemes">Max themes</label>',
                         '<input id="Ats' + profileName + mediaName + 'MaxThemes" type="number" is="emby-input" min="0" />',
@@ -4177,6 +4590,7 @@
                 function renderThemeSettings(profile, media, theme) {
                     var fields = profileFields(profile, media);
                     theme = ensureThemeConfig(theme);
+                    fields.UseAsTheme.checked = theme.UseAsTheme;
                     fields.MaxThemes.value = theme.MaxThemes;
                     setVolumeFields(fields, theme.Volume);
                     fields.IgnoreOp.checked = theme.IgnoreOp;
@@ -4188,6 +4602,7 @@
                 function collectThemeSettings(profile, media) {
                     var fields = profileFields(profile, media);
                     return ensureThemeConfig({
+                        UseAsTheme: fields.UseAsTheme.checked,
                         MaxThemes: parseInt(fields.MaxThemes.value, 10) || 0,
                         Volume: clampVolume(fields.Volume.value),
                         IgnoreOp: fields.IgnoreOp.checked,
@@ -4245,7 +4660,9 @@
                             labels: 'BD NC',
                             quality: '1080'
                         }) || 'OP1';
-                        settingsFields.ExtrasFormatPreview.textContent = extrasPreview.replace(/[\\/:*?"<>|]/g, ' ').trim() + '.webm';
+                        var suffixValue = normalizeExtrasFileSuffix(settingsFields.ExtrasFileSuffix.value);
+                        var suffix = suffixValue === '2' ? '-short' : suffixValue === '3' ? '-scene' : suffixValue === '0' ? '' : '-other';
+                        settingsFields.ExtrasFormatPreview.textContent = extrasPreview.replace(/[\\/:*?"<>|]/g, ' ').trim() + suffix + '.webm';
                     }
 
                     if (settingsFields.TagFormatPreview && settingsFields.TagFormat) {
@@ -4299,6 +4716,7 @@
                     settingsFields.SeasonThemeDownloadsEnabled.checked = !!getConfigValue(config, 'SeasonThemeDownloadsEnabled', true);
                     settingsFields.ExtrasEnabled.checked = !!getConfigValue(config, 'ExtrasEnabled', false);
                     settingsFields.ExtrasLinkMode.value = normalizeExtrasLinkMode(getConfigValue(config, 'ExtrasLinkMode', 0));
+                    settingsFields.ExtrasFileSuffix.value = normalizeExtrasFileSuffix(getConfigValue(config, 'ExtrasFileSuffix', 1));
                     settingsFields.ExtrasFileNameFormat.value = getConfigValue(config, 'ExtrasFileNameFormat', '{Order}. {Theme} - {Song}');
                     settingsFields.TagsEnabled.checked = !!getConfigValue(config, 'TagsEnabled', true);
                     settingsFields.TagFormat.value = getConfigValue(config, 'TagFormat', '{Season} {Year}');
@@ -4330,7 +4748,7 @@
 
                 function readSettingsForm() {
                     return {
-                        ConfigurationVersion: 2,
+                        ConfigurationVersion: 3,
                         ThemeDownloadingEnabled: settingsFields.ThemeDownloadingEnabled.checked,
                         MaxConcurrentDownloads: parseInt(settingsFields.MaxConcurrentDownloads.value, 10) || 1,
                         DownloadTimeoutSeconds: parseInt(settingsFields.DownloadTimeoutSeconds.value, 10) || 600,
@@ -4340,6 +4758,7 @@
                         SeasonThemeDownloadsEnabled: settingsFields.SeasonThemeDownloadsEnabled.checked,
                         ExtrasEnabled: settingsFields.ExtrasEnabled.checked,
                         ExtrasLinkMode: parseInt(settingsFields.ExtrasLinkMode.value, 10) || 0,
+                        ExtrasFileSuffix: parseInt(settingsFields.ExtrasFileSuffix.value, 10),
                         ExtrasFileNameFormat: settingsFields.ExtrasFileNameFormat.value,
                         TagsEnabled: settingsFields.TagsEnabled.checked,
                         TagFormat: settingsFields.TagFormat.value,
@@ -4436,7 +4855,78 @@
                     var itemId = activeGroupItemId();
                     var rowId = value(row, 'RowId', 'rowId');
                     if (!itemId || !rowId) return;
-                    startDownloadJob('AnimeThemesSync/Jobs/ThemeDownload?ItemId=' + encodeURIComponent(itemId) + '&RowId=' + encodeURIComponent(rowId) + '&Force=false');
+
+                    var settingsPromise = state.settingsConfig
+                        ? Promise.resolve(ensureSettingsConfig(state.settingsConfig))
+                        : ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                            state.settingsConfig = ensureSettingsConfig(config || {});
+                            return state.settingsConfig;
+                        });
+
+                    settingsPromise.then(function (config) {
+                        var groupType = String(value(activeGroup(), 'Type', 'type') || value(state.currentResult, 'Type', 'type') || 'Series');
+                        var profile = groupType === 'Movie' ? config.Movie : config.Series;
+                        var audioDefault = profile.Audio.UseAsTheme && profile.Audio.MaxThemes > 0;
+                        var videoDefault = profile.Video.UseAsTheme && profile.Video.MaxThemes > 0;
+                        var extrasDefault = !!getConfigValue(config, 'ExtrasEnabled', false) && profile.Video.MaxThemes > 0;
+                        openDownloadDialog(row, itemId, rowId, videoDefault, audioDefault, extrasDefault);
+                    }).catch(function (err) {
+                        Dashboard.alert({ title: 'Settings Error', message: 'Failed to load download defaults: ' + getErrorMessage(err) });
+                    });
+                }
+
+                function syncDownloadOptionStyles() {
+                    [downloadIncludeVideo, downloadIncludeAudio, downloadIncludeExtras].forEach(function (control) {
+                        if (control) {
+                            var option = control.closest('.ats-download-option');
+                            if (option) option.classList.toggle('selected', control.checked);
+                        }
+                    });
+                }
+
+                function openDownloadDialog(row, itemId, rowId, includeVideo, includeAudio, includeExtras) {
+                    state.lastFocus = document.activeElement;
+                    state.pendingDownload = { itemId: itemId, rowId: rowId };
+                    downloadDialogTheme.textContent = text(value(row, 'ThemeKey', 'themeKey')) + (value(row, 'SongTitle', 'songTitle') ? ' · ' + value(row, 'SongTitle', 'songTitle') : '');
+                    downloadIncludeVideo.checked = includeVideo;
+                    downloadIncludeAudio.checked = includeAudio;
+                    downloadIncludeExtras.checked = includeExtras;
+                    downloadDialogError.hidden = true;
+                    syncDownloadOptionStyles();
+                    downloadDialog.classList.add('open');
+                    downloadDialog.setAttribute('aria-hidden', 'false');
+                    downloadDialogConfirm.focus();
+                }
+
+                function closeDownloadDialog() {
+                    if (downloadDialog.contains(document.activeElement)) {
+                        document.activeElement.blur();
+                    }
+
+                    downloadDialog.classList.remove('open');
+                    downloadDialog.setAttribute('aria-hidden', 'true');
+                    downloadDialogError.hidden = true;
+                    state.pendingDownload = null;
+                    if (state.lastFocus && typeof state.lastFocus.focus === 'function') {
+                        state.lastFocus.focus();
+                    }
+                }
+
+                function confirmDownloadSelection() {
+                    var pending = state.pendingDownload;
+                    if (!pending) return;
+                    if (!downloadIncludeVideo.checked && !downloadIncludeAudio.checked && !downloadIncludeExtras.checked) {
+                        downloadDialogError.hidden = false;
+                        return;
+                    }
+
+                    var path = 'AnimeThemesSync/Jobs/ThemeDownload?ItemId=' + encodeURIComponent(pending.itemId) +
+                        '&RowId=' + encodeURIComponent(pending.rowId) +
+                        '&Force=false&IncludeAudio=' + encodeURIComponent(downloadIncludeAudio.checked) +
+                        '&IncludeVideo=' + encodeURIComponent(downloadIncludeVideo.checked) +
+                        '&IncludeExtras=' + encodeURIComponent(downloadIncludeExtras.checked);
+                    closeDownloadDialog();
+                    startDownloadJob(path);
                 }
 
                 function downloadItem() {
@@ -4514,9 +5004,13 @@
                     });
                 }
 
-                function addDeleteFileButton(container, row, target, label, exists) {
+                function addDeleteFileButton(container, row, target, label, exists, iconOnly) {
                     if (!exists) return;
                     var button = createButton(label, true, 'danger');
+                    if (iconOnly) {
+                        button.classList.add('ats-icon-button-only');
+                        button.title = label;
+                    }
                     button.addEventListener('click', function () {
                         deleteIndividualThemeFile(row, target);
                     });
@@ -4686,7 +5180,7 @@
                 buildProfileControls();
                 settingsFields.ExtrasEnabled.addEventListener('change', syncConditionalSettings);
                 settingsFields.TagsEnabled.addEventListener('change', syncConditionalSettings);
-                [settingsFields.ExtrasFileNameFormat, settingsFields.TagFormat, settingsFields.TagSeasonWinter].forEach(function (input) {
+                [settingsFields.ExtrasFileNameFormat, settingsFields.ExtrasFileSuffix, settingsFields.TagFormat, settingsFields.TagSeasonWinter].forEach(function (input) {
                     if (input) {
                         input.addEventListener('input', updateFormatPreviews);
                     }
@@ -4726,6 +5220,27 @@
                 page.querySelector('#AnimeThemesBrowserPlayerClose').addEventListener('click', closePlayer);
                 player.addEventListener('click', function (event) {
                     if (event.target === player) closePlayer();
+                });
+                page.querySelector('#AnimeThemesDownloadDialogClose').addEventListener('click', closeDownloadDialog);
+                page.querySelector('#AnimeThemesDownloadDialogCancel').addEventListener('click', closeDownloadDialog);
+                downloadDialogConfirm.addEventListener('click', confirmDownloadSelection);
+                downloadDialog.addEventListener('click', function (event) {
+                    if (event.target === downloadDialog) closeDownloadDialog();
+                });
+                [downloadIncludeVideo, downloadIncludeAudio, downloadIncludeExtras].forEach(function (control) {
+                    control.addEventListener('change', function () {
+                        downloadDialogError.hidden = true;
+                        syncDownloadOptionStyles();
+                    });
+                    var option = control.closest('.ats-download-option');
+                    option.addEventListener('click', function (event) {
+                        if (!control.parentElement.contains(event.target)) control.click();
+                    });
+                });
+                page.addEventListener('keydown', function (event) {
+                    if (event.key === 'Escape' && downloadDialog.classList.contains('open')) {
+                        closeDownloadDialog();
+                    }
                 });
                 setupClearButtons();
                 syncSeasonFilterButtons();

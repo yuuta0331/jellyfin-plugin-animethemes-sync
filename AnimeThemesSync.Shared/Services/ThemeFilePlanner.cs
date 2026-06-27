@@ -18,11 +18,21 @@ public static class ThemeFilePlanner
 {
     public const string DefaultExtrasFileNameFormat = "{Order}. {Theme} - {Song}";
     private const int MaxExtrasFileNameLength = 180;
+    private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".webm", ".mkv", ".mp4", ".m4v", ".mov", ".avi", ".ts", ".mts", ".m2ts", ".ogv"
+    };
+
+    private static readonly HashSet<string> AudioExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp3", ".ogg", ".oga", ".opus", ".flac", ".m4a", ".aac", ".wav", ".wma"
+    };
+
     private static readonly HashSet<char> CrossPlatformInvalidFileNameChars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
-    private static readonly Regex LegacyPluginFileRegex = new(@"^(OP|ED)\d+v?\d*(-video)?\.(webm|mp3)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex CanonicalPluginFileRegex = new(@"^\d{2}-(OP|ED)\d+v?\d*( - .+)?\.(webm|mp3)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex DefaultExtrasPluginFileRegex = new(@"^\d{2}\. (OP|ED)\d+v?\d*( - .+)?\.webm$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex LegacyPluginFileRegex = new(@"^(OP|ED)\d+v?\d*(-video)?\.[A-Za-z0-9]{1,8}$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex CanonicalPluginFileRegex = new(@"^\d{2}-(OP|ED)\d+v?\d*( - .+)?\.[A-Za-z0-9]{1,8}$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex DefaultExtrasPluginFileRegex = new(@"^\d{2}\. (OP|ED)\d+v?\d*( - .+)?(?:-(?:other|short|scene))?\.[A-Za-z0-9]{1,8}$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
     /// Builds all desired media and extras files for an item.
@@ -33,6 +43,7 @@ public static class ThemeFilePlanner
     /// <param name="videoConfig">The video theme configuration.</param>
     /// <param name="extrasEnabled">Whether browseable extras should be planned.</param>
     /// <param name="extrasFileNameFormat">The browseable extras display-name format.</param>
+    /// <param name="extrasFileSuffix">The server-recognized extras filename suffix.</param>
     /// <returns>The output plan for theme media and extras.</returns>
     public static ThemeOutputPlan BuildPlan(
         AnimeThemesAnime anime,
@@ -40,7 +51,8 @@ public static class ThemeFilePlanner
         ThemeConfig audioConfig,
         ThemeConfig videoConfig,
         bool extrasEnabled,
-        string? extrasFileNameFormat = null)
+        string? extrasFileNameFormat = null,
+        ExtrasFileSuffix extrasFileSuffix = ExtrasFileSuffix.Other)
     {
         var mediaFiles = new List<ThemeFilePlan>();
         var extraFiles = new List<ThemeExtraPlan>();
@@ -57,8 +69,15 @@ public static class ThemeFilePlanner
         var videoFiles = BuildMediaPlans(anime.AnimeThemes, videoConfig, backdropsPath, isVideo: true);
         var audioFiles = BuildMediaPlans(anime.AnimeThemes, audioConfig, themeMusicPath, isVideo: false);
 
-        mediaFiles.AddRange(videoFiles.Select(x => x.File));
-        mediaFiles.AddRange(audioFiles.Select(x => x.File));
+        if (videoConfig.UseAsTheme)
+        {
+            mediaFiles.AddRange(videoFiles.Select(x => x.File));
+        }
+
+        if (audioConfig.UseAsTheme)
+        {
+            mediaFiles.AddRange(audioFiles.Select(x => x.File));
+        }
 
         if (extrasEnabled)
         {
@@ -66,9 +85,10 @@ public static class ThemeFilePlanner
             foreach (var item in videoFiles)
             {
                 var extrasFileName = EnsureUniqueFileName(
-                    BuildExtrasFileName(item.Candidate, item.File.Order, extrasFileNameFormat),
+                    BuildExtrasFileName(item.Candidate, item.File.Order, Path.GetExtension(item.File.Path), extrasFileNameFormat, extrasFileSuffix),
                     plannedExtraNames);
-                extraFiles.Add(BuildExtraPlan(item.File.Path, extrasPath, extrasFileName, item.Candidate, item.File.Order));
+                var sourcePath = videoConfig.UseAsTheme ? item.File.Path : null;
+                extraFiles.Add(BuildExtraPlan(sourcePath, item.File.Url, item.File.RequiresTranscoding, extrasPath, extrasFileName, item.Candidate, item.File.Order));
             }
         }
 
@@ -89,6 +109,48 @@ public static class ThemeFilePlanner
             .ToList();
     }
 
+    /// <summary>
+    /// Resolves a safe source extension from AnimeThemes metadata and the media URL.
+    /// </summary>
+    public static string ResolveMediaExtension(
+        string? filename,
+        string? basename,
+        string? url,
+        string fallback,
+        bool isVideo)
+    {
+        return TryResolveMediaExtension(filename, basename, url, isVideo) ?? fallback.ToLowerInvariant();
+    }
+
+    /// <summary>Returns whether the extension is a supported local theme media type.</summary>
+    public static bool IsSupportedMediaExtension(string? extension)
+        => !string.IsNullOrWhiteSpace(extension) &&
+           (VideoExtensions.Contains(extension) || AudioExtensions.Contains(extension));
+
+    /// <summary>Returns the content type used when streaming local theme media.</summary>
+    public static string GetMediaContentType(string path)
+    {
+        return Path.GetExtension(path).ToLowerInvariant() switch
+        {
+            ".mp3" => "audio/mpeg",
+            ".ogg" or ".oga" => "audio/ogg",
+            ".opus" => "audio/opus",
+            ".flac" => "audio/flac",
+            ".m4a" => "audio/mp4",
+            ".aac" => "audio/aac",
+            ".wav" => "audio/wav",
+            ".wma" => "audio/x-ms-wma",
+            ".webm" => "video/webm",
+            ".mkv" => "video/x-matroska",
+            ".mp4" or ".m4v" => "video/mp4",
+            ".mov" => "video/quicktime",
+            ".avi" => "video/x-msvideo",
+            ".ts" or ".mts" or ".m2ts" => "video/mp2t",
+            ".ogv" => "video/ogg",
+            _ => "application/octet-stream"
+        };
+    }
+
     public static ThemeOutputPlan BuildSingleCandidatePlan(
         AnimeThemesAnime anime,
         ScoredCandidate candidate,
@@ -97,7 +159,8 @@ public static class ThemeFilePlanner
         bool includeAudio,
         bool includeVideo,
         bool includeExtras,
-        string? extrasFileNameFormat = null)
+        string? extrasFileNameFormat = null,
+        ExtrasFileSuffix extrasFileSuffix = ExtrasFileSuffix.Other)
     {
         var mediaFiles = new List<ThemeFilePlan>();
         var extraFiles = new List<ThemeExtraPlan>();
@@ -107,32 +170,49 @@ public static class ThemeFilePlanner
         var extrasPath = Path.Combine(itemPath, "extras");
 
         ThemeFilePlan? videoPlan = null;
+        var sourceVideoExtension = TryResolveMediaExtension(
+            candidate.Video.Filename,
+            candidate.Video.Basename,
+            candidate.Video.Link,
+            isVideo: true);
+        var videoExtension = sourceVideoExtension ?? ".webm";
         if (includeVideo && !string.IsNullOrWhiteSpace(candidate.Video.Link))
         {
             videoPlan = new ThemeFilePlan(
-                Path.Combine(backdropsPath, BuildVideoFileName(candidate, order, themeKey)),
+                Path.Combine(backdropsPath, BuildVideoFileName(candidate, order, themeKey, videoExtension)),
                 candidate.Video.Link!,
                 true,
                 order,
-                themeKey);
+                themeKey)
+            {
+                RequiresTranscoding = sourceVideoExtension == null
+            };
             mediaFiles.Add(videoPlan);
         }
 
-        var audioUrl = candidate.Video.Audio?.Link ?? candidate.Video.Link;
+        var separateAudio = !string.IsNullOrWhiteSpace(candidate.Video.Audio?.Link);
+        var audioUrl = separateAudio ? candidate.Video.Audio!.Link : candidate.Video.Link;
         if (includeAudio && !string.IsNullOrWhiteSpace(audioUrl))
         {
+            var sourceAudioExtension = separateAudio
+                ? TryResolveMediaExtension(candidate.Video.Audio!.Filename, candidate.Video.Audio.Basename, audioUrl, isVideo: false)
+                : null;
+            var audioExtension = sourceAudioExtension ?? ".mp3";
             mediaFiles.Add(new ThemeFilePlan(
-                Path.Combine(themeMusicPath, BuildAudioFileName(candidate, order, themeKey)),
+                Path.Combine(themeMusicPath, BuildAudioFileName(candidate, order, themeKey, audioExtension)),
                 audioUrl!,
                 false,
                 order,
-                themeKey));
+                themeKey)
+            {
+                RequiresTranscoding = !separateAudio || sourceAudioExtension == null
+            });
         }
 
-        if (includeExtras && videoPlan != null)
+        if (includeExtras && !string.IsNullOrWhiteSpace(candidate.Video.Link))
         {
-            var extrasFileName = BuildExtrasFileName(candidate, order, extrasFileNameFormat);
-            extraFiles.Add(BuildExtraPlan(videoPlan.Path, extrasPath, extrasFileName, candidate, order));
+            var extrasFileName = BuildExtrasFileName(candidate, order, videoExtension, extrasFileNameFormat, extrasFileSuffix);
+            extraFiles.Add(BuildExtraPlan(videoPlan?.Path, candidate.Video.Link!, sourceVideoExtension == null, extrasPath, extrasFileName, candidate, order));
         }
 
         return new ThemeOutputPlan(mediaFiles, extraFiles, anime.AnimeThemes ?? new List<AnimeThemesTheme>());
@@ -189,8 +269,12 @@ public static class ThemeFilePlanner
             return false;
         }
 
-        if (fileName.StartsWith("AnimeThemes - ", StringComparison.OrdinalIgnoreCase) &&
-            fileName.EndsWith(".webm", StringComparison.OrdinalIgnoreCase))
+        if (!IsSupportedMediaExtension(Path.GetExtension(fileName)))
+        {
+            return false;
+        }
+
+        if (fileName.StartsWith("AnimeThemes - ", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -210,7 +294,7 @@ public static class ThemeFilePlanner
             }
 
             var slug = Regex.Escape(theme.Slug);
-            var regex = new Regex($"^{slug}v?\\d*(-video)?\\.(webm|mp3)$", RegexOptions.IgnoreCase);
+            var regex = new Regex($"^{slug}v?\\d*(-video)?\\.[A-Za-z0-9]{{1,8}}$", RegexOptions.IgnoreCase);
             if (regex.IsMatch(fileName))
             {
                 return true;
@@ -275,7 +359,8 @@ public static class ThemeFilePlanner
                 break;
             }
 
-            var link = isVideo ? candidate.Video.Link : candidate.Video.Audio?.Link ?? candidate.Video.Link;
+            var separateAudio = !string.IsNullOrWhiteSpace(candidate.Video.Audio?.Link);
+            var link = isVideo ? candidate.Video.Link : separateAudio ? candidate.Video.Audio!.Link : candidate.Video.Link;
             if (string.IsNullOrWhiteSpace(link))
             {
                 continue;
@@ -283,11 +368,20 @@ public static class ThemeFilePlanner
 
             count++;
             var themeKey = BuildThemeKey(candidate);
+            var sourceExtension = isVideo
+                ? TryResolveMediaExtension(candidate.Video.Filename, candidate.Video.Basename, link, isVideo: true)
+                : separateAudio
+                    ? TryResolveMediaExtension(candidate.Video.Audio!.Filename, candidate.Video.Audio.Basename, link, isVideo: false)
+                    : null;
+            var extension = sourceExtension ?? (isVideo ? ".webm" : ".mp3");
             var fileName = isVideo
-                ? BuildVideoFileName(candidate, count, themeKey)
-                : BuildAudioFileName(candidate, count, themeKey);
+                ? BuildVideoFileName(candidate, count, themeKey, extension)
+                : BuildAudioFileName(candidate, count, themeKey, extension);
 
-            plans.Add((new ThemeFilePlan(Path.Combine(targetDir, fileName), link, isVideo, count, themeKey), candidate));
+            plans.Add((new ThemeFilePlan(Path.Combine(targetDir, fileName), link, isVideo, count, themeKey)
+            {
+                RequiresTranscoding = sourceExtension == null
+            }, candidate));
         }
 
         return plans;
@@ -335,7 +429,7 @@ public static class ThemeFilePlanner
         return 2;
     }
 
-    private static string BuildAudioFileName(ScoredCandidate candidate, int order, string themeKey)
+    private static string BuildAudioFileName(ScoredCandidate candidate, int order, string themeKey, string extension)
     {
         var details = BuildTitleArtistTokens(candidate);
         var tokens = new List<string>
@@ -346,10 +440,10 @@ public static class ThemeFilePlanner
         tokens.AddRange(details);
 
         var stem = string.Join(" - ", tokens.Where(t => !string.IsNullOrWhiteSpace(t)));
-        return TruncateFileName(stem, ".mp3", MaxExtrasFileNameLength);
+        return TruncateFileName(stem, extension, MaxExtrasFileNameLength);
     }
 
-    private static string BuildVideoFileName(ScoredCandidate candidate, int order, string themeKey)
+    private static string BuildVideoFileName(ScoredCandidate candidate, int order, string themeKey, string extension)
     {
         var tokens = new List<string>
         {
@@ -365,26 +459,35 @@ public static class ThemeFilePlanner
         }
 
         var stem = string.Join(" - ", tokens.Where(t => !string.IsNullOrWhiteSpace(t)));
-        return TruncateFileName(stem, ".webm", MaxExtrasFileNameLength);
+        return TruncateFileName(stem, extension, MaxExtrasFileNameLength);
     }
 
     private static ThemeExtraPlan BuildExtraPlan(
-        string sourcePath,
+        string? sourcePath,
+        string downloadUrl,
+        bool requiresTranscoding,
         string extrasPath,
         string extrasFileName,
         ScoredCandidate candidate,
         int order)
     {
         var targetPath = Path.Combine(extrasPath, extrasFileName);
-        var legacyFileName = BuildLegacyRichExtrasFileName(candidate, order);
-        var legacyPaths = string.Equals(legacyFileName, extrasFileName, StringComparison.OrdinalIgnoreCase)
-            ? Array.Empty<string>()
-            : new[] { Path.Combine(extrasPath, legacyFileName) };
+        var extension = Path.GetExtension(extrasFileName);
+        var legacyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            BuildLegacyRichExtrasFileName(candidate, order, extension),
+            BuildLegacyRichExtrasFileName(candidate, order, ".webm"),
+            BuildExtrasFileName(candidate, order, extension, null, ExtrasFileSuffix.None),
+            BuildExtrasFileName(candidate, order, ".webm", null, ExtrasFileSuffix.None)
+        };
+        legacyNames.Remove(extrasFileName);
 
         return new ThemeExtraPlan(sourcePath, targetPath)
         {
+            DownloadUrl = downloadUrl,
+            RequiresTranscoding = requiresTranscoding,
             Key = BuildBrowserRowId(candidate),
-            LegacyTargetPaths = legacyPaths
+            LegacyTargetPaths = legacyNames.Select(name => Path.Combine(extrasPath, name)).ToArray()
         };
     }
 
@@ -408,7 +511,12 @@ public static class ThemeFilePlanner
         }
     }
 
-    private static string BuildExtrasFileName(ScoredCandidate candidate, int order, string? format)
+    private static string BuildExtrasFileName(
+        ScoredCandidate candidate,
+        int order,
+        string extension,
+        string? format,
+        ExtrasFileSuffix suffix)
     {
         var selectedFormat = string.IsNullOrWhiteSpace(format) ? DefaultExtrasFileNameFormat : format!;
         var tokens = BuildExtrasFormatTokens(candidate, order);
@@ -426,7 +534,19 @@ public static class ThemeFilePlanner
         stem = Regex.Replace(stem, @"(\s*-\s*){2,}", " - ");
         stem = Regex.Replace(stem, @"^\s*-\s*|\s*-\s*$", string.Empty);
         stem = SanitizeFileNamePart(stem, fallback: BuildThemeKey(candidate)).Trim(' ', '.', '-');
-        return TruncateFileName(stem, ".webm", MaxExtrasFileNameLength);
+        stem += GetExtrasSuffixText(suffix);
+        return TruncateFileName(stem, extension, MaxExtrasFileNameLength);
+    }
+
+    private static string GetExtrasSuffixText(ExtrasFileSuffix suffix)
+    {
+        return suffix switch
+        {
+            ExtrasFileSuffix.None => string.Empty,
+            ExtrasFileSuffix.Short => "-short",
+            ExtrasFileSuffix.Scene => "-scene",
+            _ => "-other"
+        };
     }
 
     private static Dictionary<string, string> BuildExtrasFormatTokens(ScoredCandidate candidate, int order)
@@ -455,7 +575,7 @@ public static class ThemeFilePlanner
         };
     }
 
-    private static string BuildLegacyRichExtrasFileName(ScoredCandidate candidate, int order)
+    private static string BuildLegacyRichExtrasFileName(ScoredCandidate candidate, int order, string extension)
     {
         var themeKey = BuildThemeKey(candidate);
         var tokens = new List<string>
@@ -479,7 +599,7 @@ public static class ThemeFilePlanner
         }
 
         var stem = string.Join(" - ", tokens.Where(t => !string.IsNullOrWhiteSpace(t)));
-        return TruncateFileName(stem, ".webm", MaxExtrasFileNameLength);
+        return TruncateFileName(stem, extension, MaxExtrasFileNameLength);
     }
 
     private static List<string> BuildTitleArtistTokens(ScoredCandidate candidate)
@@ -604,6 +724,37 @@ public static class ThemeFilePlanner
     {
         return !string.IsNullOrWhiteSpace(tags) &&
                tags.Contains(value, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? GetValidatedExtension(string? value, bool isVideo)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var extension = Path.GetExtension(value).ToLowerInvariant();
+        var supported = isVideo ? VideoExtensions : AudioExtensions;
+        return supported.Contains(extension) ? extension : null;
+    }
+
+    private static string? TryResolveMediaExtension(string? filename, string? basename, string? url, bool isVideo)
+    {
+        foreach (var value in new[] { filename, basename })
+        {
+            var extension = GetValidatedExtension(value, isVideo);
+            if (extension != null)
+            {
+                return extension;
+            }
+        }
+
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return GetValidatedExtension(Uri.UnescapeDataString(uri.AbsolutePath), isVideo);
+        }
+
+        return null;
     }
 
     private static string SanitizeFileNamePart(string? value, string fallback)

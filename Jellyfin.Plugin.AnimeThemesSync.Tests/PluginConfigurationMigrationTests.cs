@@ -1,5 +1,6 @@
 using System.IO;
 using System.Xml.Serialization;
+using AnimeThemesSync.Shared.Configuration;
 using Jellyfin.Plugin.AnimeThemesSync.Configuration;
 
 #pragma warning disable CS0618
@@ -9,7 +10,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests;
 public sealed class PluginConfigurationMigrationTests
 {
     [Fact]
-    public void Constructor_CreatesV2Defaults()
+    public void Constructor_CreatesV3Defaults()
     {
         var config = new PluginConfiguration();
 
@@ -20,6 +21,9 @@ public sealed class PluginConfigurationMigrationTests
         Assert.Equal(1, config.Movie.Video.MaxThemes);
         Assert.Equal(100, config.Movie.Video.Volume);
         Assert.True(config.Movie.Video.IgnoreEd);
+        Assert.True(config.Series.Audio.UseAsTheme);
+        Assert.True(config.Series.Video.UseAsTheme);
+        Assert.Equal(ExtrasFileSuffix.Other, config.ExtrasFileSuffix);
     }
 
     [Fact]
@@ -90,6 +94,26 @@ public sealed class PluginConfigurationMigrationTests
     }
 
     [Fact]
+    public void Normalize_V2StructuredSettings_UpgradesWithoutReplacingProfiles()
+    {
+        var config = new PluginConfiguration
+        {
+            ConfigurationVersion = 2,
+            ExtrasFileSuffix = (ExtrasFileSuffix)999,
+        };
+        config.Series.Audio.MaxThemes = 4;
+        config.Series.Video.UseAsTheme = false;
+
+        var changed = config.Normalize();
+
+        Assert.True(changed);
+        Assert.Equal(3, config.ConfigurationVersion);
+        Assert.Equal(4, config.Series.Audio.MaxThemes);
+        Assert.False(config.Series.Video.UseAsTheme);
+        Assert.Equal(ExtrasFileSuffix.Other, config.ExtrasFileSuffix);
+    }
+
+    [Fact]
     public void Serialize_AfterMigration_DoesNotWriteLegacyFlatSettings()
     {
         var config = new PluginConfiguration
@@ -104,7 +128,7 @@ public sealed class PluginConfigurationMigrationTests
         serializer.Serialize(writer, config);
         var xml = writer.ToString();
 
-        Assert.Contains("<ConfigurationVersion>2</ConfigurationVersion>", xml);
+        Assert.Contains("<ConfigurationVersion>3</ConfigurationVersion>", xml);
         Assert.Contains("<Series>", xml);
         Assert.Contains("<Movie>", xml);
         Assert.DoesNotContain("SeriesAudioMaxThemes", xml);

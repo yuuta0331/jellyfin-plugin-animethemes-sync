@@ -14,7 +14,7 @@ namespace Emby.Plugin.AnimeThemesSync.Configuration;
 /// </summary>
 public class PluginConfiguration : BasePluginConfiguration
 {
-    public const int CurrentConfigurationVersion = 2;
+    public const int CurrentConfigurationVersion = 3;
 
     private int _maxConcurrentDownloads = 1;
     private string _tagSeasonSpring = "Spring";
@@ -49,6 +49,7 @@ public class PluginConfiguration : BasePluginConfiguration
         AllowDelete = false;
         ExtrasEnabled = false;
         ExtrasLinkMode = ExtrasLinkMode.HardLinkWithCopyFallback;
+        ExtrasFileSuffix = ExtrasFileSuffix.Other;
         ExtrasFileNameFormat = ThemeFilePlanner.DefaultExtrasFileNameFormat;
         SeasonThemeDownloadsEnabled = true;
         TagsEnabled = true;
@@ -79,6 +80,8 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool ExtrasEnabled { get; set; }
 
     public ExtrasLinkMode ExtrasLinkMode { get; set; }
+
+    public ExtrasFileSuffix ExtrasFileSuffix { get; set; }
 
     public string ExtrasFileNameFormat
     {
@@ -325,7 +328,7 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool Normalize()
     {
         var changed = false;
-        if (_legacyConfigurationLoaded || ConfigurationVersion < CurrentConfigurationVersion)
+        if (_legacyConfigurationLoaded || ConfigurationVersion < 2)
         {
             Series = new MediaTypeConfig
             {
@@ -396,6 +399,12 @@ public class PluginConfiguration : BasePluginConfiguration
         if (SeasonThemeMappings == null)
         {
             SeasonThemeMappings = [];
+            changed = true;
+        }
+
+        if (!Enum.IsDefined(typeof(ExtrasFileSuffix), ExtrasFileSuffix))
+        {
+            ExtrasFileSuffix = ExtrasFileSuffix.Other;
             changed = true;
         }
 

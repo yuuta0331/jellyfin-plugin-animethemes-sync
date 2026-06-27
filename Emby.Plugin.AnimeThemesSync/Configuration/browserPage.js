@@ -39,6 +39,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             settingsLoaded: false,
             settingsSnapshot: '',
             settingsApplying: false,
+            pendingDownload: null,
             browserStartIndex: 0,
             browserLimit: 80,
             browserTotalRecordCount: 0,
@@ -82,6 +83,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         var player = page.querySelector('#AnimeThemesBrowserPlayer');
         var playerBody = page.querySelector('#AnimeThemesBrowserPlayerBody');
         var playerTitle = page.querySelector('#AnimeThemesBrowserPlayerTitle');
+        var downloadDialog = page.querySelector('#AnimeThemesDownloadDialog');
+        var downloadDialogTheme = page.querySelector('#AnimeThemesDownloadDialogTheme');
+        var downloadDialogError = page.querySelector('#AnimeThemesDownloadDialogError');
+        var downloadIncludeVideo = page.querySelector('#AtsDownloadIncludeVideo');
+        var downloadIncludeAudio = page.querySelector('#AtsDownloadIncludeAudio');
+        var downloadIncludeExtras = page.querySelector('#AtsDownloadIncludeExtras');
+        var downloadDialogConfirm = page.querySelector('#AnimeThemesDownloadDialogConfirm');
         var progressPanel = page.querySelector('#AnimeThemesBrowserProgress');
         var progressText = page.querySelector('#AnimeThemesBrowserProgressText');
         var progressPercent = page.querySelector('#AnimeThemesBrowserProgressPercent');
@@ -138,6 +146,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             ExtrasEnabled: page.querySelector('#AtsExtrasEnabled'),
             ExtrasOptions: page.querySelector('#AtsExtrasOptions'),
             ExtrasLinkMode: page.querySelector('#AtsExtrasLinkMode'),
+            ExtrasFileSuffix: page.querySelector('#AtsExtrasFileSuffix'),
             ExtrasFileNameFormat: page.querySelector('#AtsExtrasFileNameFormat'),
             ExtrasFormatPreview: page.querySelector('#AtsExtrasFormatPreview'),
             TagsEnabled: page.querySelector('#AtsTagsEnabled'),
@@ -1160,7 +1169,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             actions.className = 'ats-actions';
             addRemotePreviewButton(actions, row, 'video');
             addRemotePreviewButton(actions, row, 'audio');
-            addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'));
+            addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'), true);
             card.appendChild(actions);
             return card;
         }
@@ -1175,9 +1184,14 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             container.appendChild(button);
         }
 
-        function addRemotePreviewButton(container, row, target) {
+        function addRemotePreviewButton(container, row, target, isSmall) {
             var url = target === 'audio' ? value(row, 'AudioUrl', 'audioUrl') : value(row, 'VideoUrl', 'videoUrl');
             var button = createButton(target === 'audio' ? 'Preview Audio' : 'Preview Video', true, 'play');
+            if (isSmall) {
+                button.classList.add('ats-btn-preview-small');
+                var labelSpan = button.querySelector('span:not(.ats-icon)');
+                if (labelSpan) labelSpan.textContent = 'Preview';
+            }
             button.disabled = !url;
             button.addEventListener('click', function () {
                 if (url) openRemotePlayer(row, target, url);
@@ -1849,15 +1863,44 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
             var actions = document.createElement('div');
             actions.className = 'ats-actions';
-            addRemotePreviewButton(actions, row, 'video');
-            addRemotePreviewButton(actions, row, 'audio');
-            addDownloadButton(actions, row);
-            addLocalVideoButton(actions, row);
-            addPlayButton(actions, row, 'audio', 'Play Audio', value(row, 'SavedAudioPlayable', 'savedAudioPlayable'));
-            addDeleteFileButton(actions, row, 'video', 'Delete Video', value(row, 'BackdropExists', 'backdropExists'));
-            addDeleteFileButton(actions, row, 'audio', 'Delete Audio', value(row, 'ThemeMusicExists', 'themeMusicExists'));
-            addDeleteFileButton(actions, row, 'extra', 'Delete Extras', value(row, 'ExtraExists', 'extraExists'));
-            addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'));
+
+            // 1. AnimeThemes Link (icon-only)
+            addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'), true);
+
+            // 2. Play/Preview Video Stack & Individual Delete Video
+            var hasVideoUrl = !!value(row, 'VideoUrl', 'videoUrl');
+            var hasVideoLocal = !!value(row, 'SavedVideoPlayable', 'savedVideoPlayable') || !!value(row, 'SavedExtraPlayable', 'savedExtraPlayable');
+            if (hasVideoUrl || hasVideoLocal) {
+                var videoStack = document.createElement('div');
+                videoStack.className = 'ats-btn-stack';
+                if (hasVideoUrl) {
+                    addRemotePreviewButton(videoStack, row, 'video', true);
+                }
+                addLocalVideoButton(videoStack, row);
+                actions.appendChild(videoStack);
+            }
+            addDeleteFileButton(actions, row, 'video', 'Delete Video', value(row, 'BackdropExists', 'backdropExists'), true);
+
+            // 3. Play/Preview Audio Stack & Individual Delete Audio
+            var hasAudioUrl = !!value(row, 'AudioUrl', 'audioUrl');
+            var hasAudioLocal = !!value(row, 'SavedAudioPlayable', 'savedAudioPlayable');
+            if (hasAudioUrl || hasAudioLocal) {
+                var audioStack = document.createElement('div');
+                audioStack.className = 'ats-btn-stack';
+                if (hasAudioUrl) {
+                    addRemotePreviewButton(audioStack, row, 'audio', true);
+                }
+                addPlayButton(audioStack, row, 'audio', 'Play Audio', hasAudioLocal);
+                actions.appendChild(audioStack);
+            }
+            addDeleteFileButton(actions, row, 'audio', 'Delete Audio', value(row, 'ThemeMusicExists', 'themeMusicExists'), true);
+
+            // 4. Delete Extras
+            addDeleteFileButton(actions, row, 'extra', 'Delete Extras', value(row, 'ExtraExists', 'extraExists'), true);
+
+            // 5. Download button (icon-only, aligned to the right)
+            addDownloadButton(actions, row, true);
+
             side.appendChild(actions);
             card.appendChild(side);
             return card;
@@ -1925,8 +1968,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             return button;
         }
 
-        function addDownloadButton(container, row) {
+        function addDownloadButton(container, row, iconOnly) {
             var button = createButton('Download', false, 'download');
+            if (iconOnly) {
+                button.classList.add('ats-icon-button-only');
+                button.classList.add('ats-button-align-right');
+                button.title = 'Download theme';
+            }
             button.addEventListener('click', function () {
                 downloadTheme(row);
             });
@@ -1937,6 +1985,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             var hasExtra = !!value(row, 'SavedExtraPlayable', 'savedExtraPlayable');
             var hasVideo = !!value(row, 'SavedVideoPlayable', 'savedVideoPlayable');
             var button = createButton('Play Video', true, 'play');
+            button.classList.add('ats-btn-play-main');
             button.disabled = !hasExtra && !hasVideo;
             button.title = hasExtra ? 'Plays the browseable extras file.' : hasVideo ? 'Plays the local theme video file.' : 'No local video has been saved.';
             button.addEventListener('click', function () {
@@ -1947,6 +1996,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function addPlayButton(container, row, target, label, playable) {
             var button = createButton(label, true, 'play');
+            button.classList.add('ats-btn-play-main');
             button.disabled = !playable;
             button.addEventListener('click', function () {
                 if (!button.disabled) openPlayer(row, target);
@@ -1954,9 +2004,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             container.appendChild(button);
         }
 
-        function addOpenButton(container, label, url) {
+        function addOpenButton(container, label, url, iconOnly) {
             if (!url) return;
             var button = createButton(label, true, 'link');
+            if (iconOnly) {
+                button.classList.add('ats-icon-button-only');
+                button.title = 'Open on AnimeThemes';
+            }
             button.addEventListener('click', function () {
                 window.open(url, '_blank', 'noopener');
             });
@@ -2004,6 +2058,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         function ensureThemeConfig(config) {
             config = config || {};
             return {
+                UseAsTheme: !!getConfigValue(config, 'UseAsTheme', true),
                 MaxThemes: Math.max(0, parseInt(getConfigValue(config, 'MaxThemes', 1), 10) || 0),
                 Volume: Math.max(0, Math.min(100, parseInt(getConfigValue(config, 'Volume', 100), 10) || 0)),
                 IgnoreOp: !!getConfigValue(config, 'IgnoreOp', false),
@@ -2023,7 +2078,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function ensureSettingsConfig(config) {
             config = config || {};
-            config.ConfigurationVersion = 2;
+            config.ConfigurationVersion = 3;
             config.Series = ensureMediaConfig(getConfigValue(config, 'Series', null));
             config.Movie = ensureMediaConfig(getConfigValue(config, 'Movie', null));
             if (!Array.isArray(getConfigValue(config, 'SeasonThemeMappings', []))) {
@@ -2043,6 +2098,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function defaultThemeConfig() {
             return {
+                UseAsTheme: true,
                 MaxThemes: 1,
                 Volume: 100,
                 IgnoreOp: false,
@@ -2061,7 +2117,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function defaultSettingsConfig(existingConfig) {
             return ensureSettingsConfig({
-                ConfigurationVersion: 2,
+                ConfigurationVersion: 3,
                 ThemeDownloadingEnabled: true,
                 MaxConcurrentDownloads: 1,
                 DownloadTimeoutSeconds: 600,
@@ -2071,6 +2127,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 SeasonThemeDownloadsEnabled: true,
                 ExtrasEnabled: false,
                 ExtrasLinkMode: 0,
+                ExtrasFileSuffix: 1,
                 ExtrasFileNameFormat: '{Order}. {Theme} - {Song}',
                 TagsEnabled: true,
                 TagFormat: '{Season} {Year}',
@@ -2086,7 +2143,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         function canonicalizeSettings(config) {
             config = ensureSettingsConfig(cloneSettings(config || {}));
             return {
-                ConfigurationVersion: 2,
+                ConfigurationVersion: 3,
                 ThemeDownloadingEnabled: !!getConfigValue(config, 'ThemeDownloadingEnabled', true),
                 MaxConcurrentDownloads: Math.max(1, parseInt(getConfigValue(config, 'MaxConcurrentDownloads', 1), 10) || 1),
                 DownloadTimeoutSeconds: Math.max(1, parseInt(getConfigValue(config, 'DownloadTimeoutSeconds', 600), 10) || 600),
@@ -2096,6 +2153,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 SeasonThemeDownloadsEnabled: !!getConfigValue(config, 'SeasonThemeDownloadsEnabled', true),
                 ExtrasEnabled: !!getConfigValue(config, 'ExtrasEnabled', false),
                 ExtrasLinkMode: parseInt(normalizeExtrasLinkMode(getConfigValue(config, 'ExtrasLinkMode', 0)), 10) || 0,
+                ExtrasFileSuffix: parseInt(normalizeExtrasFileSuffix(getConfigValue(config, 'ExtrasFileSuffix', 1)), 10),
                 ExtrasFileNameFormat: String(getConfigValue(config, 'ExtrasFileNameFormat', '{Order}. {Theme} - {Song}')),
                 TagsEnabled: !!getConfigValue(config, 'TagsEnabled', true),
                 TagFormat: String(getConfigValue(config, 'TagFormat', '{Season} {Year}')),
@@ -2154,6 +2212,14 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             return String(value || 0);
         }
 
+        function normalizeExtrasFileSuffix(value) {
+            if (value === 'None') return '0';
+            if (value === 'Other') return '1';
+            if (value === 'Short') return '2';
+            if (value === 'Scene') return '3';
+            return String(value === undefined || value === null ? 1 : value);
+        }
+
         function setSettingsState(message) {
             settingsState.textContent = message || 'Ready.';
         }
@@ -2172,6 +2238,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function profileFields(profile, media) {
             return {
+                UseAsTheme: page.querySelector('#' + profileFieldId(profile, media, 'UseAsTheme')),
                 MaxThemes: page.querySelector('#' + profileFieldId(profile, media, 'MaxThemes')),
                 VolumeSlider: page.querySelector('#' + profileFieldId(profile, media, 'VolumeSlider')),
                 Volume: page.querySelector('#' + profileFieldId(profile, media, 'Volume')),
@@ -2230,6 +2297,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             return [
                 '<div class="ats-profile-card">',
                 '<h5>' + title + '</h5>',
+                '<div class="checkboxContainer checkboxContainer-withDescription">',
+                '<label class="emby-checkbox-label"><input id="Ats' + profileName + mediaName + 'UseAsTheme" type="checkbox" is="emby-checkbox" /><span>Use as server theme</span></label>',
+                '<div class="fieldDescription">Save selected media in ' + (mediaName === 'Audio' ? 'theme-music' : 'backdrops') + '. Disable video here while keeping Extras enabled for Extra-only output.</div>',
+                '</div>',
                 '<div class="inputContainer">',
                 '<label class="inputLabel inputLabelUnfocused" for="Ats' + profileName + mediaName + 'MaxThemes">Max themes</label>',
                 '<input id="Ats' + profileName + mediaName + 'MaxThemes" type="number" is="emby-input" min="0" />',
@@ -2268,6 +2339,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         function renderThemeSettings(profile, media, theme) {
             var fields = profileFields(profile, media);
             theme = ensureThemeConfig(theme);
+            fields.UseAsTheme.checked = theme.UseAsTheme;
             fields.MaxThemes.value = theme.MaxThemes;
             setVolumeFields(fields, theme.Volume);
             fields.IgnoreOp.checked = theme.IgnoreOp;
@@ -2279,6 +2351,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         function collectThemeSettings(profile, media) {
             var fields = profileFields(profile, media);
             return ensureThemeConfig({
+                UseAsTheme: fields.UseAsTheme.checked,
                 MaxThemes: parseInt(fields.MaxThemes.value, 10) || 0,
                 Volume: clampVolume(fields.Volume.value),
                 IgnoreOp: fields.IgnoreOp.checked,
@@ -2336,7 +2409,9 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                     labels: 'BD NC',
                     quality: '1080'
                 }) || 'OP1';
-                settingsFields.ExtrasFormatPreview.textContent = extrasPreview.replace(/[\\/:*?"<>|]/g, ' ').trim() + '.webm';
+                var suffixValue = normalizeExtrasFileSuffix(settingsFields.ExtrasFileSuffix.value);
+                var suffix = suffixValue === '2' ? '-short' : suffixValue === '3' ? '-scene' : suffixValue === '0' ? '' : '-other';
+                settingsFields.ExtrasFormatPreview.textContent = extrasPreview.replace(/[\\/:*?"<>|]/g, ' ').trim() + suffix + '.webm';
             }
 
             if (settingsFields.TagFormatPreview && settingsFields.TagFormat) {
@@ -2390,6 +2465,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             settingsFields.SeasonThemeDownloadsEnabled.checked = !!getConfigValue(config, 'SeasonThemeDownloadsEnabled', true);
             settingsFields.ExtrasEnabled.checked = !!getConfigValue(config, 'ExtrasEnabled', false);
             settingsFields.ExtrasLinkMode.value = normalizeExtrasLinkMode(getConfigValue(config, 'ExtrasLinkMode', 0));
+            settingsFields.ExtrasFileSuffix.value = normalizeExtrasFileSuffix(getConfigValue(config, 'ExtrasFileSuffix', 1));
             settingsFields.ExtrasFileNameFormat.value = getConfigValue(config, 'ExtrasFileNameFormat', '{Order}. {Theme} - {Song}');
             settingsFields.TagsEnabled.checked = !!getConfigValue(config, 'TagsEnabled', true);
             settingsFields.TagFormat.value = getConfigValue(config, 'TagFormat', '{Season} {Year}');
@@ -2421,7 +2497,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function readSettingsForm() {
             return {
-                ConfigurationVersion: 2,
+                ConfigurationVersion: 3,
                 ThemeDownloadingEnabled: settingsFields.ThemeDownloadingEnabled.checked,
                 MaxConcurrentDownloads: parseInt(settingsFields.MaxConcurrentDownloads.value, 10) || 1,
                 DownloadTimeoutSeconds: parseInt(settingsFields.DownloadTimeoutSeconds.value, 10) || 600,
@@ -2431,6 +2507,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 SeasonThemeDownloadsEnabled: settingsFields.SeasonThemeDownloadsEnabled.checked,
                 ExtrasEnabled: settingsFields.ExtrasEnabled.checked,
                 ExtrasLinkMode: parseInt(settingsFields.ExtrasLinkMode.value, 10) || 0,
+                ExtrasFileSuffix: parseInt(settingsFields.ExtrasFileSuffix.value, 10),
                 ExtrasFileNameFormat: settingsFields.ExtrasFileNameFormat.value,
                 TagsEnabled: settingsFields.TagsEnabled.checked,
                 TagFormat: settingsFields.TagFormat.value,
@@ -2527,7 +2604,78 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             var itemId = activeGroupItemId();
             var rowId = value(row, 'RowId', 'rowId');
             if (!itemId || !rowId) return;
-            startDownloadJob('AnimeThemesSync/Jobs/ThemeDownload?ItemId=' + encodeURIComponent(itemId) + '&RowId=' + encodeURIComponent(rowId) + '&Force=false');
+
+            var settingsPromise = state.settingsConfig
+                ? Promise.resolve(ensureSettingsConfig(state.settingsConfig))
+                : ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                    state.settingsConfig = ensureSettingsConfig(config || {});
+                    return state.settingsConfig;
+                });
+
+            settingsPromise.then(function (config) {
+                var groupType = String(value(activeGroup(), 'Type', 'type') || value(state.currentResult, 'Type', 'type') || 'Series');
+                var profile = groupType === 'Movie' ? config.Movie : config.Series;
+                var audioDefault = profile.Audio.UseAsTheme && profile.Audio.MaxThemes > 0;
+                var videoDefault = profile.Video.UseAsTheme && profile.Video.MaxThemes > 0;
+                var extrasDefault = !!getConfigValue(config, 'ExtrasEnabled', false) && profile.Video.MaxThemes > 0;
+                openDownloadDialog(row, itemId, rowId, videoDefault, audioDefault, extrasDefault);
+            }).catch(function (err) {
+                Dashboard.alert({ title: 'Settings Error', message: 'Failed to load download defaults: ' + getErrorMessage(err) });
+            });
+        }
+
+        function syncDownloadOptionStyles() {
+            [downloadIncludeVideo, downloadIncludeAudio, downloadIncludeExtras].forEach(function (control) {
+                if (control) {
+                    var option = control.closest('.ats-download-option');
+                    if (option) option.classList.toggle('selected', control.checked);
+                }
+            });
+        }
+
+        function openDownloadDialog(row, itemId, rowId, includeVideo, includeAudio, includeExtras) {
+            state.lastFocus = document.activeElement;
+            state.pendingDownload = { itemId: itemId, rowId: rowId };
+            downloadDialogTheme.textContent = text(value(row, 'ThemeKey', 'themeKey')) + (value(row, 'SongTitle', 'songTitle') ? ' · ' + value(row, 'SongTitle', 'songTitle') : '');
+            downloadIncludeVideo.checked = includeVideo;
+            downloadIncludeAudio.checked = includeAudio;
+            downloadIncludeExtras.checked = includeExtras;
+            downloadDialogError.hidden = true;
+            syncDownloadOptionStyles();
+            downloadDialog.classList.add('open');
+            downloadDialog.setAttribute('aria-hidden', 'false');
+            downloadDialogConfirm.focus();
+        }
+
+        function closeDownloadDialog() {
+            if (downloadDialog.contains(document.activeElement)) {
+                document.activeElement.blur();
+            }
+
+            downloadDialog.classList.remove('open');
+            downloadDialog.setAttribute('aria-hidden', 'true');
+            downloadDialogError.hidden = true;
+            state.pendingDownload = null;
+            if (state.lastFocus && typeof state.lastFocus.focus === 'function') {
+                state.lastFocus.focus();
+            }
+        }
+
+        function confirmDownloadSelection() {
+            var pending = state.pendingDownload;
+            if (!pending) return;
+            if (!downloadIncludeVideo.checked && !downloadIncludeAudio.checked && !downloadIncludeExtras.checked) {
+                downloadDialogError.hidden = false;
+                return;
+            }
+
+            var path = 'AnimeThemesSync/Jobs/ThemeDownload?ItemId=' + encodeURIComponent(pending.itemId) +
+                '&RowId=' + encodeURIComponent(pending.rowId) +
+                '&Force=false&IncludeAudio=' + encodeURIComponent(downloadIncludeAudio.checked) +
+                '&IncludeVideo=' + encodeURIComponent(downloadIncludeVideo.checked) +
+                '&IncludeExtras=' + encodeURIComponent(downloadIncludeExtras.checked);
+            closeDownloadDialog();
+            startDownloadJob(path);
         }
 
         function downloadItem() {
@@ -2605,9 +2753,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             });
         }
 
-        function addDeleteFileButton(container, row, target, label, exists) {
+        function addDeleteFileButton(container, row, target, label, exists, iconOnly) {
             if (!exists) return;
             var button = createButton(label, true, 'danger');
+            if (iconOnly) {
+                button.classList.add('ats-icon-button-only');
+                button.title = label;
+            }
             button.addEventListener('click', function () {
                 deleteIndividualThemeFile(row, target);
             });
@@ -2777,7 +2929,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         buildProfileControls();
         settingsFields.ExtrasEnabled.addEventListener('change', syncConditionalSettings);
         settingsFields.TagsEnabled.addEventListener('change', syncConditionalSettings);
-        [settingsFields.ExtrasFileNameFormat, settingsFields.TagFormat, settingsFields.TagSeasonWinter].forEach(function (input) {
+        [settingsFields.ExtrasFileNameFormat, settingsFields.ExtrasFileSuffix, settingsFields.TagFormat, settingsFields.TagSeasonWinter].forEach(function (input) {
             if (input) {
                 input.addEventListener('input', updateFormatPreviews);
             }
@@ -2817,6 +2969,27 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         page.querySelector('#AnimeThemesBrowserPlayerClose').addEventListener('click', closePlayer);
         player.addEventListener('click', function (event) {
             if (event.target === player) closePlayer();
+        });
+        page.querySelector('#AnimeThemesDownloadDialogClose').addEventListener('click', closeDownloadDialog);
+        page.querySelector('#AnimeThemesDownloadDialogCancel').addEventListener('click', closeDownloadDialog);
+        downloadDialogConfirm.addEventListener('click', confirmDownloadSelection);
+        downloadDialog.addEventListener('click', function (event) {
+            if (event.target === downloadDialog) closeDownloadDialog();
+        });
+        [downloadIncludeVideo, downloadIncludeAudio, downloadIncludeExtras].forEach(function (control) {
+            control.addEventListener('change', function () {
+                downloadDialogError.hidden = true;
+                syncDownloadOptionStyles();
+            });
+            var option = control.closest('.ats-download-option');
+            option.addEventListener('click', function (event) {
+                if (!control.parentElement.contains(event.target)) control.click();
+            });
+        });
+        page.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && downloadDialog.classList.contains('open')) {
+                closeDownloadDialog();
+            }
         });
         setupClearButtons();
         syncSeasonFilterButtons();

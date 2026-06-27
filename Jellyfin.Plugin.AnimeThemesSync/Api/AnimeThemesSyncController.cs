@@ -307,11 +307,22 @@ public sealed class AnimeThemesSyncController : ControllerBase
     public ActionResult<ThemeDownloadJobStartResult> StartThemeDownloadJob(
         [FromQuery] Guid itemId,
         [FromQuery] string rowId,
-        [FromQuery] bool force)
+        [FromQuery] bool force,
+        [FromQuery] bool? includeAudio,
+        [FromQuery] bool? includeVideo,
+        [FromQuery] bool? includeExtras)
     {
         var job = ThemeDownloadJobService.Start(
             "Downloading theme...",
-            (progress, cancellationToken) => _themeDownloader.DownloadThemeByRowIdAsync(itemId, rowId, force, progress, cancellationToken));
+            (progress, cancellationToken) => _themeDownloader.DownloadThemeByRowIdAsync(
+                itemId,
+                rowId,
+                force,
+                progress,
+                includeAudio,
+                includeVideo,
+                includeExtras,
+                cancellationToken));
         return Ok(job);
     }
 

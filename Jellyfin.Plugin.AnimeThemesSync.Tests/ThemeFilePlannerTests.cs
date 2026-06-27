@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using AnimeThemesSync.Shared;
 using AnimeThemesSync.Shared.Configuration;
 using AnimeThemesSync.Shared.Interfaces;
 using AnimeThemesSync.Shared.Models;
@@ -33,8 +34,8 @@ public class ThemeFilePlannerTests
                 "02-OP2 - Kaerimichi - Emiri Katou - Eps 3-5 - Spoiler WEB720.webm"
             },
             backdropNames);
-        Assert.Contains("01. OP1 - staple stable.webm", extrasNames);
-        Assert.Contains("02. OP2 - Kaerimichi.webm", extrasNames);
+        Assert.Contains("01. OP1 - staple stable-other.webm", extrasNames);
+        Assert.Contains("02. OP2 - Kaerimichi-other.webm", extrasNames);
         Assert.Contains(
             Path.Combine("Media", "Bakemonogatari", "extras", "AnimeThemes - 01 - OP1 - staple stable - Chiwa Saitou - Eps 1-2, 12 - NC BD1080.webm"),
             plan.ExtraFiles[0].LegacyTargetPaths);
@@ -56,7 +57,7 @@ public class ThemeFilePlannerTests
 
         var extrasName = Path.GetFileName(plan.ExtraFiles.Single().TargetPath);
 
-        Assert.Equal("OP1 - staple stable - Chiwa Saitou - Eps 1-2, 12 - BD1080.webm", extrasName);
+        Assert.Equal("OP1 - staple stable - Chiwa Saitou - Eps 1-2, 12 - BD1080-other.webm", extrasName);
     }
 
     [Fact]
@@ -73,7 +74,7 @@ public class ThemeFilePlannerTests
 
         var audioName = Path.GetFileName(plan.MediaFiles.Single().Path);
 
-        Assert.Equal("01-OP1 - staple stable - Chiwa Saitou.mp3", audioName);
+        Assert.Equal("01-OP1 - staple stable - Chiwa Saitou.ogg", audioName);
     }
 
     [Fact]
@@ -109,9 +110,9 @@ public class ThemeFilePlannerTests
 
         var plan = ThemeFilePlanner.BuildPlan(anime, Path.Combine("Media", "Test"), Enabled(maxThemes: 1), Enabled(maxThemes: 1), extrasEnabled: true);
 
-        Assert.Equal("01-ED Finalv2 - bad title.mp3", Path.GetFileName(plan.MediaFiles.Single(f => !f.IsVideo).Path));
+        Assert.Equal("01-ED Finalv2 - bad title.ogg", Path.GetFileName(plan.MediaFiles.Single(f => !f.IsVideo).Path));
         Assert.Equal("01-ED Finalv2 - bad title.webm", Path.GetFileName(plan.MediaFiles.Single(f => f.IsVideo).Path));
-        Assert.Equal("01. ED Finalv2 - bad title.webm", Path.GetFileName(plan.ExtraFiles.Single().TargetPath));
+        Assert.Equal("01. ED Finalv2 - bad title-other.webm", Path.GetFileName(plan.ExtraFiles.Single().TargetPath));
     }
 
     [Fact]
@@ -204,8 +205,94 @@ public class ThemeFilePlannerTests
         Assert.Equal(2, plan.MediaFiles.Count);
         Assert.Single(plan.ExtraFiles);
         Assert.Equal("02-OP2 - Kaerimichi - Emiri Katou - Eps 3-5 - Spoiler WEB720.webm", Path.GetFileName(plan.MediaFiles.Single(f => f.IsVideo).Path));
-        Assert.Equal("02-OP2 - Kaerimichi - Emiri Katou.mp3", Path.GetFileName(plan.MediaFiles.Single(f => !f.IsVideo).Path));
-        Assert.Equal("02. OP2 - Kaerimichi.webm", Path.GetFileName(plan.ExtraFiles.Single().TargetPath));
+        Assert.Equal("02-OP2 - Kaerimichi - Emiri Katou.ogg", Path.GetFileName(plan.MediaFiles.Single(f => !f.IsVideo).Path));
+        Assert.Equal("02. OP2 - Kaerimichi-other.webm", Path.GetFileName(plan.ExtraFiles.Single().TargetPath));
+    }
+
+    [Fact]
+    public void BuildPlan_ExtraOnly_DownloadsDirectlyAndPreservesSourceExtension()
+    {
+        var anime = CreateAnime();
+        var video = anime.AnimeThemes![0].Entries![0].Videos![0];
+        video.Filename = "OP1.MP4";
+        video.Link = "https://v.animethemes.moe/download?id=1";
+        var audio = Disabled();
+        var videoConfig = Enabled(maxThemes: 1);
+        videoConfig.UseAsTheme = false;
+
+        var plan = ThemeFilePlanner.BuildPlan(
+            anime,
+            Path.Combine("Media", "Test"),
+            audio,
+            videoConfig,
+            extrasEnabled: true);
+
+        Assert.Empty(plan.MediaFiles);
+        var extra = Assert.Single(plan.ExtraFiles);
+        Assert.Null(extra.SourcePath);
+        Assert.Equal(video.Link, extra.DownloadUrl);
+        Assert.Equal("01. OP1 - staple stable-other.mp4", Path.GetFileName(extra.TargetPath));
+    }
+
+    [Fact]
+    public void BuildPlan_PreservesSeparateAudioExtensionAndMarksVideoFallbackForExtraction()
+    {
+        var anime = CreateAnime();
+        var video = anime.AnimeThemes![0].Entries![0].Videos![0];
+        video.Audio!.Filename = "OP1.FLAC";
+        video.Audio.Link = "https://a.animethemes.moe/audio?id=1";
+
+        var withAudio = ThemeFilePlanner.BuildPlan(anime, "Media", Enabled(1), Disabled(), extrasEnabled: false);
+        var audioPlan = Assert.Single(withAudio.MediaFiles);
+        Assert.EndsWith(".flac", audioPlan.Path, StringComparison.Ordinal);
+        Assert.False(audioPlan.RequiresTranscoding);
+
+        video.Audio = null;
+        var withoutAudio = ThemeFilePlanner.BuildPlan(anime, "Media", Enabled(1), Disabled(), extrasEnabled: false);
+        audioPlan = Assert.Single(withoutAudio.MediaFiles);
+        Assert.EndsWith(".mp3", audioPlan.Path, StringComparison.Ordinal);
+        Assert.True(audioPlan.RequiresTranscoding);
+    }
+
+    [Theory]
+    [InlineData(ExtrasFileSuffix.None, "01. OP1 - staple stable.webm")]
+    [InlineData(ExtrasFileSuffix.Other, "01. OP1 - staple stable-other.webm")]
+    [InlineData(ExtrasFileSuffix.Short, "01. OP1 - staple stable-short.webm")]
+    [InlineData(ExtrasFileSuffix.Scene, "01. OP1 - staple stable-scene.webm")]
+    public void BuildPlan_AppliesConfiguredExtrasSuffix(ExtrasFileSuffix suffix, string expected)
+    {
+        var plan = ThemeFilePlanner.BuildPlan(
+            CreateAnime(),
+            "Media",
+            Disabled(),
+            Enabled(1),
+            extrasEnabled: true,
+            extrasFileNameFormat: null,
+            extrasFileSuffix: suffix);
+
+        Assert.Equal(expected, Path.GetFileName(Assert.Single(plan.ExtraFiles).TargetPath));
+    }
+
+    [Theory]
+    [InlineData("clip.MKV", null, "https://example.test/video.webm", true, ".mkv")]
+    [InlineData(null, "song.OpUs", "https://example.test/audio.ogg", false, ".opus")]
+    [InlineData(null, null, "https://example.test/video.mp4?token=abc", true, ".mp4")]
+    [InlineData(null, null, "https://example.test/download?token=abc", true, ".webm")]
+    public void ResolveMediaExtension_UsesMetadataThenUrl(
+        string? filename,
+        string? basename,
+        string url,
+        bool isVideo,
+        string expected)
+    {
+        var extension = ThemeFilePlanner.ResolveMediaExtension(
+            filename,
+            basename,
+            url,
+            isVideo ? ".webm" : ".mp3",
+            isVideo);
+
+        Assert.Equal(expected, extension);
     }
 
     [Fact]
@@ -285,6 +372,25 @@ public class ThemeFilePlannerTests
     }
 
     [Fact]
+    public void UiAssetVersion_IsSynchronizedAcrossRegisteredPages()
+    {
+        var root = FindRepositoryRoot();
+        var assetVersion = Constants.UiAssetVersion;
+        var displayVersion = Constants.UiDisplayVersion;
+        var jellyfinConfig = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "configPage.html"));
+        var jellyfinBrowser = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+        var embyConfig = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "configPage.html"));
+        var embyBrowser = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+
+        Assert.Contains("configurationpage?name=animethemessyncbrowser" + assetVersion, jellyfinConfig, StringComparison.Ordinal);
+        Assert.Contains("#/configurationpage?name=animethemessyncbrowser" + assetVersion, embyConfig, StringComparison.Ordinal);
+        Assert.Contains("__plugin/animethemessyncconfigjs" + assetVersion, embyConfig, StringComparison.Ordinal);
+        Assert.Contains("__plugin/animethemessyncbrowserjs" + assetVersion, embyBrowser, StringComparison.Ordinal);
+        Assert.Contains("UI version: " + displayVersion, jellyfinBrowser, StringComparison.Ordinal);
+        Assert.Contains("UI version: " + displayVersion, embyBrowser, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BrowserPages_UseAuthenticatedLocalMediaUrls()
     {
         var root = FindRepositoryRoot();
@@ -323,8 +429,53 @@ public class ThemeFilePlannerTests
             Assert.Contains("AnimeThemesSync/Jobs/ItemDownload", content, StringComparison.Ordinal);
             Assert.Contains("pollDownloadJob", content, StringComparison.Ordinal);
             Assert.Contains("AnimeThemesBrowserProgressBar", content, StringComparison.Ordinal);
+            Assert.Contains("AtsDownloadIncludeAudio", content, StringComparison.Ordinal);
+            Assert.Contains("AtsDownloadIncludeVideo", content, StringComparison.Ordinal);
+            Assert.Contains("AtsDownloadIncludeExtras", content, StringComparison.Ordinal);
+            Assert.Contains("&IncludeAudio=", content, StringComparison.Ordinal);
+            Assert.Contains("&IncludeVideo=", content, StringComparison.Ordinal);
+            Assert.Contains("&IncludeExtras=", content, StringComparison.Ordinal);
             Assert.DoesNotContain("/Download?force=", content, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void BrowserPages_UseDedicatedAccessibleDownloadDialog()
+    {
+        var root = FindRepositoryRoot();
+        var jellyfinHtml = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+        var embyHtml = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+        var embyController = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js"));
+
+        foreach (var content in new[] { jellyfinHtml, embyHtml })
+        {
+            var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal);
+            Assert.Contains("id=\"AnimeThemesDownloadDialog\"", content, StringComparison.Ordinal);
+            Assert.Contains("role=\"dialog\"", content, StringComparison.Ordinal);
+            Assert.Contains("aria-modal=\"true\"", content, StringComparison.Ordinal);
+            Assert.Contains("ats-download-option", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesDownloadDialogCancel", content, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesDownloadDialogConfirm", content, StringComparison.Ordinal);
+            Assert.Contains("Existing files for unselected outputs will not be deleted", content, StringComparison.Ordinal);
+            Assert.Contains("#AnimeThemesBrowserPage {", content, StringComparison.Ordinal);
+            Assert.Contains("class=\"emby-checkbox-label ats-download-checkbox\"", content, StringComparison.Ordinal);
+            Assert.Contains("aria-label=\"Include theme video\" />\n                                <span>Include</span>", normalized, StringComparison.Ordinal);
+            Assert.Contains("--jf-palette-background-paper", content, StringComparison.Ordinal);
+            Assert.Contains("--background-hue", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("Canvas", content, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("material-icons ats-download-option-icon", jellyfinHtml, StringComparison.Ordinal);
+        Assert.Contains("md-icon ats-download-option-icon", embyHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("material-icons", embyHtml, StringComparison.Ordinal);
+        Assert.Contains("openDownloadDialog", jellyfinHtml, StringComparison.Ordinal);
+        Assert.Contains("confirmDownloadSelection", jellyfinHtml, StringComparison.Ordinal);
+        Assert.Contains("openDownloadDialog", embyController, StringComparison.Ordinal);
+        Assert.Contains("confirmDownloadSelection", embyController, StringComparison.Ordinal);
+        Assert.Contains("control.click()", jellyfinHtml, StringComparison.Ordinal);
+        Assert.Contains("control.click()", embyController, StringComparison.Ordinal);
+        Assert.DoesNotContain("AtsDownloadSelectionConfirm", jellyfinHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("AtsDownloadSelectionConfirm", embyController, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -345,6 +496,7 @@ public class ThemeFilePlannerTests
             Assert.Contains("https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync", content, StringComparison.Ordinal);
             Assert.Contains("Help / GitHub", content, StringComparison.Ordinal);
             Assert.Contains("AtsExtrasOptions", content, StringComparison.Ordinal);
+            Assert.Contains("AtsExtrasFileSuffix", content, StringComparison.Ordinal);
             Assert.Contains("AtsTagOptions", content, StringComparison.Ordinal);
             Assert.Contains("Interface Customization", content, StringComparison.Ordinal);
             Assert.Contains("AtsExtrasFormatPreview", content, StringComparison.Ordinal);
@@ -386,6 +538,7 @@ public class ThemeFilePlannerTests
         Assert.Contains("ConfigurationVersion", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("Ats' + profileName + mediaName + 'VolumeSlider", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("Ats' + profileName + mediaName + 'Mute", jellyfinPage, StringComparison.Ordinal);
+        Assert.Contains("Ats' + profileName + mediaName + 'UseAsTheme", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("syncConditionalSettings", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("syncSettingsDirty", jellyfinPage, StringComparison.Ordinal);
         Assert.Contains("resetSettingsDefaults", jellyfinPage, StringComparison.Ordinal);
@@ -404,6 +557,7 @@ public class ThemeFilePlannerTests
         Assert.Contains("ConfigurationVersion", embyController, StringComparison.Ordinal);
         Assert.Contains("Ats' + profileName + mediaName + 'VolumeSlider", embyController, StringComparison.Ordinal);
         Assert.Contains("Ats' + profileName + mediaName + 'Mute", embyController, StringComparison.Ordinal);
+        Assert.Contains("Ats' + profileName + mediaName + 'UseAsTheme", embyController, StringComparison.Ordinal);
         Assert.Contains("syncConditionalSettings", embyController, StringComparison.Ordinal);
         Assert.Contains("syncSettingsDirty", embyController, StringComparison.Ordinal);
         Assert.Contains("resetSettingsDefaults", embyController, StringComparison.Ordinal);

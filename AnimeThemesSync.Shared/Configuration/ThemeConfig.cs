@@ -10,6 +10,12 @@ namespace AnimeThemesSync.Shared.Configuration
         private int _volume = 100;
 
         /// <summary>
+        /// Gets or sets a value indicating whether selected media should be saved as a server theme.
+        /// Video candidates can still be used for extras when this is disabled.
+        /// </summary>
+        public bool UseAsTheme { get; set; } = true;
+
+        /// <summary>
         /// Gets or sets the max number of themes to download. 0 to disable.
         /// </summary>
         public int MaxThemes

@@ -16,15 +16,31 @@ public sealed record ThemeFilePlan(
     string Url,
     bool IsVideo,
     int Order,
-    string ThemeKey);
+    string ThemeKey)
+{
+    /// <summary>
+    /// Gets a value indicating whether the downloaded source must be transcoded or remuxed.
+    /// </summary>
+    public bool RequiresTranscoding { get; init; }
+}
 
 /// <summary>
 /// Describes an extras file that should point at a downloaded theme video.
 /// </summary>
-/// <param name="SourcePath">The already downloaded video path.</param>
+/// <param name="SourcePath">The already downloaded video path, or null for a direct-download extra.</param>
 /// <param name="TargetPath">The extras path.</param>
-public sealed record ThemeExtraPlan(string SourcePath, string TargetPath)
+public sealed record ThemeExtraPlan(string? SourcePath, string TargetPath)
 {
+    /// <summary>
+    /// Gets the remote URL used when the extra is downloaded directly instead of linked from a theme video.
+    /// </summary>
+    public string? DownloadUrl { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether a directly downloaded extra must be remuxed to its fallback extension.
+    /// </summary>
+    public bool RequiresTranscoding { get; init; }
+
     /// <summary>
     /// Gets a stable key for this extras item across display-name format changes.
     /// </summary>

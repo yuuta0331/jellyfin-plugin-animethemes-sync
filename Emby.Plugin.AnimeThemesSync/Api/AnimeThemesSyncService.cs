@@ -51,6 +51,12 @@ public class DownloadAnimeThemesThemeRow : IReturn<ThemeDownloadExecutionResult>
     /// Gets or sets a value indicating whether existing files should be replaced.
     /// </summary>
     public bool Force { get; set; }
+
+    public bool? IncludeAudio { get; set; }
+
+    public bool? IncludeVideo { get; set; }
+
+    public bool? IncludeExtras { get; set; }
 }
 
 /// <summary>
@@ -205,6 +211,12 @@ public class StartAnimeThemesThemeDownloadJob : IReturn<ThemeDownloadJobStartRes
     public string RowId { get; set; } = string.Empty;
 
     public bool Force { get; set; }
+
+    public bool? IncludeAudio { get; set; }
+
+    public bool? IncludeVideo { get; set; }
+
+    public bool? IncludeExtras { get; set; }
 }
 
 [Route("/AnimeThemesSync/Jobs/{JobId}", "GET", Summary = "Gets an AnimeThemes download job status.")]
@@ -451,7 +463,15 @@ public class AnimeThemesSyncService : IService
     {
         try
         {
-            return _themeDownloader.DownloadThemeByRowIdAsync(request.ItemId, request.RowId, request.Force, CancellationToken.None).GetAwaiter().GetResult();
+            return _themeDownloader.DownloadThemeByRowIdAsync(
+                request.ItemId,
+                request.RowId,
+                request.Force,
+                null,
+                request.IncludeAudio,
+                request.IncludeVideo,
+                request.IncludeExtras,
+                CancellationToken.None).GetAwaiter().GetResult();
         }
         catch (InvalidOperationException ex)
         {
@@ -470,7 +490,15 @@ public class AnimeThemesSyncService : IService
     {
         return ThemeDownloadJobService.Start(
             "Downloading theme...",
-            (progress, cancellationToken) => _themeDownloader.DownloadThemeByRowIdAsync(request.ItemId, request.RowId, request.Force, progress, cancellationToken));
+            (progress, cancellationToken) => _themeDownloader.DownloadThemeByRowIdAsync(
+                request.ItemId,
+                request.RowId,
+                request.Force,
+                progress,
+                request.IncludeAudio,
+                request.IncludeVideo,
+                request.IncludeExtras,
+                cancellationToken));
     }
 
     public object Get(GetAnimeThemesDownloadJob request)

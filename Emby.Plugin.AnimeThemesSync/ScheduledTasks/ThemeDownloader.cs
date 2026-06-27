@@ -793,7 +793,7 @@ public class ThemeDownloader : IScheduledTask
         bool forceRedownload,
         CancellationToken cancellationToken)
     {
-        return await DownloadThemeByRowIdAsync(itemId, rowId, forceRedownload, null, cancellationToken).ConfigureAwait(false);
+        return await DownloadThemeByRowIdAsync(itemId, rowId, forceRedownload, null, null, null, null, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<ThemeDownloadExecutionResult> DownloadThemeByRowIdAsync(
@@ -801,6 +801,9 @@ public class ThemeDownloader : IScheduledTask
         string rowId,
         bool forceRedownload,
         IProgress<double>? progress,
+        bool? includeAudio,
+        bool? includeVideo,
+        bool? includeExtras,
         CancellationToken cancellationToken)
     {
         var config = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
@@ -822,15 +825,24 @@ public class ThemeDownloader : IScheduledTask
         progress?.Report(20);
         var audioConfig = CreateThemeConfig(item, config, isVideo: false);
         var videoConfig = CreateThemeConfig(item, config, isVideo: true);
+        var selectedAudio = includeAudio ?? true;
+        var selectedVideo = includeVideo ?? true;
+        var selectedExtras = includeExtras ?? config.ExtrasEnabled;
+        if (!selectedAudio && !selectedVideo && !selectedExtras)
+        {
+            throw new InvalidOperationException("At least one theme output must be selected.");
+        }
+
         var plan = ThemeFilePlanner.BuildSingleCandidatePlan(
             selection.Anime,
             selection.Candidate,
             selection.Order,
             item.Path,
-            includeAudio: true,
-            includeVideo: true,
-            includeExtras: config.ExtrasEnabled,
-            extrasFileNameFormat: config.ExtrasFileNameFormat);
+            includeAudio: selectedAudio,
+            includeVideo: selectedVideo,
+            includeExtras: selectedExtras,
+            extrasFileNameFormat: config.ExtrasFileNameFormat,
+            extrasFileSuffix: config.ExtrasFileSuffix);
 
         MigrateExtraFiles(plan.ExtraFiles, forceRedownload || config.ForceRedownload);
         var pendingMedia = plan.MediaFiles
@@ -853,7 +865,7 @@ public class ThemeDownloader : IScheduledTask
             }
 
             _logger.LogInformation("Downloading AnimeThemes row media [{ItemName}] {Filename}", item.Name, Path.GetFileName(file.Path));
-            await DownloadFile(file.Url, file.Path, file.IsVideo ? videoConfig.Volume : audioConfig.Volume, cancellationToken).ConfigureAwait(false);
+            await DownloadFile(file.Url, file.Path, file.IsVideo ? videoConfig.Volume : audioConfig.Volume, file.IsVideo, file.RequiresTranscoding, cancellationToken).ConfigureAwait(false);
             _dataStore.UpsertThemeFile(item.Id.ToString("D"), file.ThemeKey, file.IsVideo ? "video" : "audio", file.Path);
             downloadsCompleted++;
             finishedSteps++;
@@ -868,11 +880,30 @@ public class ThemeDownloader : IScheduledTask
             extrasPlanned++;
             try
             {
-                var result = ThemeExtrasFileService.EnsureExtraFileDetailed(
-                    extra.SourcePath,
-                    extra.TargetPath,
-                    config.ExtrasLinkMode,
-                    forceRedownload || config.ForceRedownload);
+                ThemeExtraFileResult result;
+                if (!string.IsNullOrWhiteSpace(extra.SourcePath))
+                {
+                    result = ThemeExtrasFileService.EnsureExtraFileDetailed(
+                        extra.SourcePath,
+                        extra.TargetPath,
+                        config.ExtrasLinkMode,
+                        forceRedownload || config.ForceRedownload);
+                }
+                else if (!string.IsNullOrWhiteSpace(extra.DownloadUrl))
+                {
+                    await DownloadFile(extra.DownloadUrl, extra.TargetPath, videoConfig.Volume, isVideo: true, requiresTranscoding: extra.RequiresTranscoding, cancellationToken).ConfigureAwait(false);
+                    result = new ThemeExtraFileResult("downloaded");
+                }
+                else
+                {
+                    result = new ThemeExtraFileResult("missing-source");
+                }
+
+                if (string.Equals(result.Action, "missing-source", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new FileNotFoundException("The source theme video for the extra was not found.", extra.SourcePath);
+                }
+
                 if (string.Equals(result.Action, "skipped", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -935,10 +966,7 @@ public class ThemeDownloader : IScheduledTask
         }
 
         ValidateLocalMediaPath(item.Path, path);
-        var extension = Path.GetExtension(path);
-        var contentType = extension.Equals(".mp3", StringComparison.OrdinalIgnoreCase)
-            ? "audio/mpeg"
-            : "video/webm";
+        var contentType = ThemeFilePlanner.GetMediaContentType(path);
         return new ThemeLocalMediaResult(path, contentType, Path.GetFileName(path));
     }
 
@@ -1006,9 +1034,7 @@ public class ThemeDownloader : IScheduledTask
 
     private static bool IsSupportedThemeFile(string path)
     {
-        var extension = Path.GetExtension(path);
-        return extension.Equals(".webm", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".mp3", StringComparison.OrdinalIgnoreCase);
+        return ThemeFilePlanner.IsSupportedMediaExtension(Path.GetExtension(path));
     }
 
     private BaseItem GetSupportedItem(Guid itemId)
@@ -1061,9 +1087,7 @@ public class ThemeDownloader : IScheduledTask
             throw new InvalidOperationException("The requested local media path is outside the library item.");
         }
 
-        var extension = Path.GetExtension(fullPath);
-        if (!extension.Equals(".webm", StringComparison.OrdinalIgnoreCase) &&
-            !extension.Equals(".mp3", StringComparison.OrdinalIgnoreCase))
+        if (!ThemeFilePlanner.IsSupportedMediaExtension(Path.GetExtension(fullPath)))
         {
             throw new InvalidOperationException("The requested local media type is not supported.");
         }
@@ -1328,7 +1352,7 @@ public class ThemeDownloader : IScheduledTask
         _logger.LogInformation("=== Phase 1: Resolving themes for {Count} items ===", items.Count);
 
         var allDownloads = new List<(ThemeFilePlan File, int Volume, string ItemName, Guid ItemId)>();
-        var allExtras = new List<(ThemeExtraPlan Extra, string ItemName, Guid ItemId)>();
+        var allExtras = new List<(ThemeExtraPlan Extra, string ItemName, Guid ItemId, int VideoVolume)>();
         var cleanupTasks = new List<(string Directory, HashSet<string> DesiredFiles, List<AnimeThemesTheme> Themes)>();
 
         for (var i = 0; i < items.Count; i++)
@@ -1364,7 +1388,7 @@ public class ThemeDownloader : IScheduledTask
                     {
                         if (forceRedownload || config.ForceRedownload || !_fileSystem.FileExists(extra.TargetPath))
                         {
-                            allExtras.Add((extra, itemName, item.Id));
+                            allExtras.Add((extra, itemName, item.Id, videoConfig.Volume));
                         }
                     }
                 }
@@ -1425,7 +1449,7 @@ public class ThemeDownloader : IScheduledTask
                                 try
                                 {
                                     _logger.LogDebug("Downloading [{ItemName}] {Filename}...", dl.ItemName, Path.GetFileName(dl.File.Path));
-                                    await DownloadFile(dl.File.Url, dl.File.Path, dl.Volume, cancellationToken).ConfigureAwait(false);
+                                    await DownloadFile(dl.File.Url, dl.File.Path, dl.Volume, dl.File.IsVideo, dl.File.RequiresTranscoding, cancellationToken).ConfigureAwait(false);
                                     _dataStore.UpsertThemeFile(dl.ItemId.ToString("D"), dl.File.ThemeKey, dl.File.IsVideo ? "video" : "audio", dl.File.Path);
                                     _ = Interlocked.Increment(ref completedDownloads);
                                     _logger.LogInformation("Downloaded [{ItemName}] {Filename}", dl.ItemName, Path.GetFileName(dl.File.Path));
@@ -1469,11 +1493,29 @@ public class ThemeDownloader : IScheduledTask
         {
             try
             {
-                var result = ThemeExtrasFileService.EnsureExtraFileDetailed(
-                    extra.Extra.SourcePath,
-                    extra.Extra.TargetPath,
-                    config.ExtrasLinkMode,
-                    config.ForceRedownload);
+                ThemeExtraFileResult result;
+                if (!string.IsNullOrWhiteSpace(extra.Extra.SourcePath))
+                {
+                    result = ThemeExtrasFileService.EnsureExtraFileDetailed(
+                        extra.Extra.SourcePath,
+                        extra.Extra.TargetPath,
+                        config.ExtrasLinkMode,
+                        config.ForceRedownload);
+                }
+                else if (!string.IsNullOrWhiteSpace(extra.Extra.DownloadUrl))
+                {
+                    await DownloadFile(extra.Extra.DownloadUrl, extra.Extra.TargetPath, extra.VideoVolume, isVideo: true, requiresTranscoding: extra.Extra.RequiresTranscoding, cancellationToken).ConfigureAwait(false);
+                    result = new ThemeExtraFileResult("downloaded");
+                }
+                else
+                {
+                    result = new ThemeExtraFileResult("missing-source");
+                }
+
+                if (string.Equals(result.Action, "missing-source", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new FileNotFoundException("The source theme video for the extra was not found.", extra.Extra.SourcePath);
+                }
 
                 ThemeExtrasManifestService.UpdateExtraFile(extra.Extra);
                 _dataStore.UpsertThemeFile(extra.ItemId.ToString("D"), extra.Extra.Key, "extra", extra.Extra.TargetPath);
@@ -1605,6 +1647,7 @@ public class ThemeDownloader : IScheduledTask
         var themeConfig = isVideo ? mediaConfig.Video : mediaConfig.Audio;
         return new ThemeConfig
         {
+            UseAsTheme = themeConfig.UseAsTheme,
             MaxThemes = themeConfig.MaxThemes,
             Volume = themeConfig.Volume,
             IgnoreOp = themeConfig.IgnoreOp,
@@ -1649,7 +1692,7 @@ public class ThemeDownloader : IScheduledTask
         var plans = new List<ThemeOutputPlan>();
         if (anime?.AnimeThemes != null)
         {
-            plans.Add(ThemeFilePlanner.BuildPlan(anime, item.Path, audioConfig, videoConfig, config?.ExtrasEnabled ?? false, config?.ExtrasFileNameFormat));
+            plans.Add(ThemeFilePlanner.BuildPlan(anime, item.Path, audioConfig, videoConfig, config?.ExtrasEnabled ?? false, config?.ExtrasFileNameFormat, config?.ExtrasFileSuffix ?? ExtrasFileSuffix.Other));
         }
         else
         {
@@ -1707,7 +1750,7 @@ public class ThemeDownloader : IScheduledTask
                 season.Name,
                 seasonAnime.Name ?? seasonAnime.Slug ?? "Unknown");
             var outputPath = ShouldOutputMappedSeasonToSeriesRoot(season, seasonMapping) ? series.Path : season.Path;
-            plans.Add(ThemeFilePlanner.BuildPlan(seasonAnime, outputPath, audioConfig, videoConfig, config?.ExtrasEnabled ?? false, config?.ExtrasFileNameFormat));
+            plans.Add(ThemeFilePlanner.BuildPlan(seasonAnime, outputPath, audioConfig, videoConfig, config?.ExtrasEnabled ?? false, config?.ExtrasFileNameFormat, config?.ExtrasFileSuffix ?? ExtrasFileSuffix.Other));
         }
 
         if (plans.Count == 0)
@@ -2446,7 +2489,8 @@ public class ThemeDownloader : IScheduledTask
                     includeAudio: true,
                     includeVideo: true,
                     includeExtras: config.ExtrasEnabled,
-                    extrasFileNameFormat: config.ExtrasFileNameFormat);
+                    extrasFileNameFormat: config.ExtrasFileNameFormat,
+                    extrasFileSuffix: config.ExtrasFileSuffix);
                 return BuildBrowserRow(
                     c,
                     order,
@@ -2577,7 +2621,13 @@ public class ThemeDownloader : IScheduledTask
     /// <summary>
     /// Downloads a file from a given URL to a specified path.
     /// </summary>
-    private async Task DownloadFile(string url, string path, int volume, CancellationToken cancellationToken)
+    private async Task DownloadFile(
+        string url,
+        string path,
+        int volume,
+        bool isVideo,
+        bool requiresTranscoding,
+        CancellationToken cancellationToken)
     {
         var config = Plugin.Instance?.Configuration;
         var timeoutSeconds = config?.DownloadTimeoutSeconds > 0 ? config.DownloadTimeoutSeconds : 600;
@@ -2589,6 +2639,12 @@ public class ThemeDownloader : IScheduledTask
         }
 
         client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory) && !_fileSystem.DirectoryExists(directory))
+        {
+            _ = Directory.CreateDirectory(directory);
+        }
 
         var tempPath = path + ".part";
 
@@ -2604,7 +2660,7 @@ public class ThemeDownloader : IScheduledTask
             else
             {
                 _logger.LogError("Download failed with status code {StatusCode} for {Url}", response.StatusCode, url);
-                return;
+                throw new HttpRequestException($"Download failed with status code {(int)response.StatusCode} for {url}.");
             }
         }
         catch (Exception)
@@ -2613,9 +2669,7 @@ public class ThemeDownloader : IScheduledTask
             throw;
         }
 
-        var extension = Path.GetExtension(path).ToLowerInvariant();
-        var isVideo = extension == ".webm";
-        var needsConversion = !isVideo && !url.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
+        var needsConversion = requiresTranscoding;
         var needsVolume = volume < 100;
 
         if (needsConversion || needsVolume)
@@ -2688,7 +2742,7 @@ public class ThemeDownloader : IScheduledTask
             else if (volume < 100)
             {
                 var volStr = (volume / 100.0).ToString("F2", CultureInfo.InvariantCulture);
-                args = $"-i \"{inputPath}\" -c:v copy -filter:a \"volume={volStr}\" -c:a libvorbis \"{outputPath}\"";
+                args = $"-i \"{inputPath}\" -c:v copy -filter:a \"volume={volStr}\" \"{outputPath}\"";
             }
             else
             {
