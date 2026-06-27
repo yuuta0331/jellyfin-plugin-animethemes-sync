@@ -33,6 +33,7 @@ public static class ThemeFilePlanner
     private static readonly Regex LegacyPluginFileRegex = new(@"^(OP|ED)\d+v?\d*(-video)?\.[A-Za-z0-9]{1,8}$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex CanonicalPluginFileRegex = new(@"^\d{2}-(OP|ED)\d+v?\d*( - .+)?\.[A-Za-z0-9]{1,8}$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex DefaultExtrasPluginFileRegex = new(@"^\d{2}\. (OP|ED)\d+v?\d*( - .+)?(?:-(?:other|short|scene))?\.[A-Za-z0-9]{1,8}$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex SeasonFilePrefixRegex = new(@"^Season \d{2} - ", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
     /// Builds all desired media and extras files for an item.
@@ -44,6 +45,8 @@ public static class ThemeFilePlanner
     /// <param name="extrasEnabled">Whether browseable extras should be planned.</param>
     /// <param name="extrasFileNameFormat">The browseable extras display-name format.</param>
     /// <param name="extrasFileSuffix">The server-recognized extras filename suffix.</param>
+    /// <param name="fileNamePrefix">An optional prefix for every planned filename.</param>
+    /// <param name="outputTarget">The logical owner and physical output root metadata.</param>
     /// <returns>The output plan for theme media and extras.</returns>
     public static ThemeOutputPlan BuildPlan(
         AnimeThemesAnime anime,
@@ -52,7 +55,9 @@ public static class ThemeFilePlanner
         ThemeConfig videoConfig,
         bool extrasEnabled,
         string? extrasFileNameFormat = null,
-        ExtrasFileSuffix extrasFileSuffix = ExtrasFileSuffix.Other)
+        ExtrasFileSuffix extrasFileSuffix = ExtrasFileSuffix.Other,
+        string? fileNamePrefix = null,
+        ThemeOutputTarget? outputTarget = null)
     {
         var mediaFiles = new List<ThemeFilePlan>();
         var extraFiles = new List<ThemeExtraPlan>();
@@ -66,8 +71,8 @@ public static class ThemeFilePlanner
         var themeMusicPath = Path.Combine(itemPath, "theme-music");
         var extrasPath = Path.Combine(itemPath, "extras");
 
-        var videoFiles = BuildMediaPlans(anime.AnimeThemes, videoConfig, backdropsPath, isVideo: true);
-        var audioFiles = BuildMediaPlans(anime.AnimeThemes, audioConfig, themeMusicPath, isVideo: false);
+        var videoFiles = BuildMediaPlans(anime.AnimeThemes, videoConfig, backdropsPath, isVideo: true, fileNamePrefix, outputTarget);
+        var audioFiles = BuildMediaPlans(anime.AnimeThemes, audioConfig, themeMusicPath, isVideo: false, fileNamePrefix, outputTarget);
 
         if (videoConfig.UseAsTheme)
         {
@@ -85,10 +90,10 @@ public static class ThemeFilePlanner
             foreach (var item in videoFiles)
             {
                 var extrasFileName = EnsureUniqueFileName(
-                    BuildExtrasFileName(item.Candidate, item.File.Order, Path.GetExtension(item.File.Path), extrasFileNameFormat, extrasFileSuffix),
+                    PrefixFileName(BuildExtrasFileName(item.Candidate, item.File.Order, Path.GetExtension(item.File.Path), extrasFileNameFormat, extrasFileSuffix), fileNamePrefix),
                     plannedExtraNames);
                 var sourcePath = videoConfig.UseAsTheme ? item.File.Path : null;
-                extraFiles.Add(BuildExtraPlan(sourcePath, item.File.Url, item.File.RequiresTranscoding, extrasPath, extrasFileName, item.Candidate, item.File.Order));
+                extraFiles.Add(BuildExtraPlan(sourcePath, item.File.Url, item.File.RequiresTranscoding, extrasPath, extrasFileName, item.Candidate, item.File.Order, fileNamePrefix, outputTarget));
             }
         }
 
@@ -160,7 +165,9 @@ public static class ThemeFilePlanner
         bool includeVideo,
         bool includeExtras,
         string? extrasFileNameFormat = null,
-        ExtrasFileSuffix extrasFileSuffix = ExtrasFileSuffix.Other)
+        ExtrasFileSuffix extrasFileSuffix = ExtrasFileSuffix.Other,
+        string? fileNamePrefix = null,
+        ThemeOutputTarget? outputTarget = null)
     {
         var mediaFiles = new List<ThemeFilePlan>();
         var extraFiles = new List<ThemeExtraPlan>();
@@ -179,13 +186,14 @@ public static class ThemeFilePlanner
         if (includeVideo && !string.IsNullOrWhiteSpace(candidate.Video.Link))
         {
             videoPlan = new ThemeFilePlan(
-                Path.Combine(backdropsPath, BuildVideoFileName(candidate, order, themeKey, videoExtension)),
+                Path.Combine(backdropsPath, PrefixFileName(BuildVideoFileName(candidate, order, themeKey, videoExtension), fileNamePrefix)),
                 candidate.Video.Link!,
                 true,
                 order,
                 themeKey)
             {
-                RequiresTranscoding = sourceVideoExtension == null
+                RequiresTranscoding = sourceVideoExtension == null,
+                OutputTarget = outputTarget
             };
             mediaFiles.Add(videoPlan);
         }
@@ -199,20 +207,21 @@ public static class ThemeFilePlanner
                 : null;
             var audioExtension = sourceAudioExtension ?? ".mp3";
             mediaFiles.Add(new ThemeFilePlan(
-                Path.Combine(themeMusicPath, BuildAudioFileName(candidate, order, themeKey, audioExtension)),
+                Path.Combine(themeMusicPath, PrefixFileName(BuildAudioFileName(candidate, order, themeKey, audioExtension), fileNamePrefix)),
                 audioUrl!,
                 false,
                 order,
                 themeKey)
             {
-                RequiresTranscoding = !separateAudio || sourceAudioExtension == null
+                RequiresTranscoding = !separateAudio || sourceAudioExtension == null,
+                OutputTarget = outputTarget
             });
         }
 
         if (includeExtras && !string.IsNullOrWhiteSpace(candidate.Video.Link))
         {
-            var extrasFileName = BuildExtrasFileName(candidate, order, videoExtension, extrasFileNameFormat, extrasFileSuffix);
-            extraFiles.Add(BuildExtraPlan(videoPlan?.Path, candidate.Video.Link!, sourceVideoExtension == null, extrasPath, extrasFileName, candidate, order));
+            var extrasFileName = PrefixFileName(BuildExtrasFileName(candidate, order, videoExtension, extrasFileNameFormat, extrasFileSuffix), fileNamePrefix);
+            extraFiles.Add(BuildExtraPlan(videoPlan?.Path, candidate.Video.Link!, sourceVideoExtension == null, extrasPath, extrasFileName, candidate, order, fileNamePrefix, outputTarget));
         }
 
         return new ThemeOutputPlan(mediaFiles, extraFiles, anime.AnimeThemes ?? new List<AnimeThemesTheme>());
@@ -226,7 +235,14 @@ public static class ThemeFilePlanner
             planList.SelectMany(p => p.ExtraFiles).ToList(),
             planList.SelectMany(p => p.Themes).ToList())
         {
-            CleanupPlans = planList.SelectMany(p => p.CleanupPlans).ToList()
+            CleanupPlans = planList
+                .SelectMany(p => p.CleanupPlans)
+                .GroupBy(p => p.Directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparer.OrdinalIgnoreCase)
+                .Select(group => new ThemeCleanupPlan(
+                    group.First().Directory,
+                    group.SelectMany(p => p.DesiredFiles).ToHashSet(StringComparer.OrdinalIgnoreCase),
+                    group.SelectMany(p => p.Themes).ToList()))
+                .ToList()
         };
 
         return merged;
@@ -273,6 +289,8 @@ public static class ThemeFilePlanner
         {
             return false;
         }
+
+        fileName = SeasonFilePrefixRegex.Replace(fileName, string.Empty, 1);
 
         if (fileName.StartsWith("AnimeThemes - ", StringComparison.OrdinalIgnoreCase))
         {
@@ -330,7 +348,9 @@ public static class ThemeFilePlanner
         List<AnimeThemesTheme> themes,
         ThemeConfig config,
         string targetDir,
-        bool isVideo)
+        bool isVideo,
+        string? fileNamePrefix,
+        ThemeOutputTarget? outputTarget)
     {
         var plans = new List<(ThemeFilePlan File, ScoredCandidate Candidate)>();
         if (config.MaxThemes <= 0)
@@ -377,10 +397,12 @@ public static class ThemeFilePlanner
             var fileName = isVideo
                 ? BuildVideoFileName(candidate, count, themeKey, extension)
                 : BuildAudioFileName(candidate, count, themeKey, extension);
+            fileName = PrefixFileName(fileName, fileNamePrefix);
 
             plans.Add((new ThemeFilePlan(Path.Combine(targetDir, fileName), link, isVideo, count, themeKey)
             {
-                RequiresTranscoding = sourceExtension == null
+                RequiresTranscoding = sourceExtension == null,
+                OutputTarget = outputTarget
             }, candidate));
         }
 
@@ -469,16 +491,18 @@ public static class ThemeFilePlanner
         string extrasPath,
         string extrasFileName,
         ScoredCandidate candidate,
-        int order)
+        int order,
+        string? fileNamePrefix,
+        ThemeOutputTarget? outputTarget)
     {
         var targetPath = Path.Combine(extrasPath, extrasFileName);
         var extension = Path.GetExtension(extrasFileName);
         var legacyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            BuildLegacyRichExtrasFileName(candidate, order, extension),
-            BuildLegacyRichExtrasFileName(candidate, order, ".webm"),
-            BuildExtrasFileName(candidate, order, extension, null, ExtrasFileSuffix.None),
-            BuildExtrasFileName(candidate, order, ".webm", null, ExtrasFileSuffix.None)
+            PrefixFileName(BuildLegacyRichExtrasFileName(candidate, order, extension), fileNamePrefix),
+            PrefixFileName(BuildLegacyRichExtrasFileName(candidate, order, ".webm"), fileNamePrefix),
+            PrefixFileName(BuildExtrasFileName(candidate, order, extension, null, ExtrasFileSuffix.None), fileNamePrefix),
+            PrefixFileName(BuildExtrasFileName(candidate, order, ".webm", null, ExtrasFileSuffix.None), fileNamePrefix)
         };
         legacyNames.Remove(extrasFileName);
 
@@ -487,8 +511,28 @@ public static class ThemeFilePlanner
             DownloadUrl = downloadUrl,
             RequiresTranscoding = requiresTranscoding,
             Key = BuildBrowserRowId(candidate),
-            LegacyTargetPaths = legacyNames.Select(name => Path.Combine(extrasPath, name)).ToArray()
+            LegacyTargetPaths = legacyNames.Select(name => Path.Combine(extrasPath, name)).ToArray(),
+            OutputTarget = outputTarget
         };
+    }
+
+    private static string PrefixFileName(string fileName, string? prefix)
+    {
+        if (string.IsNullOrWhiteSpace(prefix))
+        {
+            return fileName;
+        }
+
+        var sanitizedPrefix = SanitizeFileNamePart(prefix, fallback: string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(sanitizedPrefix))
+        {
+            return fileName;
+        }
+
+        sanitizedPrefix += " ";
+        var extension = Path.GetExtension(fileName);
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        return TruncateFileName(sanitizedPrefix + stem, extension, MaxExtrasFileNameLength);
     }
 
     private static string EnsureUniqueFileName(string fileName, HashSet<string> usedNames)

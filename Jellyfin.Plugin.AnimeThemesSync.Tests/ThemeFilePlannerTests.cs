@@ -210,6 +210,74 @@ public class ThemeFilePlannerTests
     }
 
     [Fact]
+    public void BuildPlans_ApplySeasonPrefixAndOutputTargetToEveryArtifact()
+    {
+        var anime = CreateAnime();
+        var seriesPath = Path.Combine("Media", "Bakemonogatari");
+        var target = new ThemeOutputTarget(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            seriesPath,
+            ThemeOutputScope.SeriesRoot,
+            true);
+
+        var plan = ThemeFilePlanner.BuildPlan(
+            anime,
+            target.OutputRootPath,
+            Enabled(1),
+            Enabled(1),
+            extrasEnabled: true,
+            fileNamePrefix: "Season 01 -",
+            outputTarget: target);
+        var candidate = ThemeFilePlanner.GetBrowserCandidates(anime.AnimeThemes!).First();
+        var single = ThemeFilePlanner.BuildSingleCandidatePlan(
+            anime,
+            candidate,
+            1,
+            target.OutputRootPath,
+            includeAudio: true,
+            includeVideo: true,
+            includeExtras: true,
+            fileNamePrefix: "Season 01 -",
+            outputTarget: target);
+
+        Assert.All(plan.MediaFiles, file =>
+        {
+            Assert.StartsWith("Season 01 - ", Path.GetFileName(file.Path), StringComparison.Ordinal);
+            Assert.Equal(target, file.OutputTarget);
+            Assert.True(ThemeFilePlanner.IsPluginOwnedFile(file.Path, anime.AnimeThemes!));
+        });
+        Assert.All(plan.ExtraFiles, file =>
+        {
+            Assert.StartsWith("Season 01 - ", Path.GetFileName(file.TargetPath), StringComparison.Ordinal);
+            Assert.Equal(target, file.OutputTarget);
+            Assert.True(ThemeFilePlanner.IsPluginOwnedFile(file.TargetPath, anime.AnimeThemes!));
+        });
+        Assert.All(single.MediaFiles, file => Assert.StartsWith("Season 01 - ", Path.GetFileName(file.Path), StringComparison.Ordinal));
+        Assert.StartsWith("Season 01 - ", Path.GetFileName(Assert.Single(single.ExtraFiles).TargetPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MergePlans_UnionsCleanupForSharedSeriesRoot()
+    {
+        var anime = CreateAnime();
+        var root = Path.Combine("Media", "Bakemonogatari");
+        var seriesPlan = ThemeFilePlanner.BuildPlan(anime, root, Enabled(1), Enabled(1), extrasEnabled: true);
+        var seasonPlan = ThemeFilePlanner.BuildPlan(
+            anime,
+            root,
+            Enabled(1),
+            Enabled(1),
+            extrasEnabled: true,
+            fileNamePrefix: "Season 01 -");
+
+        var merged = ThemeFilePlanner.MergePlans([seriesPlan, seasonPlan]);
+
+        Assert.Equal(3, merged.CleanupPlans.Count);
+        Assert.All(merged.CleanupPlans, cleanup => Assert.Equal(2, cleanup.DesiredFiles.Count));
+    }
+
+    [Fact]
     public void BuildPlan_ExtraOnly_DownloadsDirectlyAndPreservesSourceExtension()
     {
         var anime = CreateAnime();
@@ -879,6 +947,29 @@ public class ThemeFilePlannerTests
             Assert.DoesNotContain("seasonMappingResolveToken", content, StringComparison.Ordinal);
             Assert.DoesNotContain("groupHasContent", content, StringComparison.Ordinal);
             Assert.DoesNotContain("if (!value(row, 'AnimeThemesSlug', 'animeThemesSlug')) addChip(chips, 'Needs match', 'missing');", content, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void HostDownloaders_NormalizeSeasonOneOutputAndUseLogicalActionItem()
+    {
+        var root = FindRepositoryRoot();
+        var files = new[]
+        {
+            Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs")
+        };
+
+        foreach (var file in files)
+        {
+            var content = File.ReadAllText(file);
+            Assert.Contains("private ThemeOutputTarget? ResolveThemeOutputTarget", content, StringComparison.Ordinal);
+            Assert.Contains("return !season.IndexNumber.HasValue || season.IndexNumber.Value == 1;", content, StringComparison.Ordinal);
+            Assert.Contains("new ThemeOutputTarget(season.Id, series.Id, series.Path, ThemeOutputScope.SeriesRoot, true)", content, StringComparison.Ordinal);
+            Assert.Contains("var representativeSeason = seasonsWithPath.FirstOrDefault(IsSeriesRootSeason);", content, StringComparison.Ordinal);
+            Assert.Contains("fileNamePrefix = outputTarget.IsRedirected ? \"Season 01 -\" : null", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("ShouldOutputMappedSeasonToSeriesRoot", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("BuildPlan(anime, item.Path", content, StringComparison.Ordinal);
         }
     }
 

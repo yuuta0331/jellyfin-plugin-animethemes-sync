@@ -194,6 +194,80 @@ public sealed class AnimeThemesDataStoreTests
         }
     }
 
+    [Fact]
+    public void ThemeFiles_SchemaV2MigratesLogicalIdAndStoresOutputRoot()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(
+                store.DatabasePath,
+                "{\"SchemaVersion\":1,\"ThemeFiles\":[{\"ServerKind\":\"Test\",\"ItemId\":\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\",\"ThemeKey\":\"OP1\",\"FileKind\":\"video\",\"Path\":\"old.webm\"}]}");
+
+            store.EnsureInitialized();
+            var target = new ThemeOutputTarget(
+                Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+                Path.Combine(directory, "Series"),
+                ThemeOutputScope.SeriesRoot,
+                true);
+            store.UpsertThemeFile(target, "ED1", "audio", Path.Combine(target.OutputRootPath, "theme-music", "ED1.mp3"));
+            store.UpdateExtraFile(new ThemeExtraPlan(
+                string.Empty,
+                Path.Combine(target.OutputRootPath, "extras", "ED1-other.webm"))
+            {
+                Key = "extra-key",
+                OutputTarget = target
+            });
+
+            var json = File.ReadAllText(store.DatabasePath);
+            Assert.Contains("\"SchemaVersion\":2", json, StringComparison.Ordinal);
+            Assert.Contains("\"LogicalItemId\":\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"LogicalItemId\":\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"OutputRootItemId\":\"cccccccc-cccc-cccc-cccc-cccccccccccc\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"OutputScope\":\"SeriesRoot\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"Key\":\"extra-key\",\"LogicalItemId\":\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\"", json, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void ExtrasTracking_DoesNotMigrateLegacyFileAcrossOutputRoots()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var legacyPath = Path.Combine(directory, "Series", "Season 01", "extras", "legacy.webm");
+            store.UpdateExtraFile(new ThemeExtraPlan(string.Empty, legacyPath) { Key = "theme-key" });
+
+            var target = new ThemeOutputTarget(
+                Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+                Path.Combine(directory, "Series"),
+                ThemeOutputScope.SeriesRoot,
+                true);
+            var newPlan = new ThemeExtraPlan(
+                string.Empty,
+                Path.Combine(target.OutputRootPath, "extras", "Season 01 - new.webm"))
+            {
+                Key = "theme-key",
+                OutputTarget = target
+            };
+
+            Assert.Null(store.FindPreviousExtraPath(newPlan));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
     private static BrowserItemRecord CreateBrowserItem(string id, string name, string itemType, int videos, int songs, int extras, long bytes)
     {
         return new BrowserItemRecord

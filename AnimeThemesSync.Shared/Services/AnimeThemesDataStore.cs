@@ -14,7 +14,7 @@ namespace AnimeThemesSync.Shared.Services;
 /// </summary>
 public sealed class AnimeThemesDataStore
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
     private const int DefaultLimit = 80;
     private const int MaxLimit = 100;
     private readonly IAnimeThemesDataPathProvider _pathProvider;
@@ -252,7 +252,12 @@ public sealed class AnimeThemesDataStore
         lock (_syncRoot)
         {
             return LoadDocument().ExtraFiles
-                .FirstOrDefault(i => IsCurrentServer(i.ServerKind) && string.Equals(i.Key, plan.Key, StringComparison.OrdinalIgnoreCase))
+                .Where(i => IsCurrentServer(i.ServerKind) && string.Equals(i.Key, plan.Key, StringComparison.OrdinalIgnoreCase))
+                .Where(i => plan.OutputTarget == null ||
+                            string.Equals(i.LogicalItemId, plan.OutputTarget.LogicalItemId.ToString("D"), StringComparison.OrdinalIgnoreCase) ||
+                            (string.IsNullOrWhiteSpace(i.LogicalItemId) && SameDirectory(i.TargetPath, plan.TargetPath)))
+                .OrderByDescending(i => plan.OutputTarget != null && string.Equals(i.LogicalItemId, plan.OutputTarget.LogicalItemId.ToString("D"), StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault()
                 ?.TargetPath;
         }
     }
@@ -277,11 +282,20 @@ public sealed class AnimeThemesDataStore
         lock (_syncRoot)
         {
             var document = LoadDocument();
-            document.ExtraFiles.RemoveAll(i => IsCurrentServer(i.ServerKind) && string.Equals(i.Key, plan.Key, StringComparison.OrdinalIgnoreCase));
+            var logicalItemId = plan.OutputTarget?.LogicalItemId.ToString("D");
+            document.ExtraFiles.RemoveAll(i =>
+                IsCurrentServer(i.ServerKind) &&
+                string.Equals(i.Key, plan.Key, StringComparison.OrdinalIgnoreCase) &&
+                (string.Equals(i.LogicalItemId, logicalItemId, StringComparison.OrdinalIgnoreCase) ||
+                 (string.IsNullOrWhiteSpace(i.LogicalItemId) && string.Equals(i.TargetPath, plan.TargetPath, StringComparison.OrdinalIgnoreCase))));
             document.ExtraFiles.Add(new StoredExtraFile
             {
                 ServerKind = ServerKind,
                 Key = plan.Key,
+                LogicalItemId = logicalItemId,
+                OutputRootItemId = plan.OutputTarget?.OutputRootItemId.ToString("D"),
+                OutputRootPath = plan.OutputTarget?.OutputRootPath,
+                OutputScope = plan.OutputTarget?.Scope.ToString(),
                 TargetPath = plan.TargetPath,
                 FileName = fileName,
                 FileSize = info.Exists ? info.Length : null,
@@ -341,21 +355,25 @@ public sealed class AnimeThemesDataStore
     /// <summary>
     /// Upserts one ThemeFiles row.
     /// </summary>
-    public void UpsertThemeFile(string itemId, string themeKey, string fileKind, string path)
+    public void UpsertThemeFile(ThemeOutputTarget outputTarget, string themeKey, string fileKind, string path)
     {
+        var logicalItemId = outputTarget.LogicalItemId.ToString("D");
         var info = new FileInfo(path);
         lock (_syncRoot)
         {
             var document = LoadDocument();
             document.ThemeFiles.RemoveAll(i =>
                 IsCurrentServer(i.ServerKind) &&
-                string.Equals(i.ItemId, itemId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(i.LogicalItemId, logicalItemId, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(i.ThemeKey, themeKey, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(i.FileKind, fileKind, StringComparison.OrdinalIgnoreCase));
             document.ThemeFiles.Add(new StoredThemeFile
             {
                 ServerKind = ServerKind,
-                ItemId = itemId,
+                LogicalItemId = logicalItemId,
+                OutputRootItemId = outputTarget.OutputRootItemId.ToString("D"),
+                OutputRootPath = outputTarget.OutputRootPath,
+                OutputScope = outputTarget.Scope.ToString(),
                 ThemeKey = themeKey,
                 FileKind = fileKind,
                 Path = path,
@@ -392,6 +410,14 @@ public sealed class AnimeThemesDataStore
             _cache.ThemeFiles ??= [];
             _cache.LibrarySyncState ??= [];
             _cache.ServerCacheState ??= [];
+            foreach (var themeFile in _cache.ThemeFiles)
+            {
+                if (string.IsNullOrWhiteSpace(themeFile.LogicalItemId))
+                {
+                    themeFile.LogicalItemId = themeFile.ItemId ?? string.Empty;
+                }
+            }
+
             return _cache;
         }
         catch (JsonException)
@@ -634,6 +660,18 @@ public sealed class AnimeThemesDataStore
         return value?.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
+    private static bool SameDirectory(string? leftPath, string? rightPath)
+    {
+        if (string.IsNullOrWhiteSpace(leftPath) || string.IsNullOrWhiteSpace(rightPath))
+        {
+            return false;
+        }
+
+        var leftDirectory = Path.GetDirectoryName(Path.GetFullPath(leftPath))?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var rightDirectory = Path.GetDirectoryName(Path.GetFullPath(rightPath))?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(leftDirectory, rightDirectory, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static DateTimeOffset? ParseDate(string? value)
     {
         return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed)
@@ -673,6 +711,14 @@ public sealed class AnimeThemesDataStore
         public string ServerKind { get; set; } = string.Empty;
 
         public string Key { get; set; } = string.Empty;
+
+        public string? LogicalItemId { get; set; }
+
+        public string? OutputRootItemId { get; set; }
+
+        public string? OutputRootPath { get; set; }
+
+        public string? OutputScope { get; set; }
 
         public string TargetPath { get; set; } = string.Empty;
 
@@ -752,7 +798,16 @@ public sealed class AnimeThemesDataStore
     {
         public string ServerKind { get; set; } = string.Empty;
 
-        public string ItemId { get; set; } = string.Empty;
+        public string LogicalItemId { get; set; } = string.Empty;
+
+        public string? OutputRootItemId { get; set; }
+
+        public string? OutputRootPath { get; set; }
+
+        public string? OutputScope { get; set; }
+
+        // Schema v1 compatibility. New writes use LogicalItemId.
+        public string? ItemId { get; set; }
 
         public string ThemeKey { get; set; } = string.Empty;
 

@@ -19,6 +19,11 @@ public sealed record ThemeFilePlan(
     string ThemeKey)
 {
     /// <summary>
+    /// Gets the logical owner and physical output root for this file.
+    /// </summary>
+    public ThemeOutputTarget? OutputTarget { get; init; }
+
+    /// <summary>
     /// Gets a value indicating whether the downloaded source must be transcoded or remuxed.
     /// </summary>
     public bool RequiresTranscoding { get; init; }
@@ -31,6 +36,11 @@ public sealed record ThemeFilePlan(
 /// <param name="TargetPath">The extras path.</param>
 public sealed record ThemeExtraPlan(string? SourcePath, string TargetPath)
 {
+    /// <summary>
+    /// Gets the logical owner and physical output root for this file.
+    /// </summary>
+    public ThemeOutputTarget? OutputTarget { get; init; }
+
     /// <summary>
     /// Gets the remote URL used when the extra is downloaded directly instead of linked from a theme video.
     /// </summary>

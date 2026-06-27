@@ -93,8 +93,8 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 2. タイトルと任意の年でAnimeThemesを検索
 3. 候補を選択してOP/EDをプレビューし、`Save mapping` または `Save & Download` を実行
 
-`Save & Download` はマッピング保存後にそのSeason itemのオンデマンドダウンロードを実行し、対象Seasonの `theme-music` / `backdrops` に出力します。設定画面の `SeasonThemeMappings` JSONはAdvanced用途のフォールバックとして引き続き利用できます。
-`Enable Season Theme Downloads` が無効の場合、Seasonマッピングは保存されたままですが、Seasonフォルダへの出力とSeason itemのオンデマンドダウンロードは再度有効化するまでスキップされます。
+`Save & Download` はマッピング保存後にそのSeason itemのオンデマンドダウンロードを実行します。Season 1（および番号なしの通常Season）の `backdrops` / `theme-music` / `extras` は親Seriesフォルダへ、Season 2以降は各Seasonフォルダへ出力します。Season 1がSeriesとは異なるAnimeThemes entryへ明示的に割り当てられた場合は、衝突を避けるためファイル名に `Season 01 - ` prefixを付けます。既存のSeason 1フォルダ内のファイルは自動移動・自動削除しません。設定画面の `SeasonThemeMappings` JSONはAdvanced用途のフォールバックとして引き続き利用できます。
+`Enable Season Theme Downloads` が無効の場合、Seasonマッピングは保存されたままですが、Season出力とSeason itemのオンデマンドダウンロードは再度有効化するまでスキップされます。
 
 ```json
 {
