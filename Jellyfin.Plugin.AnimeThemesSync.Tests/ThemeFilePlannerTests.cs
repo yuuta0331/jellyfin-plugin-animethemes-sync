@@ -1161,6 +1161,66 @@ public class ThemeFilePlannerTests
         }
     }
 
+    [Fact]
+    public void BrowserPages_SynchronizeMutationsAndReleaseMediaBeforeDelete()
+    {
+        var root = FindRepositoryRoot();
+        var scripts = new[]
+        {
+            File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html")),
+            File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js"))
+        };
+
+        foreach (var script in scripts)
+        {
+            Assert.Contains("function scheduleUiRefresh(options)", script, StringComparison.Ordinal);
+            Assert.Contains("if (terminalTransition) scheduleUiRefresh();", script, StringComparison.Ordinal);
+            Assert.Contains("token !== state.browserRequestToken", script, StringComparison.Ordinal);
+            Assert.Contains("loadItems(false, { silent: true })", script, StringComparison.Ordinal);
+            Assert.Contains("normalizeApiError", script, StringComparison.Ordinal);
+            Assert.Contains("response.text()", script, StringComparison.Ordinal);
+            Assert.Contains("function releasePlayerMedia()", script, StringComparison.Ordinal);
+            Assert.Contains("media.removeAttribute('src')", script, StringComparison.Ordinal);
+            Assert.Contains("restoreThemeTarget(row, outcome.target", script, StringComparison.Ordinal);
+            Assert.DoesNotContain("dismissBtn.textContent = '\\u00d7'", script, StringComparison.Ordinal);
+        }
+
+        var pages = new[]
+        {
+            File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html")),
+            File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"))
+        };
+        foreach (var page in pages)
+        {
+            Assert.Contains(".ats-dm-item-dismiss::before", page, StringComparison.Ordinal);
+            Assert.Contains("translate(-50%, -50%) rotate(45deg)", page, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void HostDownloaders_RefreshParentSeriesAndRetryLockedDeletes()
+    {
+        var root = FindRepositoryRoot();
+        var downloaderFiles = new[]
+        {
+            Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs"),
+            Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs")
+        };
+
+        foreach (var file in downloaderFiles)
+        {
+            var content = File.ReadAllText(file);
+            Assert.Contains("item = FindSeriesForSeason(season) ?? item;", content, StringComparison.Ordinal);
+            Assert.Contains("RefreshBrowserCacheForItem(series);", content, StringComparison.Ordinal);
+            Assert.Contains("FileDeleteRetryService.DeleteAsync", content, StringComparison.Ordinal);
+        }
+
+        var retryService = File.ReadAllText(Path.Combine(root, "AnimeThemesSync.Shared", "Services", "FileDeleteRetryService.cs"));
+        Assert.Contains("[250, 500, 1000, 2000]", retryService, StringComparison.Ordinal);
+        Assert.Contains("catch (IOException ex)", retryService, StringComparison.Ordinal);
+        Assert.Contains("throw new InvalidOperationException", retryService, StringComparison.Ordinal);
+    }
+
     private static ThemeConfig Enabled(int maxThemes)
     {
         return new ThemeConfig

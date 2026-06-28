@@ -298,6 +298,11 @@ public sealed class ThemeDownloader : IScheduledTask
 
     private void RefreshBrowserCacheForItem(BaseItem item)
     {
+        if (item is Season season)
+        {
+            item = FindSeriesForSeason(season) ?? item;
+        }
+
         if (item is not Series and not Movie)
         {
             return;
@@ -575,6 +580,7 @@ public sealed class ThemeDownloader : IScheduledTask
             [new SeasonThemeMappingChange(BuildSeasonThemeMappingTarget(series, season), mapping, request.Locked ? "Manual" : "Auto")]);
         var result = BuildSeasonMappingRow(series, season);
         _seasonFinderStore.UpsertRow(BuildSeasonFinderRecord(series, season, ResolveLibraryId(series)));
+        RefreshBrowserCacheForItem(series);
         return await Task.FromResult(result).ConfigureAwait(false);
     }
 
@@ -590,6 +596,7 @@ public sealed class ThemeDownloader : IScheduledTask
             [new SeasonThemeMappingChange(BuildSeasonThemeMappingTarget(series, season), null, "Delete")]);
         var result = BuildSeasonMappingRow(series, season);
         _seasonFinderStore.UpsertRow(BuildSeasonFinderRecord(series, season, ResolveLibraryId(series)));
+        RefreshBrowserCacheForItem(series);
         return await Task.FromResult(result).ConfigureAwait(false);
     }
 
@@ -656,6 +663,11 @@ public sealed class ThemeDownloader : IScheduledTask
         foreach (var changed in changedSeasons)
         {
             _seasonFinderStore.UpsertRow(BuildSeasonFinderRecord(changed.Series, changed.Season, ResolveLibraryId(changed.Series)));
+        }
+
+        foreach (var series in changedSeasons.Select(changed => changed.Series).DistinctBy(series => series.Id))
+        {
+            RefreshBrowserCacheForItem(series);
         }
 
         return await Task.FromResult(new SeasonThemeMappingImportResult(imported, skipped, errors)).ConfigureAwait(false);
@@ -768,11 +780,28 @@ public sealed class ThemeDownloader : IScheduledTask
         }
 
         var bytesDeleted = new FileInfo(path).Length;
-        _fileSystem.DeleteFile(path);
-        RefreshBrowserCacheForItem(item is Season season ? FindSeriesForSeason(season) ?? item : item);
+        await DeleteFileWithRetryAsync(path, cancellationToken).ConfigureAwait(false);
+        RefreshBrowserCacheForItem(item);
 
         _logger.LogInformation("Deleted specific local theme file for {ItemName} ({ItemId}, RowId={RowId}, Target={Target}). File={Path}, Bytes={Bytes}", item.Name, itemId, rowId, target, path, bytesDeleted);
         return new ThemeDeleteResult(1, bytesDeleted);
+    }
+
+    private async Task DeleteFileWithRetryAsync(string path, CancellationToken cancellationToken)
+    {
+        await FileDeleteRetryService.DeleteAsync(
+            () => _fileSystem.DeleteFile(path),
+            Path.GetFileName(path),
+            "Jellyfin",
+            (ex, retryDelay, attempt, maxAttempts) =>
+                _logger.LogWarning(
+                    ex,
+                    "Theme file is temporarily locked. Retrying delete in {Delay} ms ({Attempt}/{MaxAttempts}): {Path}",
+                    retryDelay,
+                    attempt,
+                    maxAttempts,
+                    path),
+            cancellationToken).ConfigureAwait(false);
     }
 
     private void DeleteThemeFilesForPath(

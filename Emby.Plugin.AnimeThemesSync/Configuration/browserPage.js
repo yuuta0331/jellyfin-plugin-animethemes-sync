@@ -59,6 +59,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             browserCacheReady: false,
             browserRebuildRunning: false,
             browserRefreshTimer: null,
+            browserRequestToken: 0,
             librarySearchTimer: null,
             libraryScrollTop: null,
             activeDownloads: [],
@@ -67,6 +68,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             downloadsPollRequested: false,
             downloadsPollingEnabled: false,
             downloadSequence: 0,
+            downloadStatuses: {},
+            downloadStatusesInitialized: false,
+            uiRefreshTimer: null,
+            uiRefreshInFlight: false,
+            uiRefreshQueued: false,
+            refreshFinderRequested: false,
+            refreshMappingsRequested: false,
             playerLoadToken: 0,
             playerLoadTimer: null,
             themeObserver: null,
@@ -217,16 +225,60 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             return raw === null || raw === undefined || raw === '' ? '-' : String(raw);
         }
 
+        function apiRequest(options) {
+            return Promise.resolve(ApiClient.ajax(options)).catch(function (err) {
+                return normalizeApiError(err).then(function (normalized) {
+                    throw normalized;
+                });
+            });
+        }
+
+        function errorMessageFromPayload(payload) {
+            if (!payload) return '';
+            if (typeof payload === 'string') {
+                var trimmed = payload.trim();
+                if (!trimmed) return '';
+                try {
+                    return errorMessageFromPayload(JSON.parse(trimmed)) || trimmed;
+                } catch (ignored) {
+                    return trimmed;
+                }
+            }
+
+            return payload.error || payload.Error || payload.message || payload.Message ||
+                (payload.ResponseStatus && (payload.ResponseStatus.Message || payload.ResponseStatus.ErrorCode)) ||
+                (payload.responseStatus && (payload.responseStatus.message || payload.responseStatus.errorCode)) || '';
+        }
+
+        function normalizeApiError(err) {
+            var immediate = errorMessageFromPayload(err && err.responseJSON) ||
+                errorMessageFromPayload(err && err.responseText) ||
+                (err && err.message && err.message !== '[object Response]' ? err.message : '');
+            if (immediate) return Promise.resolve(new Error(immediate));
+
+            var response = err && typeof err.clone === 'function' ? err.clone() : err;
+            if (response && typeof response.text === 'function') {
+                return response.text().then(function (body) {
+                    var message = errorMessageFromPayload(body) || response.statusText || ('HTTP ' + response.status);
+                    return new Error(message);
+                }).catch(function () {
+                    return new Error((response && response.statusText) || 'Request failed.');
+                });
+            }
+
+            return Promise.resolve(err instanceof Error ? err : new Error(String(err || 'Unknown error')));
+        }
+
         function apiGet(path) {
-            return ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl(path), dataType: 'json' });
+            return apiRequest({ type: 'GET', url: ApiClient.getUrl(path), dataType: 'json' });
         }
 
         function apiPost(path) {
-            return ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl(path), dataType: 'json' });
+            return apiRequest({ type: 'POST', url: ApiClient.getUrl(path), dataType: 'json' });
         }
 
         function apiPostJson(path, data) {
-            return ApiClient.ajax({
+            return apiRequest({
                 type: 'POST',
                 url: ApiClient.getUrl(path),
                 dataType: 'json',
@@ -236,11 +288,11 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         }
 
         function apiDelete(path) {
-            return ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl(path), dataType: 'json' });
+            return apiRequest({ type: 'DELETE', url: ApiClient.getUrl(path), dataType: 'json' });
         }
 
         function apiDeleteNoContent(path) {
-            return ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl(path) });
+            return apiRequest({ type: 'DELETE', url: ApiClient.getUrl(path) });
         }
 
         function apiUrl(path, authenticated) {
@@ -308,6 +360,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function getErrorMessage(err) {
             if (!err) return 'Unknown error';
+            if (err.message) return err.message;
             if (err.responseJSON && err.responseJSON.error) return err.responseJSON.error;
             if (err.responseText) return err.responseText;
             return String(err);
@@ -944,14 +997,20 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             }).join('&');
         }
 
-        function loadItems(append) {
+        function loadItems(append, options) {
+            options = options || {};
+            var silent = options.silent === true;
             var startIndex = append ? state.items.length : 0;
+            var token = ++state.browserRequestToken;
             state.itemsLoading = true;
             state.summaryLoading = true;
-            if (!append) renderLibrarySkeleton();
-            renderSummarySkeleton();
-            Dashboard.showLoadingMsg();
-            Promise.all([apiGet(browserItemsPath(startIndex)), apiGet('AnimeThemesSync/Summary'), apiGet('AnimeThemesSync/Storage')]).then(function (results) {
+            if (!append && !silent) renderLibrarySkeleton();
+            if (!silent) {
+                renderSummarySkeleton();
+                Dashboard.showLoadingMsg();
+            }
+            return Promise.all([apiGet(browserItemsPath(startIndex)), apiGet('AnimeThemesSync/Summary'), apiGet('AnimeThemesSync/Storage')]).then(function (results) {
+                if (token !== state.browserRequestToken) return state.items;
                 var page = results[0] || {};
                 var items = value(page, 'Items', 'items') || (Array.isArray(page) ? page : []);
                 var summary = results[1] || {};
@@ -968,16 +1027,23 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 renderStorage(storage);
                 attachScrollListener();
                 scheduleBrowserRefresh();
-                Dashboard.hideLoadingMsg();
+                if (!silent) Dashboard.hideLoadingMsg();
+                return state.items;
             }).catch(function (err) {
+                if (token !== state.browserRequestToken) return state.items;
                 state.itemsLoading = false;
                 state.summaryLoading = false;
-                if (!append) {
+                if (!append && !silent) {
                     itemGrid.innerHTML = '';
                     appendEmptyState(itemGrid, 'Library failed to load', getErrorMessage(err));
                 }
-                Dashboard.hideLoadingMsg();
-                Dashboard.alert({ title: 'Browser Error', message: 'Failed to load items: ' + err });
+                if (!silent) {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert({ title: 'Browser Error', message: 'Failed to load items: ' + getErrorMessage(err) });
+                } else {
+                    console.error('Failed to refresh Browser items', err);
+                }
+                return state.items;
             });
         }
 
@@ -996,7 +1062,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             apiPost(path).then(function (result) {
                 Dashboard.hideLoadingMsg();
                 Dashboard.alert({ title: title, message: value(result || {}, 'Message', 'message') || 'Done.' });
-                loadItems(false);
+                scheduleUiRefresh({ finder: true, mappings: true });
             }).catch(function (err) {
                 Dashboard.hideLoadingMsg();
                 Dashboard.alert({ title: title, message: getErrorMessage(err) });
@@ -1494,9 +1560,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             apiPostJson('AnimeThemesSync/SeasonMappings', payload).then(function (row) {
                 state.selectedSeason = row || state.selectedSeason;
                 state.mappingExplorerRows = [];
-                if (row) {
-                    reloadSeasonMappingsPreservingState(seasonRowId(row));
-                }
+                scheduleUiRefresh({ finder: true, mappings: true });
                 if (downloadAfterSave) {
                     startDownloadJob({
                         path: 'AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(payload.SeasonItemId) + '&Force=false',
@@ -1525,11 +1589,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 state.finderPreview = null;
                 finderPreview.className = 'ats-finder-preview fieldDescription';
                 finderPreview.textContent = 'Mapping cleared.';
-                if (row) {
-                    reloadSeasonMappingsPreservingState(seasonRowId(row));
-                } else {
-                    reloadSeasonMappingsPreservingState();
-                }
+                scheduleUiRefresh({ finder: true, mappings: true });
             }).catch(function (err) {
                 finderState.textContent = 'Clear failed.';
                 Dashboard.alert({ title: 'Season Finder Error', message: getErrorMessage(err) });
@@ -1679,7 +1739,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 captureSettingsSnapshot();
                 importApplyButton.disabled = true;
                 setImportState('Settings import applied.');
-                loadItems();
+                scheduleUiRefresh({ finder: true, mappings: true });
                 Dashboard.processPluginConfigurationUpdateResult(result);
             }).catch(function (err) {
                 setImportState('Import save failed.');
@@ -1813,9 +1873,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 mappingsApplyButton.disabled = true;
                 setMappingsState('Mappings import complete.');
                 state.mappingExplorerRows = [];
-                reloadSeasonMappingsPreservingState().catch(function () { });
-                loadAllSeasonMappings().catch(function () { });
-                loadItems();
+                scheduleUiRefresh({ finder: true, mappings: true });
             }).catch(function (err) {
                 setMappingsState('Mappings import failed.');
                 Dashboard.alert({ title: 'Mappings Import Error', message: getErrorMessage(err) });
@@ -1997,10 +2055,14 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             appendEmptyState(rowsContainer, 'Themes could not be loaded', message || 'Go back to the library and try again.');
         }
 
-        function loadThemes(token) {
-            var itemId = itemSelect.value || (state.currentItem ? value(state.currentItem, 'Id', 'id') : null);
+        function loadThemes(token, options) {
+            options = options || {};
+            var silent = options.silent === true;
+            var itemId = options.itemId || itemSelect.value || (state.currentItem ? value(state.currentItem, 'Id', 'id') : null);
             if (!itemId) return;
-            state.currentItem = selectedItem(itemId);
+            state.currentItem = state.items.find(function (item) {
+                return String(value(item, 'Id', 'id')) === String(itemId);
+            }) || selectedItem(itemId);
             var previousGroupId = state.activeGroupId;
             return apiGet('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes').then(function (result) {
                 if (token && token !== state.detailToken) return;
@@ -2022,11 +2084,71 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 if (token && token !== state.detailToken) return;
                 hideDetailLoading(token);
                 state.detailLoading = false;
+                if (silent) {
+                    console.error('Failed to refresh Browser detail', err);
+                    return;
+                }
                 state.currentResult = null;
                 state.detailError = getErrorMessage(err);
                 renderDetailError(state.detailError);
                 syncLayout();
                 Dashboard.alert({ title: 'Browser Error', message: 'Failed to load themes: ' + err });
+            });
+        }
+
+        function scheduleUiRefresh(options) {
+            options = options || {};
+            state.refreshFinderRequested = state.refreshFinderRequested || options.finder === true;
+            state.refreshMappingsRequested = state.refreshMappingsRequested || options.mappings === true;
+            if (state.uiRefreshInFlight) {
+                state.uiRefreshQueued = true;
+                return;
+            }
+
+            if (state.uiRefreshTimer) return;
+            state.uiRefreshTimer = setTimeout(runUiRefresh, 0);
+        }
+
+        function runUiRefresh() {
+            state.uiRefreshTimer = null;
+            if (state.uiRefreshInFlight) {
+                state.uiRefreshQueued = true;
+                return;
+            }
+
+            state.uiRefreshInFlight = true;
+            var refreshFinder = state.refreshFinderRequested || state.activeTab === 'finder';
+            var refreshMappings = state.refreshMappingsRequested || state.activeTab === 'manage';
+            state.refreshFinderRequested = false;
+            state.refreshMappingsRequested = false;
+
+            var selectedSeasonId = state.selectedSeason ? seasonRowId(state.selectedSeason) : null;
+            var detailItemId = itemSelect.value || (state.currentItem ? value(state.currentItem, 'Id', 'id') : null);
+            var refreshDetail = !!detailItemId && (state.detailLoading || state.detailError || !!state.currentResult);
+            var tasks = [loadItems(false, { silent: true })];
+            if (refreshDetail) {
+                var detailToken = ++state.detailToken;
+                tasks.push(loadThemes(detailToken, { silent: true, itemId: detailItemId }));
+            }
+            if (refreshFinder) {
+                tasks.push(reloadSeasonMappingsPreservingState(selectedSeasonId));
+            }
+            if (refreshMappings) {
+                state.mappingExplorerRows = [];
+                tasks.push(loadAllSeasonMappings());
+            }
+
+            function completeRefresh() {
+                state.uiRefreshInFlight = false;
+                if (state.uiRefreshQueued) {
+                    state.uiRefreshQueued = false;
+                    scheduleUiRefresh();
+                }
+            }
+
+            Promise.all(tasks).then(completeRefresh, function (err) {
+                console.error('Failed to synchronize Browser state', err);
+                completeRefresh();
             });
         }
 
@@ -3163,12 +3285,30 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             apiGet('AnimeThemesSync/Jobs').then(function (jobs) {
                 var list = jobs || [];
                 var serverJobs = list.map(normalizeDownloadJob);
+                var previousStatuses = {};
+                Object.keys(state.downloadStatuses).forEach(function (jobId) {
+                    previousStatuses[jobId] = state.downloadStatuses[jobId];
+                });
+                state.activeDownloads.forEach(function (job) {
+                    if (job.jobId && String(job.jobId).indexOf('starting-') !== 0) previousStatuses[job.jobId] = job.status;
+                });
                 var serverJobIds = {};
                 serverJobs.forEach(function (job) { serverJobIds[job.jobId] = true; });
                 var optimisticJobs = state.activeDownloads.filter(function (job) { return job.clientOnly && !serverJobIds[job.jobId]; });
                 state.activeDownloads = optimisticJobs.concat(serverJobs);
+                var terminalTransition = false;
+                var nextStatuses = {};
+                serverJobs.forEach(function (job) {
+                    nextStatuses[job.jobId] = job.status;
+                    if (state.downloadStatusesInitialized && isActiveDownloadStatus(previousStatuses[job.jobId]) && isTerminalDownloadStatus(job.status)) {
+                        terminalTransition = true;
+                    }
+                });
+                state.downloadStatuses = nextStatuses;
+                state.downloadStatusesInitialized = true;
                 renderDownloadManager();
                 updateThemeCardDownloadStatuses();
+                if (terminalTransition) scheduleUiRefresh();
                 shouldContinue = state.activeDownloads.some(function (job) { return isActiveDownloadStatus(job.status); });
             }).catch(function (err) {
                 console.error('Failed to poll downloads', err);
@@ -3287,7 +3427,6 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             var dismissBtn = document.createElement('button');
             dismissBtn.type = 'button';
             dismissBtn.className = 'emby-button ats-dm-item-dismiss';
-            dismissBtn.textContent = '\u00d7';
             dismissBtn.addEventListener('click', function (event) {
                 event.stopPropagation();
                 var jobId = item.getAttribute('data-job-id');
@@ -3575,13 +3714,60 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             }
         }
 
+        function snapshotThemeTarget(row, target) {
+            if (target === 'video') {
+                return {
+                    exists: !!value(row, 'BackdropExists', 'backdropExists'),
+                    playable: !!value(row, 'SavedVideoPlayable', 'savedVideoPlayable'),
+                    path: value(row, 'BackdropPath', 'backdropPath')
+                };
+            }
+            if (target === 'audio') {
+                return {
+                    exists: !!value(row, 'ThemeMusicExists', 'themeMusicExists'),
+                    playable: !!value(row, 'SavedAudioPlayable', 'savedAudioPlayable'),
+                    path: value(row, 'ThemeMusicPath', 'themeMusicPath')
+                };
+            }
+            return {
+                exists: !!value(row, 'ExtraExists', 'extraExists'),
+                playable: !!value(row, 'SavedExtraPlayable', 'savedExtraPlayable'),
+                path: value(row, 'ExtraPath', 'extraPath')
+            };
+        }
+
+        function restoreThemeTarget(row, target, snapshot) {
+            if (target === 'video') {
+                row.BackdropExists = row.backdropExists = snapshot.exists;
+                row.SavedVideoPlayable = row.savedVideoPlayable = snapshot.playable;
+                row.BackdropPath = row.backdropPath = snapshot.path;
+            } else if (target === 'audio') {
+                row.ThemeMusicExists = row.themeMusicExists = snapshot.exists;
+                row.SavedAudioPlayable = row.savedAudioPlayable = snapshot.playable;
+                row.ThemeMusicPath = row.themeMusicPath = snapshot.path;
+            } else {
+                row.ExtraExists = row.extraExists = snapshot.exists;
+                row.SavedExtraPlayable = row.savedExtraPlayable = snapshot.playable;
+                row.ExtraPath = row.extraPath = snapshot.path;
+            }
+        }
+
         function deleteRowTargets(row, targets) {
             var itemId = activeGroupItemId();
             var rowId = value(row, 'RowId', 'rowId');
             if (!itemId || !rowId || !targets.length) return;
 
+            if (player.classList.contains('open')) {
+                closePlayer();
+            } else {
+                state.playerLoadToken++;
+                releasePlayerMedia();
+            }
+
+            var snapshots = {};
             var targetKeys = targets.map(function (target) { return themeTargetKey(row, target, itemId); });
             targets.forEach(function (target, index) {
+                snapshots[target] = snapshotThemeTarget(row, target);
                 state.deletingThemeTargets[targetKeys[index]] = true;
                 markThemeTargetDeleted(row, target);
             });
@@ -3592,9 +3778,9 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 var path = 'AnimeThemesSync/ThemeFiles/DeleteFile?ItemId=' + encodeURIComponent(itemId) +
                     '&RowId=' + encodeURIComponent(rowId) + '&Target=' + encodeURIComponent(target);
                 return apiPost(path).then(function (result) {
-                    return { ok: true, result: result };
+                    return { ok: true, result: result, target: target };
                 }, function (error) {
-                    return { ok: false, error: error };
+                    return { ok: false, error: error, target: target };
                 });
             });
 
@@ -3603,12 +3789,15 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 var files = 0;
                 var bytes = 0;
                 outcomes.forEach(function (outcome) {
-                    if (!outcome.ok) return;
+                    if (!outcome.ok) {
+                        restoreThemeTarget(row, outcome.target, snapshots[outcome.target]);
+                        return;
+                    }
                     files += Number(value(outcome.result, 'FilesDeleted', 'filesDeleted')) || 0;
                     bytes += Number(value(outcome.result, 'BytesDeleted', 'bytesDeleted')) || 0;
                 });
-                loadItems();
-                loadThemes();
+                renderThemes();
+                scheduleUiRefresh();
                 var failure = outcomes.find(function (outcome) { return !outcome.ok; });
                 if (failure) {
                     setProgress(true, 'Delete partially failed; refreshing...', 0);
@@ -3626,6 +3815,11 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 return;
             }
 
+            if (player.classList.contains('open')) closePlayer();
+            else {
+                state.playerLoadToken++;
+                releasePlayerMedia();
+            }
             setProgress(true, 'Deleting ' + label + '...', 0);
             var bulkTargets = scope === 'all' ? ['video', 'audio', 'extra'] : scope === 'audio' ? ['audio'] : ['video', 'extra'];
             activeRows().forEach(function (row) { bulkTargets.forEach(function (target) { markThemeTargetDeleted(row, target); }); });
@@ -3634,14 +3828,11 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 var files = value(result, 'FilesDeleted', 'filesDeleted') || 0;
                 var bytes = value(result, 'BytesDeleted', 'bytesDeleted') || 0;
                 setProgress(true, 'Deleted ' + files + ' files (' + formatBytes(bytes) + ')', 100);
-                loadItems();
-                if (itemSelect.value) {
-                    loadThemes();
-                }
+                scheduleUiRefresh();
                 setTimeout(function () { setProgress(false, '', 0); }, 1800);
             }).catch(function (err) {
                 setProgress(true, 'Delete failed: ' + getErrorMessage(err), 0);
-                if (itemSelect.value) loadThemes();
+                scheduleUiRefresh();
                 Dashboard.alert({ title: 'Delete Error', message: getErrorMessage(err) });
             });
         }
@@ -3696,7 +3887,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             state.playerLoadToken++;
             var token = state.playerLoadToken;
             if (state.playerLoadTimer) clearTimeout(state.playerLoadTimer);
-            playerBody.innerHTML = '';
+            releasePlayerMedia();
             var wrapper = document.createElement('div');
             wrapper.className = 'ats-player-wrapper' + (target === 'audio' ? ' ats-player-wrapper-audio' : ' ats-player-wrapper-video');
             var loader = document.createElement('div');
@@ -3755,6 +3946,19 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             element.load();
         }
 
+        function releasePlayerMedia() {
+            Array.prototype.slice.call(playerBody.querySelectorAll('audio, video')).forEach(function (media) {
+                try {
+                    media.pause();
+                    media.removeAttribute('src');
+                    media.load();
+                } catch (ignored) {
+                    // The element may already have been detached.
+                }
+            });
+            playerBody.innerHTML = '';
+        }
+
         function closePlayer() {
             if (player.contains(document.activeElement)) {
                 document.activeElement.blur();
@@ -3763,10 +3967,9 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             state.playerLoadToken++;
             if (state.playerLoadTimer) clearTimeout(state.playerLoadTimer);
             state.playerLoadTimer = null;
-            Array.prototype.slice.call(playerBody.querySelectorAll('audio, video')).forEach(function (media) { media.pause(); });
+            releasePlayerMedia();
             player.classList.remove('open');
             player.setAttribute('aria-hidden', 'true');
-            playerBody.innerHTML = '';
             if (state.lastFocus && typeof state.lastFocus.focus === 'function') {
                 state.lastFocus.focus();
             }
@@ -3993,7 +4196,11 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             setViewSize(state.viewSize);
             setActiveTab(state.activeTab);
             attachScrollListener();
-            loadItems();
+            if (state.items.length) {
+                scheduleUiRefresh({ finder: state.activeTab === 'finder', mappings: state.activeTab === 'manage' });
+            } else {
+                loadItems();
+            }
             startDownloadsPolling();
         });
         page.addEventListener('pagehide', function () {
@@ -4001,6 +4208,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             container.removeEventListener('scroll', handleScroll);
             scrollListenerAttached = false;
             stopDownloadsPolling();
+            if (state.uiRefreshTimer) clearTimeout(state.uiRefreshTimer);
+            state.uiRefreshTimer = null;
             hideDetailLoading();
             teardownThemeObserver();
         });

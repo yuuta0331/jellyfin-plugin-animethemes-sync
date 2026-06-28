@@ -1,8 +1,8 @@
-<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260628c" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260628d" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.06.28-c.</div>
+                <div class="fieldDescription">UI version: 2026.06.28-d.</div>
 
                 <div class="verticalSection ats-tabs" id="AnimeThemesBrowserTabs">
                     <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-tab active" id="AnimeThemesBrowserLibraryTab" data-ats-tab="library">
@@ -2573,6 +2573,10 @@
             }
 
             #AnimeThemesBrowserPage .ats-dm-item-dismiss {
+                position: relative !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
                 width: 2rem !important;
                 min-width: 2rem !important;
                 height: 2rem !important;
@@ -2583,8 +2587,29 @@
                 border: 1px solid var(--ats-border) !important;
                 background: transparent !important;
                 color: inherit !important;
-                font-size: 1.4rem !important;
-                line-height: 1 !important;
+                font-size: 0 !important;
+                line-height: 0 !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item-dismiss::before,
+            #AnimeThemesBrowserPage .ats-dm-item-dismiss::after {
+                content: "";
+                position: absolute;
+                width: .8rem;
+                height: 2px;
+                border-radius: 999px;
+                background: currentColor;
+                left: 50%;
+                top: 50%;
+                transform-origin: center;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item-dismiss::before {
+                transform: translate(-50%, -50%) rotate(45deg);
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item-dismiss::after {
+                transform: translate(-50%, -50%) rotate(-45deg);
             }
 
             #AnimeThemesBrowserPage .ats-dm-item-dismiss:hover {
