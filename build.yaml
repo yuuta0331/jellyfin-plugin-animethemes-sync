@@ -2,7 +2,7 @@
 name: "AnimeThemesSync"
 guid: "66d528df-4632-4d43-9828-56957262572b"
 imageUrl: https://cassiscloud.github.io/jellyfin-plugin-animethemes-sync/images/jellyfin-plugin-animethemes-sync.jpeg
-version: "2.2.0"
+version: "2.3.0"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 overview: "Automatically downloads anime OP/ED themes from AnimeThemes.moe for your Jellyfin library."
@@ -18,7 +18,11 @@ owner: "CassisCloud"
 artifacts:
 - "Jellyfin.Plugin.AnimeThemesSync.dll"
 changelog: >
-  - Library Browser loads faster with an automatically maintained local cache.
-  - Added cache status, rebuild, clear, and legacy manifest import controls.
-  - Improved Jellyfin and Emby dashboard pages so cache setup is handled in the background.
-  - Existing legacy extras manifests are imported without deleting the old files.
+  - Added a persistent SQLite-backed Season Finder with paged browsing, mapping import/export, and automatic migration of existing season mappings.
+  - Added a live download queue with progress tracking, cancellation, completed-job history, segmented downloads, and configurable concurrency.
+  - Added video and audio previews with retry support and seekable playback.
+  - Library Browser now refreshes its list, details, and summary immediately after downloads, mapping changes, and file deletions.
+  - Season Finder changes now update the related Library Browser series without reopening the page.
+  - Fixed Emby extra-file deletion failures caused by temporary file locks by releasing active playback and retrying safely.
+  - Improved API error messages and prevented stale responses from overwriting newer UI state.
+  - Existing SeasonThemeMappings are migrated automatically; no manual migration is required.
