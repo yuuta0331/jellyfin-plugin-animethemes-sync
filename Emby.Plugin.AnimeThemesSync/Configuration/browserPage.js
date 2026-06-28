@@ -51,6 +51,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             settingsSnapshot: '',
             settingsApplying: false,
             pendingDownload: null,
+            deletingThemeTargets: {},
             browserStartIndex: 0,
             browserLimit: 80,
             browserTotalRecordCount: 0,
@@ -66,7 +67,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             downloadsPollRequested: false,
             downloadsPollingEnabled: false,
             downloadSequence: 0,
-            detailHostLoading: false,
+            playerLoadToken: 0,
+            playerLoadTimer: null,
             themeObserver: null,
             themeMediaQuery: null,
             themeMediaHandler: null
@@ -235,6 +237,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function apiDelete(path) {
             return ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl(path), dataType: 'json' });
+        }
+
+        function apiDeleteNoContent(path) {
+            return ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl(path) });
         }
 
         function apiUrl(path, authenticated) {
@@ -767,19 +773,11 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function showDetailLoading() {
             detailView.setAttribute('aria-busy', 'true');
-            if (!state.detailHostLoading) {
-                Dashboard.showLoadingMsg();
-                state.detailHostLoading = true;
-            }
         }
 
         function hideDetailLoading(token) {
             if (token && token !== state.detailToken) return;
             detailView.setAttribute('aria-busy', 'false');
-            if (state.detailHostLoading) {
-                Dashboard.hideLoadingMsg();
-                state.detailHostLoading = false;
-            }
         }
 
         function syncLayout() {
@@ -1454,7 +1452,6 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             actions.className = 'ats-actions';
             addRemotePreviewButton(actions, row, 'video');
             addRemotePreviewButton(actions, row, 'audio');
-            addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'), true);
             card.appendChild(actions);
             return card;
         }
@@ -1958,6 +1955,12 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
             logo.style.display = 'none';
             meta.innerHTML = '';
+            for (var metaLine = 0; metaLine < 2; metaLine++) {
+                var metaSkeleton = document.createElement('span');
+                metaSkeleton.className = 'ats-skeleton ats-skeleton-text';
+                if (metaLine) metaSkeleton.style.width = '2.75rem';
+                meta.appendChild(metaSkeleton);
+            }
 
             seasonGroups.style.display = '';
             seasonGroups.innerHTML = '';
@@ -1999,7 +2002,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             if (!itemId) return;
             state.currentItem = selectedItem(itemId);
             var previousGroupId = state.activeGroupId;
-            apiGet('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes').then(function (result) {
+            return apiGet('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes').then(function (result) {
                 if (token && token !== state.detailToken) return;
                 hideDetailLoading(token);
                 state.detailLoading = false;
@@ -2194,8 +2197,6 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         var actions = document.createElement('div');
         actions.className = 'ats-actions';
 
-        addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'), true);
-
         var hasVideoUrl = !!value(row, 'VideoUrl', 'videoUrl');
         var hasVideoLocal = !!value(row, 'SavedVideoPlayable', 'savedVideoPlayable') || !!value(row, 'SavedExtraPlayable', 'savedExtraPlayable');
         if (hasVideoUrl || hasVideoLocal) {
@@ -2233,6 +2234,15 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         side.appendChild(actions);
         card.appendChild(side);
+        var deletingTargets = deletingTargetsForRow(row);
+        if (deletingTargets.length) {
+            card.setAttribute('aria-busy', 'true');
+            var deletingStatus = document.createElement('div');
+            deletingStatus.className = 'ats-card-delete-status';
+            deletingStatus.setAttribute('role', 'status');
+            deletingStatus.textContent = 'Deleting ' + deletingTargets.join(', ') + '...';
+            card.appendChild(deletingStatus);
+        }
         return card;
     }
 
@@ -3126,6 +3136,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             return status === 'Starting' || status === 'Running' || status === 'Pending' || status === 'Cancelling';
         }
 
+        function isTerminalDownloadStatus(status) {
+            return status === 'Completed' || status === 'Failed' || status === 'Cancelled';
+        }
+
         function normalizeDownloadJob(job) {
             return {
                 jobId: value(job, 'JobId', 'jobId') || '',
@@ -3184,6 +3198,20 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             });
         }
 
+        function dismissDownloadJob(jobId) {
+            var previousJobs = state.activeDownloads.slice();
+            state.activeDownloads = state.activeDownloads.filter(function (job) { return job.jobId !== jobId; });
+            renderDownloadManager();
+            updateThemeCardDownloadStatuses();
+            apiDeleteNoContent('AnimeThemesSync/Jobs/' + encodeURIComponent(jobId)).catch(function (err) {
+                state.activeDownloads = previousJobs;
+                renderDownloadManager();
+                updateThemeCardDownloadStatuses();
+                pollDownloadsNow();
+                Dashboard.alert({ title: 'Download History Error', message: 'Failed to remove download history: ' + getErrorMessage(err) });
+            });
+        }
+
         function toggleDownloadManager() {
             if (downloadManager) {
                 downloadManager.classList.toggle('collapsed');
@@ -3211,14 +3239,22 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function updateProgressTrack(track, bar, job, animateFromZero) {
             var progress = Math.max(0, Math.min(100, Number(job.progress) || 0));
+            var visualProgress = isActiveDownloadStatus(job.status) && progress === 0 ? 1 : progress;
+            var indeterminate = job.status === 'Starting' || job.status === 'Pending';
+            track.classList.toggle('ats-progress-indeterminate', indeterminate);
             track.setAttribute('aria-label', job.title);
             track.setAttribute('aria-valuemin', '0');
             track.setAttribute('aria-valuemax', '100');
             track.setAttribute('aria-valuetext', downloadStatusText(job));
-            if (job.status === 'Starting' || job.status === 'Pending') track.removeAttribute('aria-valuenow');
+            if (indeterminate) track.removeAttribute('aria-valuenow');
             else track.setAttribute('aria-valuenow', String(Math.round(progress)));
 
-            function applyWidth() { bar.style.width = progress + '%'; }
+            if (indeterminate) {
+                bar.style.width = '36%';
+                return;
+            }
+
+            function applyWidth() { bar.style.width = visualProgress + '%'; }
             if (animateFromZero) {
                 bar.style.width = '0%';
                 window.requestAnimationFrame(applyWidth);
@@ -3236,6 +3272,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             var titleSpan = document.createElement('div');
             titleSpan.className = 'ats-dm-item-title';
             header.appendChild(titleSpan);
+            var headerActions = document.createElement('div');
+            headerActions.className = 'ats-dm-item-actions';
             var cancelBtn = document.createElement('button');
             cancelBtn.type = 'button';
             cancelBtn.className = 'emby-button ats-dm-item-cancel';
@@ -3245,7 +3283,18 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 var jobId = item.getAttribute('data-job-id');
                 if (jobId) cancelDownloadJob(jobId);
             });
-            header.appendChild(cancelBtn);
+            headerActions.appendChild(cancelBtn);
+            var dismissBtn = document.createElement('button');
+            dismissBtn.type = 'button';
+            dismissBtn.className = 'emby-button ats-dm-item-dismiss';
+            dismissBtn.textContent = '\u00d7';
+            dismissBtn.addEventListener('click', function (event) {
+                event.stopPropagation();
+                var jobId = item.getAttribute('data-job-id');
+                if (jobId) dismissDownloadJob(jobId);
+            });
+            headerActions.appendChild(dismissBtn);
+            header.appendChild(headerActions);
             item.appendChild(header);
 
             var statusRow = document.createElement('div');
@@ -3279,6 +3328,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             cancelBtn.hidden = !job.canCancel;
             cancelBtn.disabled = !job.canCancel;
             cancelBtn.setAttribute('aria-label', 'Cancel ' + job.title);
+            var dismissBtn = item.querySelector('.ats-dm-item-dismiss');
+            dismissBtn.hidden = job.clientOnly || !isTerminalDownloadStatus(job.status);
+            dismissBtn.disabled = job.clientOnly || !isTerminalDownloadStatus(job.status);
+            dismissBtn.setAttribute('aria-label', 'Remove ' + job.title + ' from download history');
             var progressText = item.querySelector('.ats-dm-item-progress-text');
             progressText.textContent = downloadStatusText(job);
             progressText.classList.toggle('ats-color-danger', job.status === 'Failed');
@@ -3488,29 +3541,82 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 return;
             }
 
+            var targets = [];
+            if (deleteIncludeVideo.checked) targets.push('video');
+            if (deleteIncludeAudio.checked) targets.push('audio');
+            if (deleteIncludeExtras.checked) targets.push('extra');
             closeDeleteDialog();
+            deleteRowTargets(row, targets);
+        }
 
+        function themeTargetKey(row, target, itemId) {
+            return String(itemId || activeGroupItemId() || '').toLowerCase() + ':' + String(value(row, 'RowId', 'rowId') || '') + ':' + target;
+        }
+
+        function deletingTargetsForRow(row) {
+            return ['video', 'audio', 'extra'].filter(function (target) {
+                return !!state.deletingThemeTargets[themeTargetKey(row, target)];
+            });
+        }
+
+        function markThemeTargetDeleted(row, target) {
+            if (target === 'video') {
+                row.BackdropExists = row.backdropExists = false;
+                row.SavedVideoPlayable = row.savedVideoPlayable = false;
+                row.BackdropPath = row.backdropPath = null;
+            } else if (target === 'audio') {
+                row.ThemeMusicExists = row.themeMusicExists = false;
+                row.SavedAudioPlayable = row.savedAudioPlayable = false;
+                row.ThemeMusicPath = row.themeMusicPath = null;
+            } else {
+                row.ExtraExists = row.extraExists = false;
+                row.SavedExtraPlayable = row.savedExtraPlayable = false;
+                row.ExtraPath = row.extraPath = null;
+            }
+        }
+
+        function deleteRowTargets(row, targets) {
             var itemId = activeGroupItemId();
             var rowId = value(row, 'RowId', 'rowId');
+            if (!itemId || !rowId || !targets.length) return;
 
-            var deletePromises = [];
-            if (deleteIncludeVideo.checked) {
-                deletePromises.push(apiPost('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes/' + encodeURIComponent(rowId) + '/Delete/Video'));
-            }
-            if (deleteIncludeAudio.checked) {
-                deletePromises.push(apiPost('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes/' + encodeURIComponent(rowId) + '/Delete/Audio'));
-            }
-            if (deleteIncludeExtras.checked) {
-                deletePromises.push(apiPost('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes/' + encodeURIComponent(rowId) + '/Delete/Extra'));
-            }
+            var targetKeys = targets.map(function (target) { return themeTargetKey(row, target, itemId); });
+            targets.forEach(function (target, index) {
+                state.deletingThemeTargets[targetKeys[index]] = true;
+                markThemeTargetDeleted(row, target);
+            });
+            renderThemes();
+            setProgress(true, 'Deleting selected theme files...', 0);
 
-            Dashboard.showLoadingMsg();
-            Promise.all(deletePromises).then(function () {
-                Dashboard.hideLoadingMsg();
+            var requests = targets.map(function (target) {
+                var path = 'AnimeThemesSync/ThemeFiles/DeleteFile?ItemId=' + encodeURIComponent(itemId) +
+                    '&RowId=' + encodeURIComponent(rowId) + '&Target=' + encodeURIComponent(target);
+                return apiPost(path).then(function (result) {
+                    return { ok: true, result: result };
+                }, function (error) {
+                    return { ok: false, error: error };
+                });
+            });
+
+            Promise.all(requests).then(function (outcomes) {
+                targetKeys.forEach(function (key) { delete state.deletingThemeTargets[key]; });
+                var files = 0;
+                var bytes = 0;
+                outcomes.forEach(function (outcome) {
+                    if (!outcome.ok) return;
+                    files += Number(value(outcome.result, 'FilesDeleted', 'filesDeleted')) || 0;
+                    bytes += Number(value(outcome.result, 'BytesDeleted', 'bytesDeleted')) || 0;
+                });
+                loadItems();
                 loadThemes();
-            }).catch(function (err) {
-                Dashboard.hideLoadingMsg();
-                Dashboard.alert({ title: 'Delete Error', message: 'Failed to delete files: ' + getErrorMessage(err) });
+                var failure = outcomes.find(function (outcome) { return !outcome.ok; });
+                if (failure) {
+                    setProgress(true, 'Delete partially failed; refreshing...', 0);
+                    Dashboard.alert({ title: 'Delete Error', message: 'Some files could not be deleted: ' + getErrorMessage(failure.error) });
+                } else {
+                    setProgress(true, 'Deleted ' + files + ' files (' + formatBytes(bytes) + ')', 100);
+                    setTimeout(function () { setProgress(false, '', 0); }, 1800);
+                }
             });
         }
 
@@ -3521,6 +3627,9 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             }
 
             setProgress(true, 'Deleting ' + label + '...', 0);
+            var bulkTargets = scope === 'all' ? ['video', 'audio', 'extra'] : scope === 'audio' ? ['audio'] : ['video', 'extra'];
+            activeRows().forEach(function (row) { bulkTargets.forEach(function (target) { markThemeTargetDeleted(row, target); }); });
+            renderThemes();
             apiPost('AnimeThemesSync/ThemeFiles/Delete?Scope=' + encodeURIComponent(scope)).then(function (result) {
                 var files = value(result, 'FilesDeleted', 'filesDeleted') || 0;
                 var bytes = value(result, 'BytesDeleted', 'bytesDeleted') || 0;
@@ -3532,6 +3641,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 setTimeout(function () { setProgress(false, '', 0); }, 1800);
             }).catch(function (err) {
                 setProgress(true, 'Delete failed: ' + getErrorMessage(err), 0);
+                if (itemSelect.value) loadThemes();
                 Dashboard.alert({ title: 'Delete Error', message: getErrorMessage(err) });
             });
         }
@@ -3559,61 +3669,47 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 return;
             }
 
-            setProgress(true, 'Deleting ' + label + '...', 0);
-            apiPost('AnimeThemesSync/ThemeFiles/DeleteFile?ItemId=' + encodeURIComponent(itemId) + '&RowId=' + encodeURIComponent(rowId) + '&Target=' + encodeURIComponent(target)).then(function (result) {
-                var files = value(result, 'FilesDeleted', 'filesDeleted') || 0;
-                var bytes = value(result, 'BytesDeleted', 'bytesDeleted') || 0;
-                setProgress(true, 'Deleted ' + files + ' files (' + formatBytes(bytes) + ')', 100);
-                loadItems();
-                loadThemes();
-                setTimeout(function () { setProgress(false, '', 0); }, 1800);
-            }).catch(function (err) {
-                setProgress(true, 'Delete failed: ' + getErrorMessage(err), 0);
-                Dashboard.alert({ title: 'Delete Error', message: getErrorMessage(err) });
-            });
+            deleteRowTargets(row, [target]);
         }
 
         function openPlayer(row, target) {
             var rowId = value(row, 'RowId', 'rowId');
             var itemId = activeGroupItemId();
-            state.lastFocus = document.activeElement;
-            var src = apiUrl('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes/' + encodeURIComponent(rowId) + '/LocalMedia?target=' + encodeURIComponent(target) + '&_=' + Date.now(), true);
-            playerTitle.textContent = text(value(row, 'ThemeKey', 'themeKey')) + ' - ' + target;
-            playerBody.innerHTML = '';
-            var wrapper = document.createElement('div');
-            wrapper.className = 'ats-player-wrapper' + (target === 'audio' ? ' ats-player-wrapper-audio' : ' ats-player-wrapper-video');
-            var loader = document.createElement('div');
-            loader.className = 'ats-player-loader';
-            loader.innerHTML = '<div class=\"ats-spinner\"></div><span>Loading media...</span>';
-            wrapper.appendChild(loader);
-            var element = document.createElement(target === 'audio' ? 'audio' : 'video');
-            element.controls = true;
-            element.autoplay = true;
-            element.preload = 'auto';
-            element.style.width = '100%';
-            element.style.height = target === 'audio' ? '54px' : '100%';
-            element.addEventListener('canplay', function () { loader.remove(); });
-            element.addEventListener('error', function () {
-                loader.innerHTML = '<span style=\"color:#ff6b6b\">Failed to load media</span><button class=\"ats-button-secondary\" onclick=\"this.parentElement.remove()\">Close</button>';
+            openMediaPlayer(row, target, false, function () {
+                return apiUrl('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes/' + encodeURIComponent(rowId) + '/LocalMedia?target=' + encodeURIComponent(target) + '&_=' + Date.now(), true);
             });
-            element.addEventListener('loadedmetadata', function () { loader.remove(); });
-            wrapper.appendChild(element);
-            element.src = src;
-            element.load();
-            playerBody.appendChild(wrapper);
-            player.classList.add('open');
-            player.setAttribute('aria-hidden', 'false');
         }
 
         function openRemotePlayer(row, target, src) {
+            openMediaPlayer(row, target, true, function () { return src; });
+        }
+
+        function openMediaPlayer(row, target, isPreview, sourceFactory) {
             state.lastFocus = document.activeElement;
-            playerTitle.textContent = text(value(row, 'ThemeKey', 'themeKey')) + ' - preview ' + target;
+            playerTitle.textContent = text(value(row, 'ThemeKey', 'themeKey')) + (isPreview ? ' - preview ' : ' - ') + target;
+            player.classList.add('open');
+            player.setAttribute('aria-hidden', 'false');
+            loadPlayerAttempt(target, isPreview, sourceFactory);
+        }
+
+        function loadPlayerAttempt(target, isPreview, sourceFactory) {
+            state.playerLoadToken++;
+            var token = state.playerLoadToken;
+            if (state.playerLoadTimer) clearTimeout(state.playerLoadTimer);
             playerBody.innerHTML = '';
             var wrapper = document.createElement('div');
             wrapper.className = 'ats-player-wrapper' + (target === 'audio' ? ' ats-player-wrapper-audio' : ' ats-player-wrapper-video');
             var loader = document.createElement('div');
             loader.className = 'ats-player-loader';
-            loader.innerHTML = '<div class=\"ats-spinner\"></div><span>Loading preview...</span>';
+            loader.setAttribute('role', 'status');
+            loader.setAttribute('aria-live', 'polite');
+            var spinner = document.createElement('div');
+            spinner.className = 'ats-spinner';
+            spinner.setAttribute('aria-hidden', 'true');
+            loader.appendChild(spinner);
+            var loadingText = document.createElement('span');
+            loadingText.textContent = isPreview ? 'Loading preview...' : 'Loading media...';
+            loader.appendChild(loadingText);
             wrapper.appendChild(loader);
             var element = document.createElement(target === 'audio' ? 'audio' : 'video');
             element.controls = true;
@@ -3621,17 +3717,42 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             element.preload = 'auto';
             element.style.width = '100%';
             element.style.height = target === 'audio' ? '54px' : '100%';
-            element.addEventListener('canplay', function () { loader.remove(); });
-            element.addEventListener('error', function () {
-                loader.innerHTML = '<span style=\"color:#ff6b6b\">Preview failed to load</span><button class=\"ats-button-secondary\" onclick=\"this.parentElement.remove()\">Close</button>';
-            });
-            element.addEventListener('loadedmetadata', function () { loader.remove(); });
+            var failedOnce = false;
+            function ready() {
+                if (failedOnce || token !== state.playerLoadToken) return;
+                if (state.playerLoadTimer) clearTimeout(state.playerLoadTimer);
+                state.playerLoadTimer = null;
+                if (loader.parentNode) loader.remove();
+            }
+            function failed() {
+                if (failedOnce || token !== state.playerLoadToken) return;
+                failedOnce = true;
+                if (state.playerLoadTimer) clearTimeout(state.playerLoadTimer);
+                state.playerLoadTimer = null;
+                if (!loader.parentNode) wrapper.appendChild(loader);
+                loader.innerHTML = '';
+                var message = document.createElement('span');
+                message.className = 'ats-color-danger';
+                message.textContent = isPreview ? 'Preview failed to load' : 'Failed to load media';
+                loader.appendChild(message);
+                var actions = document.createElement('div');
+                actions.className = 'ats-player-error-actions';
+                var retry = createButton('Retry', true);
+                retry.addEventListener('click', function () { loadPlayerAttempt(target, isPreview, sourceFactory); });
+                actions.appendChild(retry);
+                var close = createButton('Close', true);
+                close.addEventListener('click', closePlayer);
+                actions.appendChild(close);
+                loader.appendChild(actions);
+            }
+            element.addEventListener('canplay', ready);
+            element.addEventListener('loadedmetadata', ready);
+            element.addEventListener('error', failed);
             wrapper.appendChild(element);
-            element.src = src;
-            element.load();
             playerBody.appendChild(wrapper);
-            player.classList.add('open');
-            player.setAttribute('aria-hidden', 'false');
+            state.playerLoadTimer = setTimeout(failed, 30000);
+            element.src = sourceFactory();
+            element.load();
         }
 
         function closePlayer() {
@@ -3639,6 +3760,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 document.activeElement.blur();
             }
 
+            state.playerLoadToken++;
+            if (state.playerLoadTimer) clearTimeout(state.playerLoadTimer);
+            state.playerLoadTimer = null;
+            Array.prototype.slice.call(playerBody.querySelectorAll('audio, video')).forEach(function (media) { media.pause(); });
             player.classList.remove('open');
             player.setAttribute('aria-hidden', 'true');
             playerBody.innerHTML = '';

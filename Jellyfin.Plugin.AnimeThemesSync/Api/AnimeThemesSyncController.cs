@@ -376,6 +376,20 @@ public sealed class AnimeThemesSyncController : ControllerBase
         return status == null ? NotFound() : Ok(status);
     }
 
+    [HttpDelete("Jobs/{jobId}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public IActionResult RemoveDownloadJob(string jobId)
+    {
+        return ThemeDownloadJobService.RemoveTerminal(jobId) switch
+        {
+            ThemeDownloadJobRemovalResult.Removed => NoContent(),
+            ThemeDownloadJobRemovalResult.NotFound => NotFound(),
+            _ => Conflict(new { error = "Active download jobs cannot be removed from history." }),
+        };
+    }
+
     /// <summary>
     /// Streams local media for one saved AnimeThemes browser row.
     /// </summary>

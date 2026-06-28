@@ -7,6 +7,13 @@ using AnimeThemesSync.Shared.Models;
 
 namespace AnimeThemesSync.Shared.Services;
 
+public enum ThemeDownloadJobRemovalResult
+{
+    Removed,
+    NotFound,
+    Active,
+}
+
 public static class ThemeDownloadJobService
 {
     private static readonly object SyncRoot = new();
@@ -164,6 +171,26 @@ public static class ThemeDownloadJobService
 
         StartJobs(jobsToStart);
         return result;
+    }
+
+    public static ThemeDownloadJobRemovalResult RemoveTerminal(string jobId)
+    {
+        lock (SyncRoot)
+        {
+            PruneTerminalJobsLocked(DateTimeOffset.UtcNow);
+            if (!Jobs.TryGetValue(jobId, out var status))
+            {
+                return ThemeDownloadJobRemovalResult.NotFound;
+            }
+
+            if (!status.FinishedAt.HasValue)
+            {
+                return ThemeDownloadJobRemovalResult.Active;
+            }
+
+            Jobs.Remove(jobId);
+            return ThemeDownloadJobRemovalResult.Removed;
+        }
     }
 
     internal static void ResetForTests()

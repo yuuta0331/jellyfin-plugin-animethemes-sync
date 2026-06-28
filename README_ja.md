@@ -31,8 +31,10 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 - AniList / MyAnimeList ID を使ったメタデータマッチング
 - アイテム画面への AnimeThemes 外部リンク追加
 - OP/ED テーマの定期ダウンロード（動画/音声）
+- 進捗表示・キャンセル・分割ダウンロードに対応したダウンロードキュー
 - シリーズ・Season・映画の対応
 - 未一致Seasonを検索・保存できるSeason Finder UI
+- 動画/音声のプレビュー、リトライ、シーク再生
 - Season単位の出力を有効/無効にできる設定
 
 ## Installation
@@ -74,6 +76,12 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 - シリーズにはシリーズ直下、Seasonに別マッピングがある場合は各Seasonフォルダ直下へ作成されます
 - 設定画面の `Enable Season Theme Downloads` を無効にすると、Season単位の出力を止めてシリーズ/映画単位の出力だけにできます
 - `AnimeThemes Browser` -> `Season Finder` を開くと、未一致Seasonの確認、AnimeThemes検索、OP/EDプレビュー、Seasonマッピング保存をJSON編集なしで実行できます
+
+### Browserからのダウンロードとプレビュー
+
+- `AnimeThemes Browser`ではダウンロード進捗の確認、キャンセル、終了履歴の削除ができます。
+- 分割ダウンロードと同時ダウンロード数はプラグイン設定から変更できます。
+- テーマカードから動画/音声のプレビューとダウンロード済みファイルの操作ができます。
 
 ## Manual Linking
 

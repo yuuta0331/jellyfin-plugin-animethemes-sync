@@ -31,8 +31,10 @@ AnimeThemes Sync adds AnimeThemes.moe integration to your media server:
 - Metadata matching via AniList / MyAnimeList IDs
 - AnimeThemes external links on items
 - Scheduled OP/ED theme downloading (video/audio)
+- Download queue, live progress, cancellation, and segmented downloads
 - Series, season, and movie support
 - Season Finder UI for unmatched season mappings
+- Video/audio previews, retry, and seekable local playback
 - Optional season-level downloads, so you can keep output at the series level when preferred
 
 ## Installation
@@ -74,6 +76,12 @@ AnimeThemes Sync adds AnimeThemes.moe integration to your media server:
 - Series output remains under the series folder; season-specific mappings write to each season folder.
 - Disable `Enable Season Theme Downloads` in the plugin configuration to keep scheduled and on-demand output at the series/movie level.
 - Open `AnimeThemes Browser` -> `Season Finder` to review unmatched seasons, search AnimeThemes, preview OP/ED entries, and save season mappings without editing JSON.
+
+### Browser downloads and previews
+
+- `AnimeThemes Browser` shows download progress and lets you cancel active downloads or remove finished history.
+- Segmented download and concurrency settings are available from the plugin settings.
+- Theme cards provide video/audio previews and controls for downloaded files.
 
 ## Manual Linking
 

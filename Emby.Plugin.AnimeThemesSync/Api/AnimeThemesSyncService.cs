@@ -9,6 +9,7 @@ using Emby.Plugin.AnimeThemesSync.ScheduledTasks;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
+using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Services;
@@ -264,12 +265,19 @@ public class CancelAnimeThemesDownloadJob : IReturn<ThemeDownloadJobStatus>
     public string JobId { get; set; } = string.Empty;
 }
 
+[Route("/AnimeThemesSync/Jobs/{JobId}", "DELETE", Summary = "Removes a completed AnimeThemes download job from history.")]
+public class RemoveAnimeThemesDownloadJob : IReturnVoid
+{
+    public string JobId { get; set; } = string.Empty;
+}
+
 /// <summary>
 /// AnimeThemes Sync management API.
 /// </summary>
-public class AnimeThemesSyncService : IService
+public class AnimeThemesSyncService : IService, IRequiresRequest
 {
     private readonly ThemeDownloader _themeDownloader;
+    private readonly IHttpResultFactory _httpResultFactory;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AnimeThemesSyncService"/> class.
@@ -283,10 +291,14 @@ public class AnimeThemesSyncService : IService
         IFileSystem fileSystem,
         ILogManager logManager,
         IMediaEncoder mediaEncoder,
-        IApplicationPaths applicationPaths)
+        IApplicationPaths applicationPaths,
+        IHttpResultFactory httpResultFactory)
     {
         _themeDownloader = new ThemeDownloader(libraryManager, fileSystem, logManager, mediaEncoder, applicationPaths);
+        _httpResultFactory = httpResultFactory;
     }
+
+    public IRequest Request { get; set; } = null!;
 
     /// <summary>
     /// Gets AnimeThemes-enabled library items.
@@ -576,6 +588,22 @@ public class AnimeThemesSyncService : IService
             ?? throw new ArgumentException("The requested download job was not found.", nameof(request));
     }
 
+    public void Delete(RemoveAnimeThemesDownloadJob request)
+    {
+        switch (ThemeDownloadJobService.RemoveTerminal(request.JobId))
+        {
+            case ThemeDownloadJobRemovalResult.Removed:
+                Request.Response.StatusCode = 204;
+                break;
+            case ThemeDownloadJobRemovalResult.NotFound:
+                Request.Response.StatusCode = 404;
+                break;
+            default:
+                Request.Response.StatusCode = 409;
+                break;
+        }
+    }
+
     /// <summary>
     /// Streams saved local AnimeThemes media for one Browser row.
     /// </summary>
@@ -586,7 +614,16 @@ public class AnimeThemesSyncService : IService
         try
         {
             var media = _themeDownloader.GetLocalThemeMediaAsync(request.ItemId, request.RowId, request.Target, CancellationToken.None).GetAwaiter().GetResult();
-            return new FileStream(media.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return _httpResultFactory.GetStaticFileResult(
+                Request,
+                new StaticFileResultOptions
+                {
+                    Path = media.Path,
+                    ContentType = media.ContentType,
+                    ContentLength = new FileInfo(media.Path).Length,
+                    SupportsRangeRequests = true,
+                    FileShare = FileShareMode.Read,
+                }).GetAwaiter().GetResult();
         }
         catch (FileNotFoundException ex)
         {

@@ -535,6 +535,43 @@ public class ThemeFilePlannerTests
     }
 
     [Fact]
+    public void BrowserPages_ExposeVisibleProgressHistoryDismissalRetryAndCorrectDeleteApi()
+    {
+        var root = FindRepositoryRoot();
+        var jellyfinPage = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+        var embyPage = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+        var embyController = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js"));
+
+        foreach (var page in new[] { jellyfinPage, embyPage })
+        {
+            Assert.Contains("#AnimeThemesBrowserPage .ats-card-download-bar", page, StringComparison.Ordinal);
+            Assert.Contains("display: block;", page, StringComparison.Ordinal);
+            Assert.Contains("ats-skeleton-shimmer-only::after", page, StringComparison.Ordinal);
+            Assert.Contains("animation: atsShimmer 1.25s", page, StringComparison.Ordinal);
+            Assert.Contains("ats-dm-item-dismiss", page, StringComparison.Ordinal);
+        }
+
+        foreach (var script in new[] { jellyfinPage, embyController })
+        {
+            Assert.Contains("function dismissDownloadJob(jobId)", script, StringComparison.Ordinal);
+            Assert.Contains("isTerminalDownloadStatus(job.status)", script, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesSync/Jobs/", script, StringComparison.Ordinal);
+            Assert.Contains("function loadPlayerAttempt", script, StringComparison.Ordinal);
+            Assert.Contains("createButton('Retry', true)", script, StringComparison.Ordinal);
+            Assert.Contains("ThemeFiles/DeleteFile?ItemId=", script, StringComparison.Ordinal);
+            Assert.Contains("markThemeTargetDeleted", script, StringComparison.Ordinal);
+            Assert.DoesNotContain("/Delete/Video", script, StringComparison.Ordinal);
+            Assert.DoesNotContain("/Delete/Audio", script, StringComparison.Ordinal);
+            Assert.DoesNotContain("/Delete/Extra", script, StringComparison.Ordinal);
+            Assert.DoesNotContain("addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl'", script, StringComparison.Ordinal);
+        }
+
+        var embyService = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Api", "AnimeThemesSyncService.cs"));
+        Assert.Contains("SupportsRangeRequests = true", embyService, StringComparison.Ordinal);
+        Assert.Contains("GetStaticFileResult", embyService, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BrowserPages_ExposeSegmentedSettingsAndUniqueDownloadManagerIds()
     {
         var root = FindRepositoryRoot();

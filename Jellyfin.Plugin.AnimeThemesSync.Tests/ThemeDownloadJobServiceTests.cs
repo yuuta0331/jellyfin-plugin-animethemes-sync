@@ -112,6 +112,50 @@ public sealed class ThemeDownloadJobServiceTests : IDisposable
         Assert.Empty(ThemeDownloadJobService.GetAll());
     }
 
+    [Fact]
+    public async Task RemoveTerminal_RemovesCompletedFailedAndCancelledHistory()
+    {
+        ThemeDownloadJobService.Configure(1);
+        var completed = Start("completed", (_, _) => Task.FromResult(EmptyResult()));
+        await WaitUntilAsync(() => ThemeDownloadJobService.Get(completed.JobId)?.Status == "Completed");
+
+        var failed = Start("failed", (_, _) => throw new InvalidOperationException("failed"));
+        await WaitUntilAsync(() => ThemeDownloadJobService.Get(failed.JobId)?.Status == "Failed");
+
+        var gate = NewCompletionSource();
+        var cancelled = Start("cancelled", async (_, cancellationToken) =>
+        {
+            await gate.Task.WaitAsync(cancellationToken);
+            return EmptyResult();
+        });
+        ThemeDownloadJobService.Cancel(cancelled.JobId);
+        await WaitUntilAsync(() => ThemeDownloadJobService.Get(cancelled.JobId)?.Status == "Cancelled");
+
+        Assert.Equal(ThemeDownloadJobRemovalResult.Removed, ThemeDownloadJobService.RemoveTerminal(completed.JobId));
+        Assert.Equal(ThemeDownloadJobRemovalResult.Removed, ThemeDownloadJobService.RemoveTerminal(failed.JobId));
+        Assert.Equal(ThemeDownloadJobRemovalResult.Removed, ThemeDownloadJobService.RemoveTerminal(cancelled.JobId));
+        Assert.Empty(ThemeDownloadJobService.GetAll());
+    }
+
+    [Fact]
+    public async Task RemoveTerminal_RejectsActiveAndReportsUnknownJobs()
+    {
+        ThemeDownloadJobService.Configure(1);
+        var gate = NewCompletionSource();
+        var running = Start("running", async (_, cancellationToken) =>
+        {
+            await gate.Task.WaitAsync(cancellationToken);
+            return EmptyResult();
+        });
+
+        Assert.Equal(ThemeDownloadJobRemovalResult.Active, ThemeDownloadJobService.RemoveTerminal(running.JobId));
+        Assert.Equal(ThemeDownloadJobRemovalResult.NotFound, ThemeDownloadJobService.RemoveTerminal("unknown"));
+        Assert.NotNull(ThemeDownloadJobService.Get(running.JobId));
+
+        gate.TrySetResult();
+        await WaitUntilAsync(() => ThemeDownloadJobService.Get(running.JobId)?.Status == "Completed");
+    }
+
     private static ThemeDownloadJobStartResult Start(
         string title,
         Func<IProgress<double>, CancellationToken, Task<ThemeDownloadExecutionResult>> action)
