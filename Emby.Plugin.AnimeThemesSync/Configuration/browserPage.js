@@ -58,10 +58,22 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             browserCacheReady: false,
             browserRebuildRunning: false,
             browserRefreshTimer: null,
-            librarySearchTimer: null
+            librarySearchTimer: null,
+            libraryScrollTop: null,
+            activeDownloads: [],
+            downloadsInterval: null,
+            downloadsPollInFlight: false,
+            downloadsPollRequested: false,
+            downloadsPollingEnabled: false,
+            downloadSequence: 0,
+            detailHostLoading: false,
+            themeObserver: null,
+            themeMediaQuery: null,
+            themeMediaHandler: null
         };
         var browserToolbar = page.querySelector('.ats-browser-toolbar');
         var itemSelect = page.querySelector('#AnimeThemesBrowserItemSelect');
+        var libraryLimit = page.querySelector('#AnimeThemesBrowserLimit');
         var libraryView = page.querySelector('#AnimeThemesBrowserLibraryView');
         var detailView = page.querySelector('#AnimeThemesBrowserDetailView');
         var manageView = page.querySelector('#AnimeThemesBrowserManageView');
@@ -94,6 +106,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         var player = page.querySelector('#AnimeThemesBrowserPlayer');
         var playerBody = page.querySelector('#AnimeThemesBrowserPlayerBody');
         var playerTitle = page.querySelector('#AnimeThemesBrowserPlayerTitle');
+
         var downloadDialog = page.querySelector('#AnimeThemesDownloadDialog');
         var downloadDialogTheme = page.querySelector('#AnimeThemesDownloadDialogTheme');
         var downloadDialogError = page.querySelector('#AnimeThemesDownloadDialogError');
@@ -101,6 +114,19 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         var downloadIncludeAudio = page.querySelector('#AtsDownloadIncludeAudio');
         var downloadIncludeExtras = page.querySelector('#AtsDownloadIncludeExtras');
         var downloadDialogConfirm = page.querySelector('#AnimeThemesDownloadDialogConfirm');
+
+        var deleteDialog = page.querySelector('#AnimeThemesDeleteDialog');
+        var deleteDialogTheme = page.querySelector('#AnimeThemesDeleteDialogTheme');
+        var deleteDialogError = page.querySelector('#AnimeThemesDeleteDialogError');
+        var deleteIncludeVideo = page.querySelector('#AtsDeleteIncludeVideo');
+        var deleteIncludeAudio = page.querySelector('#AtsDeleteIncludeAudio');
+        var deleteIncludeExtras = page.querySelector('#AtsDeleteIncludeExtras');
+        var deleteDialogConfirm = page.querySelector('#AnimeThemesDeleteDialogConfirm');
+
+        var downloadManager = page.querySelector('#AnimeThemesDownloadManager');
+        var dmBadge = page.querySelector('#AnimeThemesDmBadge');
+        var dmToggle = page.querySelector('#AnimeThemesDmToggle');
+        var dmContent = page.querySelector('#AnimeThemesDmContent');
         var progressPanel = page.querySelector('#AnimeThemesBrowserProgress');
         var progressText = page.querySelector('#AnimeThemesBrowserProgressText');
         var progressPercent = page.querySelector('#AnimeThemesBrowserProgressPercent');
@@ -153,6 +179,9 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             ThemeDownloadingEnabled: page.querySelector('#AtsThemeDownloadingEnabled'),
             MaxConcurrentDownloads: page.querySelector('#AtsMaxConcurrentDownloads'),
             DownloadTimeoutSeconds: page.querySelector('#AtsDownloadTimeoutSeconds'),
+            SegmentedDownloadEnabled: page.querySelector('#AtsSegmentedDownloadEnabled'),
+            SegmentedDownloadSegments: page.querySelector('#AtsSegmentedDownloadSegments'),
+            SegmentedDownloadOptions: page.querySelector('#AtsSegmentedDownloadOptions'),
             AllowAdd: page.querySelector('#AtsAllowAdd'),
             ForceRedownload: page.querySelector('#AtsForceRedownload'),
             AllowDelete: page.querySelector('#AtsAllowDelete'),
@@ -283,14 +312,19 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             img.style.display = 'none';
             img.removeAttribute('src');
             if (fallback) fallback.style.display = '';
-            if (!path) return;
+            if (!path) {
+                img.classList.remove('ats-loading-blur');
+                return;
+            }
             img.onload = function () {
                 img.style.display = 'block';
                 img.classList.add('ats-fade-in');
+                img.classList.remove('ats-loading-blur');
                 if (fallback) fallback.style.display = 'none';
             };
             img.onerror = function () {
                 img.style.display = 'none';
+                img.classList.remove('ats-loading-blur');
                 if (fallback) fallback.style.display = '';
             };
             img.src = apiUrl(path, false);
@@ -298,11 +332,19 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function setBackdrop(path) {
             backdrop.style.backgroundImage = path ? 'url("' + apiUrl(path, false) + '")' : '';
+            var bg = page.querySelector('.ats-hero-bg') || backdrop;
+            if (bg) {
+                bg.classList.remove('ats-loading-blur');
+            }
         }
 
-        function selectedItem() {
-            var id = itemSelect.value;
-            return state.items.find(function (item) { return String(value(item, 'Id', 'id')) === id; }) || null;
+        function selectedItem(id) {
+            var targetId = id || itemSelect.value;
+            if (!targetId) return null;
+            if (state.currentItem && String(value(state.currentItem, 'Id', 'id')) === String(targetId)) {
+                return state.currentItem;
+            }
+            return state.items.find(function (item) { return String(value(item, 'Id', 'id')) === String(targetId); }) || null;
         }
 
         function groupId(group) {
@@ -479,7 +521,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             return result * direction;
         }
 
-        function renderItemOptions() {
+        function renderItemOptions(append) {
             var previous = itemSelect.value;
             state.filteredItems = state.items.slice();
             itemSelect.innerHTML = '';
@@ -492,7 +534,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             if (previous && state.filteredItems.some(function (item) { return String(value(item, 'Id', 'id')) === previous; })) {
                 itemSelect.value = previous;
             }
-            renderItemGrid();
+            renderItemGrid(append);
         }
 
         function createSkeleton(className) {
@@ -555,15 +597,22 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             }
         }
 
-        function renderItemGrid() {
-            if (state.itemsLoading) {
+        function renderItemGrid(append) {
+            if (state.itemsLoading && !append) {
                 renderLibrarySkeleton();
                 return;
             }
 
             itemGrid.className = 'ats-item-grid ' + state.viewMode + ' size-' + state.viewSize + ' ' + (state.showLibraryDetails ? 'show-details' : 'hide-details');
-            itemGrid.innerHTML = '';
             if (itemPager) itemPager.innerHTML = '';
+
+            if (!append) {
+                itemGrid.innerHTML = '';
+            } else {
+                var moreBtn = itemGrid.querySelector('.ats-load-more-indicator');
+                if (moreBtn) moreBtn.remove();
+            }
+
             libraryCount.textContent = state.items.length + ' / ' + state.browserTotalRecordCount + ' items' + (state.browserRebuildRunning ? ' | updating' : '');
             if (!state.filteredItems.length) {
                 appendEmptyState(
@@ -573,20 +622,19 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 return;
             }
 
-            state.filteredItems.forEach(function (item) {
+            var itemsToRender = append ? state.filteredItems.slice(state.items.length - state.browserLimit) : state.filteredItems;
+            itemsToRender.forEach(function (item) {
                 itemGrid.appendChild(createItemCard(item));
             });
 
             if (state.items.length < state.browserTotalRecordCount) {
-                var more = document.createElement('button');
-                more.type = 'button';
-                more.className = 'raised emby-button ats-action-button ats-icon-button-text';
-                more.textContent = 'Load more';
-                more.addEventListener('click', function () {
-                    loadItems(true);
-                });
-                (itemPager || itemGrid).appendChild(more);
+                var loader = document.createElement('div');
+                loader.className = 'ats-load-more-indicator';
+                loader.style.height = '1px';
+                itemGrid.appendChild(loader);
             }
+
+            attachScrollListener();
         }
 
         function createItemCard(item) {
@@ -655,6 +703,85 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             syncLayout();
         }
 
+        function parsedColor(valueToParse) {
+            var match = String(valueToParse || '').match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+))?\s*\)/i);
+            if (!match) return null;
+            return {
+                r: Number(match[1]),
+                g: Number(match[2]),
+                b: Number(match[3]),
+                a: match[4] === undefined ? 1 : Number(match[4])
+            };
+        }
+
+        function colorLuminance(color) {
+            function channel(valueToConvert) {
+                var normalized = valueToConvert / 255;
+                return normalized <= 0.03928 ? normalized / 12.92 : Math.pow((normalized + 0.055) / 1.055, 2.4);
+            }
+            return (0.2126 * channel(color.r)) + (0.7152 * channel(color.g)) + (0.0722 * channel(color.b));
+        }
+
+        function detectDarkTheme() {
+            var node = page;
+            while (node && node.nodeType === 1) {
+                var background = parsedColor(window.getComputedStyle(node).backgroundColor);
+                if (background && background.a > 0.05) return colorLuminance(background) < 0.45;
+                node = node.parentElement;
+            }
+
+            var foreground = parsedColor(window.getComputedStyle(page).color) || parsedColor(window.getComputedStyle(document.body).color);
+            if (foreground) return colorLuminance(foreground) > 0.55;
+            return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        }
+
+        function syncThemeMode() {
+            page.setAttribute('data-ats-theme', detectDarkTheme() ? 'dark' : 'light');
+        }
+
+        function setupThemeObserver() {
+            teardownThemeObserver();
+            syncThemeMode();
+            state.themeObserver = new MutationObserver(syncThemeMode);
+            state.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
+            if (document.body) state.themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
+
+            if (window.matchMedia) {
+                state.themeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+                state.themeMediaHandler = syncThemeMode;
+                if (state.themeMediaQuery.addEventListener) state.themeMediaQuery.addEventListener('change', state.themeMediaHandler);
+                else if (state.themeMediaQuery.addListener) state.themeMediaQuery.addListener(state.themeMediaHandler);
+            }
+        }
+
+        function teardownThemeObserver() {
+            if (state.themeObserver) state.themeObserver.disconnect();
+            state.themeObserver = null;
+            if (state.themeMediaQuery && state.themeMediaHandler) {
+                if (state.themeMediaQuery.removeEventListener) state.themeMediaQuery.removeEventListener('change', state.themeMediaHandler);
+                else if (state.themeMediaQuery.removeListener) state.themeMediaQuery.removeListener(state.themeMediaHandler);
+            }
+            state.themeMediaQuery = null;
+            state.themeMediaHandler = null;
+        }
+
+        function showDetailLoading() {
+            detailView.setAttribute('aria-busy', 'true');
+            if (!state.detailHostLoading) {
+                Dashboard.showLoadingMsg();
+                state.detailHostLoading = true;
+            }
+        }
+
+        function hideDetailLoading(token) {
+            if (token && token !== state.detailToken) return;
+            detailView.setAttribute('aria-busy', 'false');
+            if (state.detailHostLoading) {
+                Dashboard.hideLoadingMsg();
+                state.detailHostLoading = false;
+            }
+        }
+
         function syncLayout() {
             page.querySelectorAll('.ats-tab').forEach(function (button) {
                 button.classList.toggle('active', button.getAttribute('data-ats-tab') === state.activeTab);
@@ -693,7 +820,57 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             }
         }
 
+        function getScrollContainer() {
+            var scroller = page.closest('.scroller') || page.closest('.page') || page.closest('.skinHeader-withScroller');
+            return scroller || window;
+        }
+
+        function getScrollPosition() {
+            var container = getScrollContainer();
+            if (container === window) {
+                return { element: window, top: window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop };
+            }
+            return { element: container, top: container.scrollTop };
+        }
+
+        function restoreScrollPosition(scrollPos) {
+            if (!scrollPos) return;
+            if (scrollPos.element === window) {
+                window.scrollTo(0, scrollPos.top);
+                document.documentElement.scrollTop = scrollPos.top;
+                document.body.scrollTop = scrollPos.top;
+            } else {
+                scrollPos.element.scrollTop = scrollPos.top;
+            }
+        }
+
+        function handleScroll() {
+            if (state.itemsLoading) return;
+            if (state.items.length >= state.browserTotalRecordCount) return;
+
+            var indicator = itemGrid.querySelector('.ats-load-more-indicator');
+            if (!indicator) return;
+
+            var container = getScrollContainer();
+            var containerHeight = container === window ? window.innerHeight : container.clientHeight;
+            var rect = indicator.getBoundingClientRect();
+
+            if (rect.top <= containerHeight + 300) {
+                loadItems(true);
+            }
+        }
+
+        var scrollListenerAttached = false;
+        function attachScrollListener() {
+            if (scrollListenerAttached) return;
+            var container = getScrollContainer();
+            container.addEventListener('scroll', handleScroll);
+            scrollListenerAttached = true;
+        }
+
         function openLibraryView() {
+            state.detailToken++;
+            hideDetailLoading();
             detailView.style.display = 'none';
             libraryView.style.display = state.activeTab === 'library' ? '' : 'none';
             state.currentItem = null;
@@ -704,20 +881,38 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             detailView.classList.remove('ats-detail-loading');
             itemSelect.value = '';
             syncLayout();
+            if (state.libraryScrollTop) {
+                setTimeout(function () {
+                    restoreScrollPosition(state.libraryScrollTop);
+                    state.libraryScrollTop = null;
+                }, 0);
+            }
         }
 
         function openItemDetail(itemId) {
             if (!itemId) return;
+            state.libraryScrollTop = getScrollPosition();
             itemSelect.value = itemId;
-            state.currentItem = selectedItem();
+            state.currentItem = selectedItem(itemId);
             state.currentResult = null;
             state.activeGroupId = null;
             state.detailLoading = true;
             state.detailError = null;
             state.detailToken++;
             setActiveTab('library');
+            showDetailLoading();
             renderDetailLoading();
             syncLayout();
+
+            var container = getScrollContainer();
+            if (container === window) {
+                window.scrollTo(0, 0);
+                document.documentElement.scrollTop = 0;
+                document.body.scrollTop = 0;
+            } else {
+                container.scrollTop = 0;
+            }
+
             loadThemes(state.detailToken);
         }
 
@@ -733,6 +928,9 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         }
 
         function browserItemsPath(startIndex) {
+            if (libraryLimit) {
+                state.browserLimit = Number(libraryLimit.value) || 80;
+            }
             var params = [
                 ['startIndex', startIndex || 0],
                 ['limit', state.browserLimit],
@@ -767,16 +965,19 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 state.browserRebuildRunning = !!value(storage, 'RebuildRunning', 'rebuildRunning');
                 state.itemsLoading = false;
                 state.summaryLoading = false;
-                renderItemOptions();
+                renderItemOptions(append);
                 renderSummary(summary);
                 renderStorage(storage);
+                attachScrollListener();
                 scheduleBrowserRefresh();
                 Dashboard.hideLoadingMsg();
             }).catch(function (err) {
                 state.itemsLoading = false;
                 state.summaryLoading = false;
-                itemGrid.innerHTML = '';
-                appendEmptyState(itemGrid, 'Library failed to load', getErrorMessage(err));
+                if (!append) {
+                    itemGrid.innerHTML = '';
+                    appendEmptyState(itemGrid, 'Library failed to load', getErrorMessage(err));
+                }
                 Dashboard.hideLoadingMsg();
                 Dashboard.alert({ title: 'Browser Error', message: 'Failed to load items: ' + err });
             });
@@ -1300,7 +1501,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                     reloadSeasonMappingsPreservingState(seasonRowId(row));
                 }
                 if (downloadAfterSave) {
-                    startDownloadJob('AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(payload.SeasonItemId) + '&Force=false');
+                    startDownloadJob({
+                        path: 'AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(payload.SeasonItemId) + '&Force=false',
+                        jobType: 'Item',
+                        itemId: payload.SeasonItemId,
+                        rowId: '',
+                        title: value(state.selectedSeason, 'Name', 'name') || 'Item download'
+                    });
                 } else {
                     finderState.textContent = 'Mapping saved.';
                 }
@@ -1714,29 +1921,58 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             detailView.classList.add('ats-detail-loading');
             downloadItemButton.disabled = true;
             if (matchInFinderButton) matchInFinderButton.disabled = true;
-            setBackdrop(null);
-            poster.style.display = 'none';
+
+            var item = state.currentItem || {};
+            var name = value(item, 'Name', 'name') || 'Loading item...';
+            title.textContent = name;
+
+            var imageSrc = value(item, 'PrimaryImageUrl', 'primaryImageUrl') || value(item, 'ThumbImageUrl', 'thumbImageUrl');
+            if (imageSrc) {
+                poster.onload = function () {
+                    poster.classList.remove('ats-loading-blur');
+                    poster.onload = null;
+                };
+                poster.onerror = function () {
+                    poster.classList.remove('ats-loading-blur');
+                    poster.onerror = null;
+                };
+                poster.src = apiUrl(imageSrc, false);
+                poster.style.display = 'block';
+                poster.classList.add('ats-loading-blur');
+                posterFallback.style.display = 'none';
+            } else {
+                poster.removeAttribute('src');
+                poster.style.display = 'none';
+                posterFallback.style.display = 'block';
+                posterFallback.textContent = String(name).trim().slice(0, 2).toUpperCase();
+            }
+
+            var backdropSrc = value(item, 'BackdropImageUrl', 'backdropImageUrl') || value(item, 'ThumbImageUrl', 'thumbImageUrl') || value(item, 'PrimaryImageUrl', 'primaryImageUrl');
+            if (backdropSrc) {
+                setBackdrop(backdropSrc);
+                var bg = page.querySelector('.ats-hero-bg') || backdrop;
+                if (bg) bg.classList.add('ats-loading-blur');
+            } else {
+                setBackdrop(null);
+            }
+
             logo.style.display = 'none';
-            posterFallback.style.display = 'none';
-            title.textContent = 'Loading item...';
             meta.innerHTML = '';
-            meta.appendChild(createSkeleton('ats-skeleton-line'));
+
             seasonGroups.style.display = '';
             seasonGroups.innerHTML = '';
-            for (var i = 0; i < 4; i++) {
+            for (var i = 0; i < 2; i++) {
                 var pill = document.createElement('div');
-                pill.className = 'ats-season-pill ats-placeholder-card';
-                pill.appendChild(createSkeleton('ats-skeleton-line wide'));
-                pill.appendChild(createSkeleton('ats-skeleton-line'));
+                pill.className = 'ats-season-pill ats-placeholder-card ats-skeleton-shimmer-only';
+                pill.style.height = '2.25rem';
+                pill.style.width = '6rem';
                 seasonGroups.appendChild(pill);
             }
             rowsContainer.innerHTML = '';
-            for (var row = 0; row < 4; row++) {
+            for (var row = 0; row < 3; row++) {
                 var card = document.createElement('div');
-                card.className = 'ats-theme-card ats-placeholder-card';
-                card.appendChild(createSkeleton('ats-skeleton-line wide'));
-                card.appendChild(createSkeleton('ats-skeleton-line'));
-                card.appendChild(createSkeleton('ats-skeleton-line short'));
+                card.className = 'ats-theme-card ats-placeholder-card ats-skeleton-shimmer-only';
+                card.style.height = '6.5rem';
                 rowsContainer.appendChild(card);
             }
         }
@@ -1759,12 +1995,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         }
 
         function loadThemes(token) {
-            var itemId = itemSelect.value;
+            var itemId = itemSelect.value || (state.currentItem ? value(state.currentItem, 'Id', 'id') : null);
             if (!itemId) return;
-            state.currentItem = selectedItem();
+            state.currentItem = selectedItem(itemId);
             var previousGroupId = state.activeGroupId;
             apiGet('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes').then(function (result) {
                 if (token && token !== state.detailToken) return;
+                hideDetailLoading(token);
                 state.detailLoading = false;
                 state.detailError = null;
                 detailView.classList.remove('ats-detail-loading');
@@ -1780,6 +2017,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 syncLayout();
             }).catch(function (err) {
                 if (token && token !== state.detailToken) return;
+                hideDetailLoading(token);
                 state.detailLoading = false;
                 state.currentResult = null;
                 state.detailError = getErrorMessage(err);
@@ -1917,11 +2155,15 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             rows.forEach(function (row) {
                 rowsContainer.appendChild(createThemeCard(row));
             });
+            updateThemeCardDownloadStatuses();
         }
 
         function createThemeCard(row) {
             var card = document.createElement('div');
             card.className = 'ats-theme-card ats-fade-in';
+            card.setAttribute('data-item-id', activeGroupItemId() || '');
+            card.setAttribute('data-row-id', value(row, 'RowId', 'rowId') || '');
+            card.setAttribute('data-theme-key', value(row, 'ThemeKey', 'themeKey'));
 
             var main = document.createElement('div');
             main.className = 'ats-theme-main';
@@ -1949,50 +2191,50 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             addStatus(status, 'Extras', value(row, 'ExtraExists', 'extraExists'), value(row, 'ExtraPath', 'extraPath'));
             side.appendChild(status);
 
-            var actions = document.createElement('div');
-            actions.className = 'ats-actions';
+        var actions = document.createElement('div');
+        actions.className = 'ats-actions';
 
-            // 1. AnimeThemes Link (icon-only)
-            addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'), true);
+        addOpenButton(actions, 'AnimeThemes', value(row, 'AnimeThemesUrl', 'animeThemesUrl'), true);
 
-            // 2. Play/Preview Video Stack & Individual Delete Video
-            var hasVideoUrl = !!value(row, 'VideoUrl', 'videoUrl');
-            var hasVideoLocal = !!value(row, 'SavedVideoPlayable', 'savedVideoPlayable') || !!value(row, 'SavedExtraPlayable', 'savedExtraPlayable');
-            if (hasVideoUrl || hasVideoLocal) {
-                var videoStack = document.createElement('div');
-                videoStack.className = 'ats-btn-stack';
-                if (hasVideoUrl) {
-                    addRemotePreviewButton(videoStack, row, 'video', true);
-                }
-                addLocalVideoButton(videoStack, row);
-                actions.appendChild(videoStack);
+        var hasVideoUrl = !!value(row, 'VideoUrl', 'videoUrl');
+        var hasVideoLocal = !!value(row, 'SavedVideoPlayable', 'savedVideoPlayable') || !!value(row, 'SavedExtraPlayable', 'savedExtraPlayable');
+        if (hasVideoUrl || hasVideoLocal) {
+            var videoStack = document.createElement('div');
+            videoStack.className = 'ats-btn-stack';
+            if (hasVideoUrl) {
+                addRemotePreviewButton(videoStack, row, 'video', true);
             }
-            addDeleteFileButton(actions, row, 'video', 'Delete Video', value(row, 'BackdropExists', 'backdropExists'), true);
-
-            // 3. Play/Preview Audio Stack & Individual Delete Audio
-            var hasAudioUrl = !!value(row, 'AudioUrl', 'audioUrl');
-            var hasAudioLocal = !!value(row, 'SavedAudioPlayable', 'savedAudioPlayable');
-            if (hasAudioUrl || hasAudioLocal) {
-                var audioStack = document.createElement('div');
-                audioStack.className = 'ats-btn-stack';
-                if (hasAudioUrl) {
-                    addRemotePreviewButton(audioStack, row, 'audio', true);
-                }
-                addPlayButton(audioStack, row, 'audio', 'Play Audio', hasAudioLocal);
-                actions.appendChild(audioStack);
-            }
-            addDeleteFileButton(actions, row, 'audio', 'Delete Audio', value(row, 'ThemeMusicExists', 'themeMusicExists'), true);
-
-            // 4. Delete Extras
-            addDeleteFileButton(actions, row, 'extra', 'Delete Extras', value(row, 'ExtraExists', 'extraExists'), true);
-
-            // 5. Download button (icon-only, aligned to the right)
-            addDownloadButton(actions, row, true);
-
-            side.appendChild(actions);
-            card.appendChild(side);
-            return card;
+            addLocalVideoButton(videoStack, row);
+            actions.appendChild(videoStack);
         }
+
+        var hasAudioUrl = !!value(row, 'AudioUrl', 'audioUrl');
+        var hasAudioLocal = !!value(row, 'SavedAudioPlayable', 'savedAudioPlayable');
+        if (hasAudioUrl || hasAudioLocal) {
+            var audioStack = document.createElement('div');
+            audioStack.className = 'ats-btn-stack';
+            if (hasAudioUrl) {
+                addRemotePreviewButton(audioStack, row, 'audio', true);
+            }
+            addPlayButton(audioStack, row, 'audio', 'Play Audio', hasAudioLocal);
+            actions.appendChild(audioStack);
+        }
+
+        var rightActions = document.createElement('div');
+        rightActions.className = 'ats-theme-actions-right';
+
+        var hasAnySaved = !!(value(row, 'BackdropExists', 'backdropExists') || value(row, 'ThemeMusicExists', 'themeMusicExists') || value(row, 'ExtraExists', 'extraExists'));
+        if (hasAnySaved) {
+            addDeleteButton(rightActions, row, true);
+        }
+
+        addDownloadButton(rightActions, row, true);
+        actions.appendChild(rightActions);
+
+        side.appendChild(actions);
+        card.appendChild(side);
+        return card;
+    }
 
         function appendDiv(parent, className, content) {
             var div = document.createElement('div');
@@ -2058,6 +2300,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function addDownloadButton(container, row, iconOnly) {
             var button = createButton('Download', false, 'download');
+            button.classList.add('ats-btn-download');
             if (iconOnly) {
                 button.classList.add('ats-icon-button-only');
                 button.classList.add('ats-button-align-right');
@@ -2067,6 +2310,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 downloadTheme(row);
             });
             container.appendChild(button);
+            return button;
         }
 
         function addLocalVideoButton(container, row) {
@@ -2166,7 +2410,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function ensureSettingsConfig(config) {
             config = config || {};
-            config.ConfigurationVersion = 3;
+            config.ConfigurationVersion = 4;
             config.Series = ensureMediaConfig(getConfigValue(config, 'Series', null));
             config.Movie = ensureMediaConfig(getConfigValue(config, 'Movie', null));
             if (!Array.isArray(getConfigValue(config, 'SeasonThemeMappings', []))) {
@@ -2205,10 +2449,12 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function defaultSettingsConfig(existingConfig) {
             return ensureSettingsConfig({
-                ConfigurationVersion: 3,
+                ConfigurationVersion: 4,
                 ThemeDownloadingEnabled: true,
                 MaxConcurrentDownloads: 1,
                 DownloadTimeoutSeconds: 600,
+                SegmentedDownloadEnabled: true,
+                SegmentedDownloadSegments: 4,
                 AllowAdd: true,
                 ForceRedownload: false,
                 AllowDelete: false,
@@ -2231,10 +2477,12 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         function canonicalizeSettings(config) {
             config = ensureSettingsConfig(cloneSettings(config || {}));
             return {
-                ConfigurationVersion: 3,
+                ConfigurationVersion: 4,
                 ThemeDownloadingEnabled: !!getConfigValue(config, 'ThemeDownloadingEnabled', true),
                 MaxConcurrentDownloads: Math.max(1, parseInt(getConfigValue(config, 'MaxConcurrentDownloads', 1), 10) || 1),
                 DownloadTimeoutSeconds: Math.max(1, parseInt(getConfigValue(config, 'DownloadTimeoutSeconds', 600), 10) || 600),
+                SegmentedDownloadEnabled: !!getConfigValue(config, 'SegmentedDownloadEnabled', true),
+                SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 4), 10) || 4)),
                 AllowAdd: !!getConfigValue(config, 'AllowAdd', true),
                 ForceRedownload: !!getConfigValue(config, 'ForceRedownload', false),
                 AllowDelete: !!getConfigValue(config, 'AllowDelete', false),
@@ -2467,6 +2715,9 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         }
 
         function syncConditionalSettings() {
+            if (settingsFields.SegmentedDownloadOptions) {
+                settingsFields.SegmentedDownloadOptions.hidden = !settingsFields.SegmentedDownloadEnabled.checked;
+            }
             if (settingsFields.ExtrasOptions) {
                 settingsFields.ExtrasOptions.hidden = !settingsFields.ExtrasEnabled.checked;
             }
@@ -2547,6 +2798,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             settingsFields.ThemeDownloadingEnabled.checked = !!getConfigValue(config, 'ThemeDownloadingEnabled', true);
             settingsFields.MaxConcurrentDownloads.value = getConfigValue(config, 'MaxConcurrentDownloads', 1);
             settingsFields.DownloadTimeoutSeconds.value = getConfigValue(config, 'DownloadTimeoutSeconds', 600);
+            settingsFields.SegmentedDownloadEnabled.checked = !!getConfigValue(config, 'SegmentedDownloadEnabled', true);
+            settingsFields.SegmentedDownloadSegments.value = Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 4), 10) || 4));
             settingsFields.AllowAdd.checked = !!getConfigValue(config, 'AllowAdd', true);
             settingsFields.ForceRedownload.checked = !!getConfigValue(config, 'ForceRedownload', false);
             settingsFields.AllowDelete.checked = !!getConfigValue(config, 'AllowDelete', false);
@@ -2585,10 +2838,12 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function readSettingsForm() {
             return {
-                ConfigurationVersion: 3,
+                ConfigurationVersion: 4,
                 ThemeDownloadingEnabled: settingsFields.ThemeDownloadingEnabled.checked,
                 MaxConcurrentDownloads: parseInt(settingsFields.MaxConcurrentDownloads.value, 10) || 1,
                 DownloadTimeoutSeconds: parseInt(settingsFields.DownloadTimeoutSeconds.value, 10) || 600,
+                SegmentedDownloadEnabled: settingsFields.SegmentedDownloadEnabled.checked,
+                SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(settingsFields.SegmentedDownloadSegments.value, 10) || 4)),
                 AllowAdd: settingsFields.AllowAdd.checked,
                 ForceRedownload: settingsFields.ForceRedownload.checked,
                 AllowDelete: settingsFields.AllowDelete.checked,
@@ -2761,61 +3016,501 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 '&RowId=' + encodeURIComponent(pending.rowId) +
                 '&Force=false&IncludeAudio=' + encodeURIComponent(downloadIncludeAudio.checked) +
                 '&IncludeVideo=' + encodeURIComponent(downloadIncludeVideo.checked) +
-                '&IncludeExtras=' + encodeURIComponent(downloadIncludeExtras.checked);
+                '&IncludeExtras=' + encodeURIComponent(downloadIncludeExtras.checked) +
+                '&DisplayTitle=' + encodeURIComponent(downloadDialogTheme.textContent || pending.rowId);
+            var request = {
+                path: path,
+                jobType: 'Theme',
+                itemId: pending.itemId,
+                rowId: pending.rowId,
+                title: downloadDialogTheme.textContent || pending.rowId
+            };
             closeDownloadDialog();
-            startDownloadJob(path);
+            startDownloadJob(request);
         }
 
         function downloadItem() {
             var itemId = activeGroupItemId();
             if (!itemId) return;
-            startDownloadJob('AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(itemId) + '&Force=false');
+            var displayTitle = title.textContent || 'Item download';
+            startDownloadJob({
+                path: 'AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(itemId) +
+                    '&Force=false&DisplayTitle=' + encodeURIComponent(displayTitle),
+                jobType: 'Item',
+                itemId: itemId,
+                rowId: '',
+                title: displayTitle
+            });
         }
 
-        function startDownloadJob(path) {
-            setProgress(true, 'Starting...', 0);
-            apiPost(path).then(function (job) {
-                pollDownloadJob(value(job, 'JobId', 'jobId'));
+        function startDownloadJob(request) {
+            var temporaryId = 'starting-' + (++state.downloadSequence);
+            var optimisticJob = {
+                jobId: temporaryId,
+                clientOnly: true,
+                status: 'Starting',
+                progress: 0,
+                message: 'Starting...',
+                error: '',
+                jobType: request.jobType,
+                itemId: request.itemId || '',
+                rowId: request.rowId || '',
+                title: request.title || 'Download job',
+                queuePosition: null,
+                canCancel: false
+            };
+            state.activeDownloads.unshift(optimisticJob);
+            renderDownloadManager();
+            updateThemeCardDownloadStatuses();
+            if (downloadManager) {
+                downloadManager.style.display = 'flex';
+                downloadManager.classList.remove('collapsed');
+                downloadManager.removeAttribute('aria-hidden');
+            }
+
+            apiPost(request.path).then(function (job) {
+                state.activeDownloads = state.activeDownloads.filter(function (current) { return current.jobId !== temporaryId; });
+                if (value(job, 'JobId', 'jobId')) {
+                    var startedJob = normalizeDownloadJob(job);
+                    startedJob.clientOnly = true;
+                    state.activeDownloads.unshift(startedJob);
+                }
+                renderDownloadManager();
+                updateThemeCardDownloadStatuses();
+                startDownloadsPolling();
             }).catch(function (err) {
-                setProgress(true, 'Failed to start: ' + getErrorMessage(err), 0);
+                state.activeDownloads = state.activeDownloads.filter(function (current) { return current.jobId !== temporaryId; });
+                renderDownloadManager();
+                updateThemeCardDownloadStatuses();
                 Dashboard.alert({ title: 'Download Error', message: 'Failed to start download: ' + getErrorMessage(err) });
             });
         }
 
-        function pollDownloadJob(jobId) {
-            if (!jobId) {
-                setProgress(true, 'Failed to start: no job id returned', 0);
+        function startDownloadsPolling() {
+            state.downloadsPollingEnabled = true;
+            if (state.downloadsInterval) return;
+            if (state.downloadsPollInFlight) {
+                state.downloadsPollRequested = true;
+                return;
+            }
+            pollDownloads();
+        }
+
+        function stopDownloadsPolling() {
+            state.downloadsPollingEnabled = false;
+            state.downloadsPollRequested = false;
+            if (state.downloadsInterval) {
+                clearTimeout(state.downloadsInterval);
+                state.downloadsInterval = null;
+            }
+        }
+
+        function scheduleDownloadsPolling(delay) {
+            if (!state.downloadsPollingEnabled) return;
+            if (state.downloadsInterval) clearTimeout(state.downloadsInterval);
+            state.downloadsInterval = setTimeout(function () {
+                state.downloadsInterval = null;
+                pollDownloads();
+            }, typeof delay === 'number' ? delay : 750);
+        }
+
+        function pollDownloadsNow() {
+            state.downloadsPollingEnabled = true;
+            if (state.downloadsInterval) clearTimeout(state.downloadsInterval);
+            state.downloadsInterval = null;
+            if (state.downloadsPollInFlight) state.downloadsPollRequested = true;
+            else pollDownloads();
+        }
+
+        function isActiveDownloadStatus(status) {
+            return status === 'Starting' || status === 'Running' || status === 'Pending' || status === 'Cancelling';
+        }
+
+        function normalizeDownloadJob(job) {
+            return {
+                jobId: value(job, 'JobId', 'jobId') || '',
+                status: value(job, 'Status', 'status') || 'Pending',
+                progress: Math.max(0, Math.min(100, Number(value(job, 'Progress', 'progress')) || 0)),
+                message: value(job, 'Message', 'message') || '',
+                error: value(job, 'Error', 'error') || '',
+                jobType: value(job, 'JobType', 'jobType') || 'Download',
+                itemId: value(job, 'ItemId', 'itemId') || '',
+                rowId: value(job, 'RowId', 'rowId') || '',
+                title: value(job, 'DisplayTitle', 'displayTitle') || 'Download job',
+                queuePosition: value(job, 'QueuePosition', 'queuePosition'),
+                canCancel: !!value(job, 'CanCancel', 'canCancel')
+            };
+        }
+
+        function pollDownloads() {
+            if (state.downloadsPollInFlight) return;
+            state.downloadsPollInFlight = true;
+            var shouldContinue = false;
+            apiGet('AnimeThemesSync/Jobs').then(function (jobs) {
+                var list = jobs || [];
+                var serverJobs = list.map(normalizeDownloadJob);
+                var serverJobIds = {};
+                serverJobs.forEach(function (job) { serverJobIds[job.jobId] = true; });
+                var optimisticJobs = state.activeDownloads.filter(function (job) { return job.clientOnly && !serverJobIds[job.jobId]; });
+                state.activeDownloads = optimisticJobs.concat(serverJobs);
+                renderDownloadManager();
+                updateThemeCardDownloadStatuses();
+                shouldContinue = state.activeDownloads.some(function (job) { return isActiveDownloadStatus(job.status); });
+            }).catch(function (err) {
+                console.error('Failed to poll downloads', err);
+                shouldContinue = state.activeDownloads.some(function (job) { return isActiveDownloadStatus(job.status); });
+            }).then(function () {
+                state.downloadsPollInFlight = false;
+                if (!state.downloadsPollingEnabled) return;
+                if (state.downloadsPollRequested) {
+                    state.downloadsPollRequested = false;
+                    scheduleDownloadsPolling(0);
+                } else if (shouldContinue) scheduleDownloadsPolling(750);
+                else stopDownloadsPolling();
+            });
+        }
+
+        function cancelDownloadJob(jobId) {
+            apiPost('AnimeThemesSync/Jobs/' + encodeURIComponent(jobId) + '/Cancel').then(function (job) {
+                var updated = normalizeDownloadJob(job || {});
+                state.activeDownloads = state.activeDownloads.map(function (current) {
+                    return current.jobId === jobId && updated.jobId ? updated : current;
+                });
+                renderDownloadManager();
+                updateThemeCardDownloadStatuses();
+                pollDownloadsNow();
+            }).catch(function (err) {
+                console.error('Failed to cancel job', err);
+            });
+        }
+
+        function toggleDownloadManager() {
+            if (downloadManager) {
+                downloadManager.classList.toggle('collapsed');
+                var expanded = !downloadManager.classList.contains('collapsed');
+                if (dmToggle) {
+                    dmToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                    dmToggle.setAttribute('aria-label', expanded ? 'Collapse downloads' : 'Expand downloads');
+                }
+            }
+        }
+
+        function downloadStatusText(job) {
+            if (job.status === 'Starting') return 'Starting...';
+            if (job.status === 'Pending') return 'Queued' + (job.queuePosition ? ' #' + job.queuePosition : '');
+            if (job.status === 'Running') return Math.round(job.progress) + '% · ' + (job.message || 'Downloading...');
+            if (job.status === 'Cancelling') return 'Cancelling...';
+            if (job.status === 'Failed') return 'Failed: ' + (job.error || 'Unknown error');
+            if (job.status === 'Cancelled') return 'Cancelled';
+            return 'Completed';
+        }
+
+        function downloadJobKey(job) {
+            return String(job.jobId || (job.jobType + ':' + job.itemId + ':' + job.rowId));
+        }
+
+        function updateProgressTrack(track, bar, job, animateFromZero) {
+            var progress = Math.max(0, Math.min(100, Number(job.progress) || 0));
+            track.setAttribute('aria-label', job.title);
+            track.setAttribute('aria-valuemin', '0');
+            track.setAttribute('aria-valuemax', '100');
+            track.setAttribute('aria-valuetext', downloadStatusText(job));
+            if (job.status === 'Starting' || job.status === 'Pending') track.removeAttribute('aria-valuenow');
+            else track.setAttribute('aria-valuenow', String(Math.round(progress)));
+
+            function applyWidth() { bar.style.width = progress + '%'; }
+            if (animateFromZero) {
+                bar.style.width = '0%';
+                window.requestAnimationFrame(applyWidth);
+            } else {
+                applyWidth();
+            }
+        }
+
+        function createDownloadManagerItem(key) {
+            var item = document.createElement('div');
+            item.setAttribute('data-job-key', key);
+
+            var header = document.createElement('div');
+            header.className = 'ats-dm-item-header';
+            var titleSpan = document.createElement('div');
+            titleSpan.className = 'ats-dm-item-title';
+            header.appendChild(titleSpan);
+            var cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.className = 'emby-button ats-dm-item-cancel';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.addEventListener('click', function (event) {
+                event.stopPropagation();
+                var jobId = item.getAttribute('data-job-id');
+                if (jobId) cancelDownloadJob(jobId);
+            });
+            header.appendChild(cancelBtn);
+            item.appendChild(header);
+
+            var statusRow = document.createElement('div');
+            statusRow.className = 'ats-download-status-row';
+            var dot = document.createElement('span');
+            dot.className = 'ats-download-state-dot';
+            dot.setAttribute('aria-hidden', 'true');
+            statusRow.appendChild(dot);
+            var progressText = document.createElement('div');
+            progressText.className = 'ats-dm-item-progress-text';
+            statusRow.appendChild(progressText);
+            item.appendChild(statusRow);
+
+            var progressTrack = document.createElement('div');
+            progressTrack.className = 'ats-dm-item-progress-track';
+            progressTrack.setAttribute('role', 'progressbar');
+            var progressBar = document.createElement('div');
+            progressBar.className = 'ats-dm-item-progress-bar';
+            progressTrack.appendChild(progressBar);
+            item.appendChild(progressTrack);
+            return item;
+        }
+
+        function updateDownloadManagerItem(item, job, isNew) {
+            item.className = 'ats-dm-item ' + String(job.status || '').toLowerCase();
+            item.setAttribute('data-job-id', job.clientOnly ? '' : job.jobId);
+            var titleSpan = item.querySelector('.ats-dm-item-title');
+            titleSpan.textContent = job.title;
+            titleSpan.title = job.title;
+            var cancelBtn = item.querySelector('.ats-dm-item-cancel');
+            cancelBtn.hidden = !job.canCancel;
+            cancelBtn.disabled = !job.canCancel;
+            cancelBtn.setAttribute('aria-label', 'Cancel ' + job.title);
+            var progressText = item.querySelector('.ats-dm-item-progress-text');
+            progressText.textContent = downloadStatusText(job);
+            progressText.classList.toggle('ats-color-danger', job.status === 'Failed');
+            item.querySelector('.ats-download-state-dot').hidden = !isActiveDownloadStatus(job.status);
+            updateProgressTrack(item.querySelector('.ats-dm-item-progress-track'), item.querySelector('.ats-dm-item-progress-bar'), job, isNew);
+        }
+
+        function renderDownloadManager() {
+            if (!downloadManager) return;
+            var activeJobs = state.activeDownloads.filter(function (job) { return isActiveDownloadStatus(job.status); });
+            if (dmBadge) dmBadge.textContent = activeJobs.length;
+
+            if (state.activeDownloads.length === 0) {
+                downloadManager.style.display = 'none';
+                downloadManager.setAttribute('aria-hidden', 'true');
+                downloadManager.classList.add('collapsed');
+                if (dmContent) dmContent.innerHTML = '';
                 return;
             }
 
-            apiGet('AnimeThemesSync/Jobs/' + encodeURIComponent(jobId)).then(function (job) {
-                var status = value(job, 'Status', 'status');
-                var progress = value(job, 'Progress', 'progress') || 0;
-                var message = value(job, 'Message', 'message') || status || 'Running';
-                        setProgress(true, message, progress);
-                        if (status === 'Completed') {
-                            if (state.activeTab === 'finder') {
-                                reloadSeasonMappingsPreservingState();
-                            } else if (state.activeTab === 'library') {
-                                loadThemes();
-                            } else if (state.activeTab === 'settings') {
-                                loadSettings(true);
-                            }
-                            setTimeout(function () { setProgress(false, '', 0); }, 1600);
-                            return;
-                        }
+            downloadManager.style.display = 'flex';
+            downloadManager.removeAttribute('aria-hidden');
+            if (!dmContent) return;
 
-                if (status === 'Failed') {
-                    var error = value(job, 'Error', 'error') || 'Download failed.';
-                    setProgress(true, error, progress);
-                    Dashboard.alert({ title: 'Download Error', message: error });
-                    return;
+            var retained = {};
+            state.activeDownloads.forEach(function (job) {
+                var key = downloadJobKey(job);
+                var item = dmContent.querySelector('[data-job-key="' + key.replace(/"/g, '\\"') + '"]');
+                var isNew = !item;
+                if (!item) item = createDownloadManagerItem(key);
+                updateDownloadManagerItem(item, job, isNew);
+                dmContent.appendChild(item);
+                retained[key] = true;
+            });
+            Array.prototype.slice.call(dmContent.querySelectorAll('[data-job-key]')).forEach(function (item) {
+                if (!retained[item.getAttribute('data-job-key')]) item.remove();
+            });
+        }
+
+        function renderInlineDownloadStatus(container, job) {
+            var key = downloadJobKey(job);
+            var isNew = container.getAttribute('data-job-key') !== key;
+            container.hidden = false;
+            container.setAttribute('aria-live', 'polite');
+            container.setAttribute('data-job-key', key);
+            container.setAttribute('data-job-id', job.clientOnly ? '' : job.jobId);
+            if (isNew) {
+                container.innerHTML = '';
+                var dot = document.createElement('span');
+                dot.className = 'ats-download-state-dot';
+                dot.setAttribute('aria-hidden', 'true');
+                container.appendChild(dot);
+                var copy = document.createElement('span');
+                copy.className = 'ats-card-download-copy';
+                container.appendChild(copy);
+                var track = document.createElement('span');
+                track.className = 'ats-card-download-track';
+                track.setAttribute('role', 'progressbar');
+                var bar = document.createElement('span');
+                bar.className = 'ats-card-download-bar';
+                track.appendChild(bar);
+                container.appendChild(track);
+                var cancel = document.createElement('button');
+                cancel.type = 'button';
+                cancel.className = 'emby-button ats-card-download-cancel';
+                cancel.textContent = 'Cancel';
+                cancel.addEventListener('click', function () {
+                    var jobId = container.getAttribute('data-job-id');
+                    if (jobId) cancelDownloadJob(jobId);
+                });
+                container.appendChild(cancel);
+            }
+
+            container.querySelector('.ats-card-download-copy').textContent = downloadStatusText(job);
+            var cancelButton = container.querySelector('.ats-card-download-cancel');
+            cancelButton.hidden = !job.canCancel;
+            cancelButton.disabled = !job.canCancel;
+            cancelButton.setAttribute('aria-label', 'Cancel ' + job.title);
+            updateProgressTrack(container.querySelector('.ats-card-download-track'), container.querySelector('.ats-card-download-bar'), job, isNew);
+        }
+
+        function updateThemeCardDownloadStatuses() {
+            page.querySelectorAll('.ats-theme-card').forEach(function (card) {
+                var downloadBtn = card.querySelector('.ats-btn-download');
+                if (!downloadBtn) return;
+                var itemId = card.getAttribute('data-item-id') || '';
+                var rowId = card.getAttribute('data-row-id') || '';
+                var activeJob = state.activeDownloads.find(function (d) {
+                    return isActiveDownloadStatus(d.status) && d.jobType === 'Theme' &&
+                        String(d.itemId).toLowerCase() === String(itemId).toLowerCase() && String(d.rowId) === String(rowId);
+                });
+
+                if (activeJob) {
+                    downloadBtn.classList.add('ats-downloading');
+                    downloadBtn.disabled = true;
+                    downloadBtn.title = downloadStatusText(activeJob);
+                    var status = card.querySelector('.ats-card-download-status');
+                    if (!status) {
+                        status = document.createElement('div');
+                        status.className = 'ats-card-download-status';
+                        card.appendChild(status);
+                    }
+                    renderInlineDownloadStatus(status, activeJob);
+                } else {
+                    downloadBtn.classList.remove('ats-downloading');
+                    downloadBtn.disabled = false;
+                    downloadBtn.title = 'Download theme';
+                    var status = card.querySelector('.ats-card-download-status');
+                    if (status) status.remove();
                 }
+            });
 
-                setTimeout(function () { pollDownloadJob(jobId); }, 1000);
+            var itemStatus = page.querySelector('#AnimeThemesItemDownloadStatus');
+            var currentItemId = activeGroupItemId() || '';
+            var itemJob = state.activeDownloads.find(function (job) {
+                return isActiveDownloadStatus(job.status) && job.jobType === 'Item' &&
+                    String(job.itemId).toLowerCase() === String(currentItemId).toLowerCase();
+            });
+            if (itemStatus && itemJob) {
+                downloadItemButton.disabled = true;
+                renderInlineDownloadStatus(itemStatus, itemJob);
+            } else if (itemStatus) {
+                itemStatus.hidden = true;
+                itemStatus.innerHTML = '';
+                if (!state.detailLoading) downloadItemButton.disabled = false;
+            }
+        }
+
+        function addDeleteButton(container, row, iconOnly) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'emby-button ats-button-secondary' + (iconOnly ? ' ats-icon-button-only' : '');
+
+            var icon = document.createElement('i');
+            icon.className = 'md-icon ats-icon ats-color-danger';
+            icon.innerHTML = '&#xE872;';
+            button.appendChild(icon);
+
+            if (!iconOnly) {
+                var textSpan = document.createElement('span');
+                textSpan.textContent = 'Delete';
+                button.appendChild(textSpan);
+            }
+
+            button.title = 'Delete saved files';
+            button.addEventListener('click', function () {
+                openDeleteDialog(row);
+            });
+            container.appendChild(button);
+        }
+
+        function openDeleteDialog(row) {
+            state.lastFocus = document.activeElement;
+            state.pendingDelete = row;
+            deleteDialogTheme.textContent = text(value(row, 'ThemeKey', 'themeKey')) + (value(row, 'SongTitle', 'songTitle') ? ' · ' + value(row, 'SongTitle', 'songTitle') : '');
+
+            var hasVideo = !!value(row, 'BackdropExists', 'backdropExists');
+            var hasAudio = !!value(row, 'ThemeMusicExists', 'themeMusicExists');
+            var hasExtras = !!value(row, 'ExtraExists', 'extraExists');
+
+            var optionVideo = page.querySelector('#AtsDeleteOptionVideo');
+            var optionAudio = page.querySelector('#AtsDeleteOptionAudio');
+            var optionExtras = page.querySelector('#AtsDeleteOptionExtras');
+
+            if (optionVideo) optionVideo.style.display = hasVideo ? '' : 'none';
+            if (optionAudio) optionAudio.style.display = hasAudio ? '' : 'none';
+            if (optionExtras) optionExtras.style.display = hasExtras ? '' : 'none';
+
+            deleteIncludeVideo.checked = hasVideo;
+            deleteIncludeAudio.checked = hasAudio;
+            deleteIncludeExtras.checked = hasExtras;
+            deleteDialogError.hidden = true;
+
+            syncDeleteOptionStyles();
+            deleteDialog.classList.add('open');
+            deleteDialog.setAttribute('aria-hidden', 'false');
+            deleteDialogConfirm.focus();
+        }
+
+        function closeDeleteDialog() {
+            if (deleteDialog.contains(document.activeElement)) {
+                document.activeElement.blur();
+            }
+            deleteDialog.classList.remove('open');
+            deleteDialog.setAttribute('aria-hidden', 'true');
+            deleteDialogError.hidden = true;
+            state.pendingDelete = null;
+            if (state.lastFocus && typeof state.lastFocus.focus === 'function') {
+                state.lastFocus.focus();
+            }
+        }
+
+        function syncDeleteOptionStyles() {
+            [deleteIncludeVideo, deleteIncludeAudio, deleteIncludeExtras].forEach(function (control) {
+                if (control) {
+                    var option = control.closest('.ats-download-option');
+                    if (option) option.classList.toggle('selected', control.checked);
+                }
+            });
+        }
+
+        function confirmDeleteSelection() {
+            var row = state.pendingDelete;
+            if (!row) return;
+            if (!deleteIncludeVideo.checked && !deleteIncludeAudio.checked && !deleteIncludeExtras.checked) {
+                deleteDialogError.hidden = false;
+                return;
+            }
+
+            closeDeleteDialog();
+
+            var itemId = activeGroupItemId();
+            var rowId = value(row, 'RowId', 'rowId');
+
+            var deletePromises = [];
+            if (deleteIncludeVideo.checked) {
+                deletePromises.push(apiPost('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes/' + encodeURIComponent(rowId) + '/Delete/Video'));
+            }
+            if (deleteIncludeAudio.checked) {
+                deletePromises.push(apiPost('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes/' + encodeURIComponent(rowId) + '/Delete/Audio'));
+            }
+            if (deleteIncludeExtras.checked) {
+                deletePromises.push(apiPost('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes/' + encodeURIComponent(rowId) + '/Delete/Extra'));
+            }
+
+            Dashboard.showLoadingMsg();
+            Promise.all(deletePromises).then(function () {
+                Dashboard.hideLoadingMsg();
+                loadThemes();
             }).catch(function (err) {
-                setProgress(true, 'Failed to read progress: ' + getErrorMessage(err), 0);
-                Dashboard.alert({ title: 'Download Error', message: 'Failed to read download progress: ' + getErrorMessage(err) });
+                Dashboard.hideLoadingMsg();
+                Dashboard.alert({ title: 'Delete Error', message: 'Failed to delete files: ' + getErrorMessage(err) });
             });
         }
 
@@ -2885,11 +3580,27 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             var src = apiUrl('AnimeThemesSync/Items/' + encodeURIComponent(itemId) + '/Themes/' + encodeURIComponent(rowId) + '/LocalMedia?target=' + encodeURIComponent(target) + '&_=' + Date.now(), true);
             playerTitle.textContent = text(value(row, 'ThemeKey', 'themeKey')) + ' - ' + target;
             playerBody.innerHTML = '';
+            var wrapper = document.createElement('div');
+            wrapper.className = 'ats-player-wrapper' + (target === 'audio' ? ' ats-player-wrapper-audio' : ' ats-player-wrapper-video');
+            var loader = document.createElement('div');
+            loader.className = 'ats-player-loader';
+            loader.innerHTML = '<div class=\"ats-spinner\"></div><span>Loading media...</span>';
+            wrapper.appendChild(loader);
             var element = document.createElement(target === 'audio' ? 'audio' : 'video');
             element.controls = true;
             element.autoplay = true;
+            element.preload = 'auto';
+            element.style.width = '100%';
+            element.style.height = target === 'audio' ? '54px' : '100%';
+            element.addEventListener('canplay', function () { loader.remove(); });
+            element.addEventListener('error', function () {
+                loader.innerHTML = '<span style=\"color:#ff6b6b\">Failed to load media</span><button class=\"ats-button-secondary\" onclick=\"this.parentElement.remove()\">Close</button>';
+            });
+            element.addEventListener('loadedmetadata', function () { loader.remove(); });
+            wrapper.appendChild(element);
             element.src = src;
-            playerBody.appendChild(element);
+            element.load();
+            playerBody.appendChild(wrapper);
             player.classList.add('open');
             player.setAttribute('aria-hidden', 'false');
         }
@@ -2898,11 +3609,27 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             state.lastFocus = document.activeElement;
             playerTitle.textContent = text(value(row, 'ThemeKey', 'themeKey')) + ' - preview ' + target;
             playerBody.innerHTML = '';
+            var wrapper = document.createElement('div');
+            wrapper.className = 'ats-player-wrapper' + (target === 'audio' ? ' ats-player-wrapper-audio' : ' ats-player-wrapper-video');
+            var loader = document.createElement('div');
+            loader.className = 'ats-player-loader';
+            loader.innerHTML = '<div class=\"ats-spinner\"></div><span>Loading preview...</span>';
+            wrapper.appendChild(loader);
             var element = document.createElement(target === 'audio' ? 'audio' : 'video');
             element.controls = true;
             element.autoplay = true;
+            element.preload = 'auto';
+            element.style.width = '100%';
+            element.style.height = target === 'audio' ? '54px' : '100%';
+            element.addEventListener('canplay', function () { loader.remove(); });
+            element.addEventListener('error', function () {
+                loader.innerHTML = '<span style=\"color:#ff6b6b\">Preview failed to load</span><button class=\"ats-button-secondary\" onclick=\"this.parentElement.remove()\">Close</button>';
+            });
+            element.addEventListener('loadedmetadata', function () { loader.remove(); });
+            wrapper.appendChild(element);
             element.src = src;
-            playerBody.appendChild(element);
+            element.load();
+            playerBody.appendChild(wrapper);
             player.classList.add('open');
             player.setAttribute('aria-hidden', 'false');
         }
@@ -3035,6 +3762,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             });
         });
         buildProfileControls();
+        settingsFields.SegmentedDownloadEnabled.addEventListener('change', syncConditionalSettings);
         settingsFields.ExtrasEnabled.addEventListener('change', syncConditionalSettings);
         settingsFields.TagsEnabled.addEventListener('change', syncConditionalSettings);
         [settingsFields.ExtrasFileNameFormat, settingsFields.ExtrasFileSuffix, settingsFields.TagFormat, settingsFields.TagSeasonWinter].forEach(function (input) {
@@ -3095,18 +3823,61 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 if (!control.parentElement.contains(event.target)) control.click();
             });
         });
-        page.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape' && downloadDialog.classList.contains('open')) {
-                closeDownloadDialog();
+
+        // Delete dialog setup
+        page.querySelector('#AnimeThemesDeleteDialogClose').addEventListener('click', closeDeleteDialog);
+        page.querySelector('#AnimeThemesDeleteDialogCancel').addEventListener('click', closeDeleteDialog);
+        deleteDialogConfirm.addEventListener('click', confirmDeleteSelection);
+        deleteDialog.addEventListener('click', function (event) {
+            if (event.target === deleteDialog) closeDeleteDialog();
+        });
+        [deleteIncludeVideo, deleteIncludeAudio, deleteIncludeExtras].forEach(function (control) {
+            if (control) {
+                control.addEventListener('change', function () {
+                    deleteDialogError.hidden = true;
+                    syncDeleteOptionStyles();
+                });
+                var option = control.closest('.ats-download-option');
+                if (option) {
+                    option.addEventListener('click', function (event) {
+                        if (!control.parentElement.contains(event.target)) control.click();
+                    });
+                }
             }
         });
+
+        page.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                if (downloadDialog.classList.contains('open')) closeDownloadDialog();
+                if (deleteDialog.classList.contains('open')) closeDeleteDialog();
+            }
+        });
+
+        // Download manager setup
+        var dmHeader = page.querySelector('.ats-dm-header');
+        if (dmHeader) {
+            dmHeader.addEventListener('click', toggleDownloadManager);
+        }
+
         setupClearButtons();
         syncSeasonFilterButtons();
         page.addEventListener('pageshow', function () {
+            setupThemeObserver();
+            if (state.detailLoading) showDetailLoading();
             setViewMode(state.viewMode);
             setViewSize(state.viewSize);
             setActiveTab(state.activeTab);
+            attachScrollListener();
             loadItems();
+            startDownloadsPolling();
+        });
+        page.addEventListener('pagehide', function () {
+            var container = getScrollContainer();
+            container.removeEventListener('scroll', handleScroll);
+            scrollListenerAttached = false;
+            stopDownloadsPolling();
+            hideDetailLoading();
+            teardownThemeObserver();
         });
     }
 
@@ -3116,6 +3887,12 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         view.addEventListener('viewshow', function () {
             var event = document.createEvent('Event');
             event.initEvent('pageshow', true, true);
+            view.dispatchEvent(event);
+        });
+
+        view.addEventListener('viewhide', function () {
+            var event = document.createEvent('Event');
+            event.initEvent('pagehide', true, true);
             view.dispatchEvent(event);
         });
     };

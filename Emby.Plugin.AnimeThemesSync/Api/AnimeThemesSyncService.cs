@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using AnimeThemesSync.Shared.Models;
 using AnimeThemesSync.Shared.Services;
@@ -224,6 +225,8 @@ public class StartAnimeThemesItemDownloadJob : IReturn<ThemeDownloadJobStartResu
     public Guid ItemId { get; set; }
 
     public bool Force { get; set; }
+
+    public string? DisplayTitle { get; set; }
 }
 
 [Route("/AnimeThemesSync/Jobs/ThemeDownload", "POST", Summary = "Starts an AnimeThemes theme download job.")]
@@ -240,10 +243,23 @@ public class StartAnimeThemesThemeDownloadJob : IReturn<ThemeDownloadJobStartRes
     public bool? IncludeVideo { get; set; }
 
     public bool? IncludeExtras { get; set; }
+
+    public string? DisplayTitle { get; set; }
 }
 
 [Route("/AnimeThemesSync/Jobs/{JobId}", "GET", Summary = "Gets an AnimeThemes download job status.")]
 public class GetAnimeThemesDownloadJob : IReturn<ThemeDownloadJobStatus>
+{
+    public string JobId { get; set; } = string.Empty;
+}
+
+[Route("/AnimeThemesSync/Jobs", "GET", Summary = "Gets all AnimeThemes download jobs.")]
+public class GetAnimeThemesDownloadJobs : IReturn<List<ThemeDownloadJobStatus>>
+{
+}
+
+[Route("/AnimeThemesSync/Jobs/{JobId}/Cancel", "POST", Summary = "Cancels an AnimeThemes download job.")]
+public class CancelAnimeThemesDownloadJob : IReturn<ThemeDownloadJobStatus>
 {
     public string JobId { get; set; } = string.Empty;
 }
@@ -521,15 +537,17 @@ public class AnimeThemesSyncService : IService
 
     public object Post(StartAnimeThemesItemDownloadJob request)
     {
+        ThemeDownloadJobService.Configure(Plugin.Instance?.Configuration.MaxConcurrentDownloads ?? 1);
         return ThemeDownloadJobService.Start(
-            "Downloading item themes...",
+            new ThemeDownloadJobDescriptor("Item", request.ItemId, null, request.DisplayTitle ?? "Item download"),
             (progress, cancellationToken) => _themeDownloader.DownloadItemByIdAsync(request.ItemId, request.Force, progress, cancellationToken));
     }
 
     public object Post(StartAnimeThemesThemeDownloadJob request)
     {
+        ThemeDownloadJobService.Configure(Plugin.Instance?.Configuration.MaxConcurrentDownloads ?? 1);
         return ThemeDownloadJobService.Start(
-            "Downloading theme...",
+            new ThemeDownloadJobDescriptor("Theme", request.ItemId, request.RowId, request.DisplayTitle ?? request.RowId),
             (progress, cancellationToken) => _themeDownloader.DownloadThemeByRowIdAsync(
                 request.ItemId,
                 request.RowId,
@@ -544,6 +562,17 @@ public class AnimeThemesSyncService : IService
     public object Get(GetAnimeThemesDownloadJob request)
     {
         return ThemeDownloadJobService.Get(request.JobId)
+            ?? throw new ArgumentException("The requested download job was not found.", nameof(request));
+    }
+
+    public object Get(GetAnimeThemesDownloadJobs request)
+    {
+        return ThemeDownloadJobService.GetAll().ToList();
+    }
+
+    public object Post(CancelAnimeThemesDownloadJob request)
+    {
+        return ThemeDownloadJobService.Cancel(request.JobId)
             ?? throw new ArgumentException("The requested download job was not found.", nameof(request));
     }
 

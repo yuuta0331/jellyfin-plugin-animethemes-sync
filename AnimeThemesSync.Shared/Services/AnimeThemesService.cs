@@ -258,13 +258,7 @@ public sealed class AnimeThemesService
 
     private HttpClient CreateClient()
     {
-        var client = _httpClientFactory.CreateClient(Constants.AnimeThemesHttpClientName);
-        if (!client.DefaultRequestHeaders.Contains("User-Agent"))
-        {
-            client.DefaultRequestHeaders.Add("User-Agent", Constants.UserAgent);
-        }
-
-        return client;
+        return _httpClientFactory.CreateClient(Constants.AnimeThemesHttpClientName);
     }
 
     private async Task<AnimeThemesResourceResponse?> GetResourceFromUrl(string url, CancellationToken cancellationToken)

@@ -1,4 +1,6 @@
+using System;
 using System.Net.Http;
+using System.Threading;
 using AnimeThemesSync.Shared;
 using AnimeThemesSync.Shared.Interfaces;
 using AnimeThemesSync.Shared.Services;
@@ -49,6 +51,18 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         });
         serviceCollection.AddSingleton<ThemeDownloader>();
         serviceCollection.AddHostedService<BrowserCacheWarmupService>();
+        serviceCollection.AddHttpClient(Constants.AniListHttpClientName, client =>
+        {
+            client.BaseAddress = new Uri(Constants.AniListBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(20);
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", Constants.UserAgent);
+        });
+        serviceCollection.AddHttpClient(Constants.AnimeThemesHttpClientName, client =>
+        {
+            client.BaseAddress = new Uri(Constants.AnimeThemesBaseUrl);
+            client.Timeout = Timeout.InfiniteTimeSpan;
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", Constants.UserAgent);
+        });
 
         // Register AniListService as Singleton
         serviceCollection.AddSingleton(provider =>

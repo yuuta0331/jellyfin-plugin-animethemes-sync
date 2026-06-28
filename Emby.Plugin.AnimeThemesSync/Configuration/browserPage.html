@@ -1,8 +1,8 @@
-<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260627g" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260628b" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.06.27-g.</div>
+                <div class="fieldDescription">UI version: 2026.06.28-b.</div>
 
                 <div class="verticalSection ats-tabs" id="AnimeThemesBrowserTabs">
                     <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-tab active" id="AnimeThemesBrowserLibraryTab" data-ats-tab="library">
@@ -88,6 +88,15 @@
                                 <select is="emby-select" id="AnimeThemesBrowserLibrarySortDirection" class="emby-select-withcolor emby-select">
                                     <option value="asc">Ascending</option>
                                     <option value="desc">Descending</option>
+                                </select>
+                            </div>
+                            <div class="selectContainer">
+                                <label class="selectLabel" for="AnimeThemesBrowserLimit">Limit</label>
+                                <select is="emby-select" id="AnimeThemesBrowserLimit" class="emby-select-withcolor emby-select">
+                                    <option value="40">40</option>
+                                    <option value="80" selected>80</option>
+                                    <option value="150">150</option>
+                                    <option value="300">300</option>
                                 </select>
                             </div>
                             <div class="selectContainer ats-item-select" style="display: none;">
@@ -229,6 +238,18 @@
                                         <div class="fieldDescription">Increase this if large video downloads time out. Default: 600.</div>
                                     </div>
                                 </div>
+                                <div class="checkboxContainer checkboxContainer-withDescription">
+                                    <label class="emby-checkbox-label">
+                                        <input id="AtsSegmentedDownloadEnabled" type="checkbox" is="emby-checkbox" />
+                                        <span>Use segmented downloads</span>
+                                    </label>
+                                    <div class="fieldDescription">Uses validated HTTP range requests for files larger than 2 MiB and falls back to a standard transfer when unsupported.</div>
+                                </div>
+                                <div id="AtsSegmentedDownloadOptions" class="ats-conditional-options inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="AtsSegmentedDownloadSegments">Segments per file</label>
+                                    <input id="AtsSegmentedDownloadSegments" type="number" is="emby-input" min="2" max="8" />
+                                    <div class="fieldDescription">Allowed range: 2-8. Default: 4. Each segment uses a separate HTTP request.</div>
+                                </div>
                                 <div class="ats-toggle-list">
                                     <div><label class="emby-checkbox-label"><input id="AtsAllowAdd" type="checkbox" is="emby-checkbox" /><span>Add missing files</span></label><div class="fieldDescription">Download new theme files when planned files are missing.</div></div>
                                     <div><label class="emby-checkbox-label"><input id="AtsForceRedownload" type="checkbox" is="emby-checkbox" /><span>Overwrite existing files</span></label><div class="fieldDescription warning-text">Re-downloads and replaces existing AnimeThemes files. Disable after applying volume or version changes.</div></div>
@@ -241,7 +262,7 @@
                                 <h3>Extras</h3>
                                 <div class="checkboxContainer checkboxContainer-withDescription">
                                     <label class="emby-checkbox-label"><input id="AtsExtrasEnabled" type="checkbox" is="emby-checkbox" /><span>Create browseable extras</span></label>
-                                    <div class="fieldDescription">Creates rich display names in extras so OP/ED videos can be opened from Extras/Special Features. Disable “Use as server theme Efor Video to create Extra-only output.</div>
+                                    <div class="fieldDescription">Creates rich display names in extras so OP/ED videos can be opened from Extras/Special Features. Disable “Use as server theme” for Video to create Extra-only output.</div>
                                 </div>
                                 <div id="AtsExtrasOptions" class="ats-conditional-options">
                                     <div class="selectContainer">
@@ -452,7 +473,7 @@
                     </div>
                 </div>
 
-                <div id="AnimeThemesBrowserDetailView" style="display: none;">
+                <div id="AnimeThemesBrowserDetailView" aria-busy="false" style="display: none;">
                 <div class="verticalSection ats-detail-actions">
                     <div class="ats-detail-action-left">
                         <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesBrowserBack">
@@ -466,6 +487,7 @@
                         <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-icon-button-text" id="AnimeThemesBrowserDownload">
                             <i class="md-icon ats-icon" aria-hidden="true">&#xE2C4;</i><span>Download Item</span>
                         </button>
+                        <div id="AnimeThemesItemDownloadStatus" class="ats-card-download-status" hidden></div>
                     </div>
                 </div>
 
@@ -490,6 +512,22 @@
                     <div id="AnimeThemesBrowserRows" class="ats-theme-list"></div>
                 </div>
                 </div>
+            </div>
+        </div>
+
+        <div id="AnimeThemesDownloadManager" class="ats-download-manager collapsed" role="region" aria-label="Downloads" aria-hidden="true" style="display: none;">
+            <div class="ats-dm-header">
+                <div class="ats-dm-title-wrap">
+                    <i class="md-icon ats-icon" aria-hidden="true">&#xE2C4;</i>
+                    <span class="ats-dm-title">Downloads</span>
+                    <span class="ats-dm-badge" id="AnimeThemesDmBadge">0</span>
+                </div>
+                <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-dm-toggle-btn" id="AnimeThemesDmToggle" aria-label="Expand downloads" aria-expanded="false">
+                    <i class="md-icon ats-icon" aria-hidden="true">&#xE5CE;</i>
+                </button>
+            </div>
+            <div class="ats-dm-content" id="AnimeThemesDmContent" aria-live="polite">
+                <div class="ats-dm-empty">No active downloads</div>
             </div>
         </div>
 
@@ -556,6 +594,57 @@
             </div>
         </div>
 
+        <div id="AnimeThemesDeleteDialog" class="ats-player ats-download-dialog" aria-hidden="true">
+            <div class="ats-player-panel ats-download-panel" role="dialog" aria-modal="true" aria-labelledby="AnimeThemesDeleteDialogTitle" aria-describedby="AnimeThemesDeleteDialogDescription">
+                <div class="ats-player-header ats-download-header">
+                    <div class="ats-download-heading">
+                        <i class="md-icon ats-download-heading-icon ats-color-danger" aria-hidden="true">&#xE872;</i>
+                        <div>
+                            <h3 id="AnimeThemesDeleteDialogTitle">Delete files</h3>
+                            <div id="AnimeThemesDeleteDialogTheme" class="ats-download-theme-key"></div>
+                        </div>
+                    </div>
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-download-close" id="AnimeThemesDeleteDialogClose" aria-label="Close delete dialog">
+                        <i class="md-icon ats-icon" aria-hidden="true">&#xE5CD;</i>
+                    </button>
+                </div>
+                <div class="ats-download-content">
+                    <p id="AnimeThemesDeleteDialogDescription" class="ats-download-description">Choose which local media files to delete. This cannot be undone.</p>
+                    <div class="ats-download-options" role="group" aria-label="Delete files">
+                        <div class="ats-download-option ats-delete-option" id="AtsDeleteOptionVideo">
+                            <i class="md-icon ats-download-option-icon" aria-hidden="true">&#xE02C;</i>
+                            <span class="ats-download-option-copy"><strong>Theme video</strong><span>Delete from <code>backdrops</code>.</span></span>
+                            <label class="emby-checkbox-label ats-download-checkbox">
+                                <input id="AtsDeleteIncludeVideo" type="checkbox" is="emby-checkbox" aria-label="Delete theme video" />
+                                <span>Delete</span>
+                            </label>
+                        </div>
+                        <div class="ats-download-option ats-delete-option" id="AtsDeleteOptionAudio">
+                            <i class="md-icon ats-download-option-icon" aria-hidden="true">&#xE405;</i>
+                            <span class="ats-download-option-copy"><strong>Theme song</strong><span>Delete from <code>theme-music</code>.</span></span>
+                            <label class="emby-checkbox-label ats-download-checkbox">
+                                <input id="AtsDeleteIncludeAudio" type="checkbox" is="emby-checkbox" aria-label="Delete theme song" />
+                                <span>Delete</span>
+                            </label>
+                        </div>
+                        <div class="ats-download-option ats-delete-option" id="AtsDeleteOptionExtras">
+                            <i class="md-icon ats-download-option-icon" aria-hidden="true">&#xE04A;</i>
+                            <span class="ats-download-option-copy"><strong>Browseable Extra</strong><span>Delete from <code>extras</code>.</span></span>
+                            <label class="emby-checkbox-label ats-download-checkbox">
+                                <input id="AtsDeleteIncludeExtras" type="checkbox" is="emby-checkbox" aria-label="Delete browseable Extra" />
+                                <span>Delete</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="AnimeThemesDeleteDialogError" class="ats-download-error" role="alert" hidden>Select at least one file to delete.</div>
+                </div>
+                <div class="ats-download-actions">
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AnimeThemesDeleteDialogCancel"><span>Cancel</span></button>
+                    <button is="emby-button" type="button" class="raised emby-button ats-button-danger ats-icon-button-text" id="AnimeThemesDeleteDialogConfirm"><i class="md-icon ats-icon" aria-hidden="true">&#xE872;</i><span>Delete selected</span></button>
+                </div>
+            </div>
+        </div>
+
         <style>
             #AnimeThemesBrowserPage {
                 --ats-radius: 8px;
@@ -565,8 +654,32 @@
                 --ats-surface: rgba(127, 127, 127, .07);
                 --ats-surface-raised: rgba(127, 127, 127, .11);
                 --ats-surface-hover: rgba(127, 127, 127, .17);
-                --ats-accent: var(--jf-palette-primary-main, var(--theme-accent-text-color, currentColor));
+                --ats-accent: var(--jf-palette-primary-main, var(--theme-accent-text-color, #00a4dc));
                 --ats-dialog-surface: var(--jf-palette-background-paper, hsl(var(--background-hue, 0), var(--background-saturation, 0%), var(--background-lightness, 24%)));
+                --ats-panel: rgba(255, 255, 255, .06);
+                --ats-panel-hover: rgba(255, 255, 255, .12);
+                --ats-progress-track: rgba(255, 255, 255, .20);
+                --ats-danger: #ff8a80;
+                --ats-danger-border: rgba(255, 138, 128, .72);
+                --ats-danger-surface: rgba(244, 67, 54, .18);
+                --ats-danger-surface-hover: rgba(244, 67, 54, .30);
+                --ats-status-dot: var(--ats-accent);
+            }
+
+            #AnimeThemesBrowserPage[data-ats-theme="light"] {
+                --ats-border: rgba(20, 28, 38, .20);
+                --ats-border-strong: rgba(20, 28, 38, .38);
+                --ats-surface: rgba(20, 28, 38, .045);
+                --ats-surface-raised: rgba(20, 28, 38, .075);
+                --ats-surface-hover: rgba(20, 28, 38, .11);
+                --ats-dialog-surface: var(--jf-palette-background-paper, #fff);
+                --ats-panel: rgba(20, 28, 38, .045);
+                --ats-panel-hover: rgba(20, 28, 38, .09);
+                --ats-progress-track: rgba(20, 28, 38, .18);
+                --ats-danger: #b42318;
+                --ats-danger-border: rgba(180, 35, 24, .62);
+                --ats-danger-surface: rgba(180, 35, 24, .10);
+                --ats-danger-surface-hover: rgba(180, 35, 24, .18);
             }
 
             #AnimeThemesBrowserPage .content-primary {
@@ -2257,10 +2370,407 @@
                 #AnimeThemesBrowserPage .ats-fade-in,
                 #AnimeThemesBrowserPage .ats-skeleton::after,
                 #AnimeThemesBrowserPage .ats-item-card,
-                #AnimeThemesBrowserPage .ats-progress-bar {
+                #AnimeThemesBrowserPage .ats-progress-bar,
+                #AnimeThemesBrowserPage .ats-card-download-bar,
+                #AnimeThemesBrowserPage .ats-dm-item-progress-bar,
+                #AnimeThemesBrowserPage .ats-download-state-dot,
+                #AnimeThemesBrowserPage .ats-download-manager {
                     animation: none !important;
                     transition: none !important;
                 }
+            }
+
+            #AnimeThemesBrowserPage .ats-empty-state {
+                grid-column: 1 / -1;
+            }
+
+            #AnimeThemesBrowserPage .ats-theme-card {
+                align-items: start;
+            }
+
+            #AnimeThemesBrowserPage .ats-skeleton-shimmer-only {
+                position: relative;
+                overflow: hidden;
+                background: rgba(127, 127, 127, .12);
+                animation: atsPulse 1.5s ease-in-out infinite;
+                border-radius: var(--ats-radius-sm);
+            }
+
+            @keyframes atsPulse {
+                0%, 100% { opacity: 0.6; }
+                50% { opacity: 1; }
+            }
+
+            #AnimeThemesBrowserPage .ats-loading-blur {
+                filter: blur(16px);
+                transition: filter 0.3s ease;
+            }
+
+            #AnimeThemesBrowserPage .ats-theme-actions-right {
+                margin-left: auto;
+                display: flex;
+                gap: .4rem;
+                align-items: center;
+            }
+
+            @media (max-width: 760px) {
+                #AnimeThemesBrowserPage .ats-theme-actions-right {
+                    margin-left: 0;
+                    width: 100%;
+                    justify-content: flex-end;
+                }
+            }
+
+            #AnimeThemesBrowserPage .ats-download-manager {
+                position: fixed;
+                bottom: 1.5rem;
+                right: 1.5rem;
+                width: 24rem;
+                max-width: calc(100vw - 3rem);
+                background: var(--theme-background-card, var(--ats-dialog-surface, #1e1e1e));
+                color: inherit;
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, .45);
+                z-index: 10000;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-manager.collapsed {
+                transform: translateY(calc(100% - 3.25rem));
+            }
+
+            #AnimeThemesBrowserPage .ats-download-manager[aria-hidden="true"] {
+                display: none;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: .75rem 1rem;
+                background: var(--ats-panel);
+                border-bottom: 1px solid var(--ats-border);
+                height: 3.25rem;
+                box-sizing: border-box;
+                cursor: pointer;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-title-wrap {
+                display: flex;
+                align-items: center;
+                gap: .6rem;
+                font-weight: 700;
+                font-size: 0.95rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-badge {
+                background: var(--ats-accent, #00a4dc);
+                color: #fff;
+                border-radius: 10px;
+                padding: 1px 6px;
+                font-size: 0.72rem;
+                font-weight: bold;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-toggle-btn {
+                margin: 0 !important;
+                padding: 4px !important;
+                min-width: 0 !important;
+                background: transparent !important;
+                border: 0 !important;
+                color: inherit !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-content {
+                max-height: 16rem;
+                overflow-y: auto;
+                padding: .5rem;
+                display: flex;
+                flex-direction: column;
+                gap: .5rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-empty {
+                padding: 1.5rem;
+                text-align: center;
+                opacity: .5;
+                font-size: 0.85rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item {
+                display: flex;
+                flex-direction: column;
+                gap: .35rem;
+                padding: .6rem;
+                background: var(--ats-panel);
+                border-radius: var(--ats-radius-sm);
+                border: 1px solid var(--ats-border);
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item-header {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: .5rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item-title {
+                font-weight: bold;
+                font-size: 0.82rem;
+                min-width: 0;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item-cancel {
+                margin: 0 !important;
+                padding: .3rem .6rem !important;
+                font-size: 0.75rem !important;
+                line-height: 1.1 !important;
+                min-height: 2rem !important;
+                min-width: 3.75rem !important;
+                background: var(--ats-danger-surface) !important;
+                color: var(--ats-danger) !important;
+                border: 1px solid var(--ats-danger-border) !important;
+                border-radius: var(--ats-radius-sm) !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item-cancel:hover {
+                background: var(--ats-danger-surface-hover) !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item-cancel:focus-visible,
+            #AnimeThemesBrowserPage .ats-card-download-cancel:focus-visible {
+                outline: 2px solid var(--ats-danger) !important;
+                outline-offset: 2px;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item-cancel:disabled,
+            #AnimeThemesBrowserPage .ats-card-download-cancel:disabled {
+                opacity: .5;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item-cancel[hidden],
+            #AnimeThemesBrowserPage .ats-card-download-cancel[hidden] {
+                display: none !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item-progress-text {
+                font-size: 0.75rem;
+                opacity: .85;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-status-row {
+                display: flex;
+                align-items: center;
+                gap: .45rem;
+                min-width: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-state-dot {
+                flex: 0 0 .5rem;
+                width: .5rem;
+                height: .5rem;
+                border-radius: 50%;
+                background: var(--ats-status-dot);
+                box-shadow: 0 0 0 0 color-mix(in srgb, var(--ats-status-dot) 45%, transparent);
+                animation: atsStatusPulse 1.35s ease-out infinite;
+            }
+
+            #AnimeThemesBrowserPage .ats-download-state-dot[hidden] {
+                display: none;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item-progress-track {
+                width: 100%;
+                height: 6px;
+                background: var(--ats-progress-track);
+                border-radius: 999px;
+                overflow: hidden;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item-progress-bar {
+                height: 100%;
+                background: var(--ats-accent, #00a4dc);
+                width: 0%;
+                transition: width .65s ease-out;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item.completed .ats-dm-item-progress-bar {
+                background: #4caf50;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item.failed .ats-dm-item-progress-bar {
+                background: #f44336;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-item.cancelled .ats-dm-item-progress-bar {
+                background: #ff9800;
+            }
+
+            #AnimeThemesBrowserPage .ats-btn-download.ats-downloading {
+                pointer-events: none;
+                position: relative;
+            }
+
+            #AnimeThemesBrowserPage .ats-card-download-status {
+                grid-column: 1 / -1;
+                display: flex;
+                align-items: center;
+                gap: .5rem;
+                min-width: 0;
+                padding: .45rem .55rem;
+                background: var(--ats-panel);
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius-sm);
+                font-size: .78rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-card-download-status[hidden] {
+                display: none !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-card-download-copy {
+                min-width: 5.5rem;
+                white-space: nowrap;
+            }
+
+            #AnimeThemesBrowserPage .ats-card-download-track {
+                flex: 1;
+                min-width: 3rem;
+                height: 6px;
+                overflow: hidden;
+                border-radius: 999px;
+                background: var(--ats-progress-track);
+            }
+
+            #AnimeThemesBrowserPage .ats-card-download-bar {
+                width: 0;
+                height: 100%;
+                background: var(--ats-accent);
+                transition: width .65s ease-out;
+            }
+
+            #AnimeThemesBrowserPage .ats-card-download-cancel {
+                min-width: 3.75rem !important;
+                min-height: 2rem !important;
+                margin: 0 !important;
+                padding: .3rem .6rem !important;
+                font-size: .75rem !important;
+                line-height: 1.1 !important;
+                color: var(--ats-danger) !important;
+                background: var(--ats-danger-surface) !important;
+                border: 1px solid var(--ats-danger-border) !important;
+                border-radius: var(--ats-radius-sm) !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-card-download-cancel:hover {
+                background: var(--ats-danger-surface-hover) !important;
+            }
+
+            @media (max-width: 600px) {
+                #AnimeThemesBrowserPage .ats-download-manager {
+                    right: .5rem;
+                    bottom: .5rem;
+                    width: calc(100vw - 1rem);
+                    max-width: none;
+                }
+
+                #AnimeThemesBrowserPage .ats-card-download-status {
+                    flex-wrap: wrap;
+                }
+
+                #AnimeThemesBrowserPage .ats-card-download-track {
+                    min-width: 50%;
+                }
+
+                #AnimeThemesBrowserPage .ats-dm-item-cancel,
+                #AnimeThemesBrowserPage .ats-card-download-cancel {
+                    min-height: 44px !important;
+                }
+            }
+
+            #AnimeThemesBrowserPage .ats-player-wrapper {
+                position: relative;
+                width: 100%;
+                background: #000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--ats-radius-sm);
+                overflow: hidden;
+                aspect-ratio: 16 / 9;
+            }
+
+            #AnimeThemesBrowserPage .ats-player-wrapper-audio {
+                aspect-ratio: auto;
+                min-height: 4.5rem;
+                max-height: 6rem;
+                padding: .55rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-player-wrapper-audio audio {
+                display: block;
+                width: 100%;
+                height: 54px;
+                max-height: 54px;
+            }
+
+            #AnimeThemesBrowserPage .ats-player-wrapper-audio .ats-player-loader {
+                flex-direction: row;
+                gap: .65rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-player-wrapper-audio .ats-spinner {
+                width: 24px;
+                height: 24px;
+                border-width: 2.5px;
+            }
+
+            #AnimeThemesBrowserPage .ats-player-loader {
+                position: absolute;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.76);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 0.8rem;
+                z-index: 10;
+                color: #fff;
+            }
+
+            #AnimeThemesBrowserPage .ats-spinner {
+                width: 40px;
+                height: 40px;
+                border: 3.5px solid rgba(255, 255, 255, 0.2);
+                border-top-color: #fff;
+                border-radius: 50%;
+                animation: atsSpin 0.8s linear infinite;
+            }
+
+            #AnimeThemesBrowserPage .ats-loader-text {
+                font-size: 0.95rem;
+                font-weight: 500;
+                letter-spacing: 0.5px;
+            }
+
+            #AnimeThemesBrowserPage .ats-color-danger {
+                color: #ff5252 !important;
+            }
+
+            @keyframes atsSpin {
+                to { transform: rotate(360deg); }
+            }
+
+            @keyframes atsStatusPulse {
+                0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ats-status-dot) 45%, transparent); opacity: 1; }
+                70%, 100% { box-shadow: 0 0 0 .45rem transparent; opacity: .72; }
             }
         </style>
     </div>

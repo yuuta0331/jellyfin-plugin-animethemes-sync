@@ -9,8 +9,8 @@ namespace Emby.Plugin.AnimeThemesSync.Helpers;
 /// </summary>
 public sealed class StaticHttpClientFactory : IHttpClientFactory
 {
-    private static readonly HttpClient AniListClient = CreateConfiguredClient(Constants.AniListBaseUrl);
-    private static readonly HttpClient AnimeThemesClient = CreateConfiguredClient(Constants.AnimeThemesBaseUrl);
+    private static readonly HttpClient AniListClient = CreateConfiguredClient(Constants.AniListBaseUrl, TimeSpan.FromSeconds(20));
+    private static readonly HttpClient AnimeThemesClient = CreateConfiguredClient(Constants.AnimeThemesBaseUrl, System.Threading.Timeout.InfiniteTimeSpan);
 
     /// <inheritdoc />
     public HttpClient CreateClient(string name)
@@ -25,14 +25,14 @@ public sealed class StaticHttpClientFactory : IHttpClientFactory
             return AnimeThemesClient;
         }
 
-        return CreateConfiguredClient(null);
+        return CreateConfiguredClient(null, TimeSpan.FromSeconds(20));
     }
 
-    private static HttpClient CreateConfiguredClient(string? baseUrl)
+    private static HttpClient CreateConfiguredClient(string? baseUrl, TimeSpan timeout)
     {
         var client = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(20),
+            Timeout = timeout,
         };
 
         if (!string.IsNullOrWhiteSpace(baseUrl))

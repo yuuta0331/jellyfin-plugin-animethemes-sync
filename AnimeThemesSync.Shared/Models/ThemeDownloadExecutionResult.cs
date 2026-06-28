@@ -1,3 +1,5 @@
+using System;
+
 namespace AnimeThemesSync.Shared.Models;
 
 public sealed record ThemeDownloadExecutionResult(
@@ -12,7 +14,11 @@ public sealed record ThemeDownloadJobStartResult(
     string JobId,
     string Status,
     double Progress,
-    string Message);
+    string Message,
+    string JobType,
+    Guid? ItemId,
+    string? RowId,
+    string DisplayTitle);
 
 public sealed record ThemeDownloadJobStatus(
     string JobId,
@@ -20,4 +26,19 @@ public sealed record ThemeDownloadJobStatus(
     double Progress,
     string Message,
     ThemeDownloadExecutionResult? Result,
-    string? Error);
+    string? Error,
+    string JobType,
+    Guid? ItemId,
+    string? RowId,
+    string DisplayTitle,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? FinishedAt,
+    int? QueuePosition,
+    bool CanCancel);
+
+public sealed record ThemeDownloadJobDescriptor(
+    string JobType,
+    Guid? ItemId,
+    string? RowId,
+    string DisplayTitle);

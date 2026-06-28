@@ -315,10 +315,12 @@ public sealed class AnimeThemesSyncController : ControllerBase
     [ProducesResponseType(typeof(ThemeDownloadJobStartResult), StatusCodes.Status200OK)]
     public ActionResult<ThemeDownloadJobStartResult> StartItemDownloadJob(
         [FromQuery] Guid itemId,
-        [FromQuery] bool force)
+        [FromQuery] bool force,
+        [FromQuery] string? displayTitle)
     {
+        ThemeDownloadJobService.Configure(Plugin.Instance?.Configuration.MaxConcurrentDownloads ?? 1);
         var job = ThemeDownloadJobService.Start(
-            "Downloading item themes...",
+            new ThemeDownloadJobDescriptor("Item", itemId, null, displayTitle ?? "Item download"),
             (progress, cancellationToken) => _themeDownloader.DownloadItemByIdAsync(itemId, force, progress, cancellationToken));
         return Ok(job);
     }
@@ -331,10 +333,12 @@ public sealed class AnimeThemesSyncController : ControllerBase
         [FromQuery] bool force,
         [FromQuery] bool? includeAudio,
         [FromQuery] bool? includeVideo,
-        [FromQuery] bool? includeExtras)
+        [FromQuery] bool? includeExtras,
+        [FromQuery] string? displayTitle)
     {
+        ThemeDownloadJobService.Configure(Plugin.Instance?.Configuration.MaxConcurrentDownloads ?? 1);
         var job = ThemeDownloadJobService.Start(
-            "Downloading theme...",
+            new ThemeDownloadJobDescriptor("Theme", itemId, rowId, displayTitle ?? rowId),
             (progress, cancellationToken) => _themeDownloader.DownloadThemeByRowIdAsync(
                 itemId,
                 rowId,
@@ -353,6 +357,22 @@ public sealed class AnimeThemesSyncController : ControllerBase
     public ActionResult<ThemeDownloadJobStatus> GetDownloadJob(string jobId)
     {
         var status = ThemeDownloadJobService.Get(jobId);
+        return status == null ? NotFound() : Ok(status);
+    }
+
+    [HttpGet("Jobs")]
+    [ProducesResponseType(typeof(IEnumerable<ThemeDownloadJobStatus>), StatusCodes.Status200OK)]
+    public ActionResult<IEnumerable<ThemeDownloadJobStatus>> GetDownloadJobs()
+    {
+        return Ok(ThemeDownloadJobService.GetAll());
+    }
+
+    [HttpPost("Jobs/{jobId}/Cancel")]
+    [ProducesResponseType(typeof(ThemeDownloadJobStatus), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<ThemeDownloadJobStatus> CancelDownloadJob(string jobId)
+    {
+        var status = ThemeDownloadJobService.Cancel(jobId);
         return status == null ? NotFound() : Ok(status);
     }
 

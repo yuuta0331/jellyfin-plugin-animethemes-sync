@@ -164,8 +164,8 @@ public sealed class AnimeThemesDataStoreTests
         Assert.DoesNotContain("Browser cache is empty", jellyfinHtml, StringComparison.Ordinal);
         Assert.Contains("AnimeThemesBrowserPager", embyHtml, StringComparison.Ordinal);
         Assert.Contains("AnimeThemesBrowserPager", jellyfinHtml, StringComparison.Ordinal);
-        Assert.Contains("(itemPager || itemGrid).appendChild(more)", embyJs, StringComparison.Ordinal);
-        Assert.Contains("(itemPager || itemGrid).appendChild(more)", jellyfinHtml, StringComparison.Ordinal);
+        Assert.Contains("itemGrid.appendChild(loader)", embyJs, StringComparison.Ordinal);
+        Assert.Contains("itemGrid.appendChild(loader)", jellyfinHtml, StringComparison.Ordinal);
     }
 
     [Fact]

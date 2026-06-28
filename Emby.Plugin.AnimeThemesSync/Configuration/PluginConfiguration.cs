@@ -14,7 +14,7 @@ namespace Emby.Plugin.AnimeThemesSync.Configuration;
 /// </summary>
 public class PluginConfiguration : BasePluginConfiguration
 {
-    public const int CurrentConfigurationVersion = 3;
+    public const int CurrentConfigurationVersion = 4;
 
     private int _maxConcurrentDownloads = 1;
     private string _tagSeasonSpring = "Spring";
@@ -24,6 +24,8 @@ public class PluginConfiguration : BasePluginConfiguration
     private string _tagFormat = "{Season} {Year}";
     private string _extrasFileNameFormat = ThemeFilePlanner.DefaultExtrasFileNameFormat;
     private bool _legacyConfigurationLoaded;
+
+    private int _segmentedDownloadSegments = 4;
 
     private int _seriesAudioMaxThemes = 1;
     private int _seriesAudioVolume = 100;
@@ -44,6 +46,8 @@ public class PluginConfiguration : BasePluginConfiguration
         ThemeDownloadingEnabled = true;
         MaxConcurrentDownloads = 1;
         DownloadTimeoutSeconds = 600;
+        SegmentedDownloadEnabled = true;
+        SegmentedDownloadSegments = 4;
         AllowAdd = true;
         ForceRedownload = false;
         AllowDelete = false;
@@ -70,6 +74,14 @@ public class PluginConfiguration : BasePluginConfiguration
     }
 
     public int DownloadTimeoutSeconds { get; set; }
+
+    public bool SegmentedDownloadEnabled { get; set; } = true;
+
+    public int SegmentedDownloadSegments
+    {
+        get => _segmentedDownloadSegments;
+        set => _segmentedDownloadSegments = value < 2 ? 2 : value > 8 ? 8 : value;
+    }
 
     public bool AllowAdd { get; set; }
 

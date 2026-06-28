@@ -10,7 +10,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests;
 public sealed class PluginConfigurationMigrationTests
 {
     [Fact]
-    public void Constructor_CreatesV3Defaults()
+    public void Constructor_CreatesCurrentDefaults()
     {
         var config = new PluginConfiguration();
 
@@ -24,6 +24,23 @@ public sealed class PluginConfigurationMigrationTests
         Assert.True(config.Series.Audio.UseAsTheme);
         Assert.True(config.Series.Video.UseAsTheme);
         Assert.Equal(ExtrasFileSuffix.Other, config.ExtrasFileSuffix);
+        Assert.True(config.SegmentedDownloadEnabled);
+        Assert.Equal(4, config.SegmentedDownloadSegments);
+    }
+
+    [Theory]
+    [InlineData(0, 2)]
+    [InlineData(2, 2)]
+    [InlineData(4, 4)]
+    [InlineData(10, 8)]
+    public void SegmentedDownloadSegments_IsClamped(int value, int expected)
+    {
+        var config = new PluginConfiguration
+        {
+            SegmentedDownloadSegments = value,
+        };
+
+        Assert.Equal(expected, config.SegmentedDownloadSegments);
     }
 
     [Fact]
@@ -107,10 +124,28 @@ public sealed class PluginConfigurationMigrationTests
         var changed = config.Normalize();
 
         Assert.True(changed);
-        Assert.Equal(3, config.ConfigurationVersion);
+        Assert.Equal(4, config.ConfigurationVersion);
         Assert.Equal(4, config.Series.Audio.MaxThemes);
         Assert.False(config.Series.Video.UseAsTheme);
         Assert.Equal(ExtrasFileSuffix.Other, config.ExtrasFileSuffix);
+    }
+
+    [Fact]
+    public void Normalize_V3Config_UpgradesWithSegmentedDownloadDefaults()
+    {
+        var config = new PluginConfiguration
+        {
+            ConfigurationVersion = 3,
+        };
+        config.Series.Audio.MaxThemes = 3;
+
+        var changed = config.Normalize();
+
+        Assert.True(changed);
+        Assert.Equal(4, config.ConfigurationVersion);
+        Assert.Equal(3, config.Series.Audio.MaxThemes);
+        Assert.True(config.SegmentedDownloadEnabled);
+        Assert.Equal(4, config.SegmentedDownloadSegments);
     }
 
     [Fact]
@@ -128,7 +163,7 @@ public sealed class PluginConfigurationMigrationTests
         serializer.Serialize(writer, config);
         var xml = writer.ToString();
 
-        Assert.Contains("<ConfigurationVersion>3</ConfigurationVersion>", xml);
+        Assert.Contains("<ConfigurationVersion>4</ConfigurationVersion>", xml);
         Assert.Contains("<Series>", xml);
         Assert.Contains("<Movie>", xml);
         Assert.DoesNotContain("SeriesAudioMaxThemes", xml);

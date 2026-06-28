@@ -519,7 +519,7 @@ public class ThemeFilePlannerTests
             var content = File.ReadAllText(file);
             Assert.Contains("AnimeThemesSync/Jobs/ThemeDownload", content, StringComparison.Ordinal);
             Assert.Contains("AnimeThemesSync/Jobs/ItemDownload", content, StringComparison.Ordinal);
-            Assert.Contains("pollDownloadJob", content, StringComparison.Ordinal);
+            Assert.Contains("startDownloadsPolling", content, StringComparison.Ordinal);
             Assert.Contains("AnimeThemesBrowserProgressBar", content, StringComparison.Ordinal);
             Assert.Contains("AtsDownloadIncludeAudio", content, StringComparison.Ordinal);
             Assert.Contains("AtsDownloadIncludeVideo", content, StringComparison.Ordinal);
@@ -527,8 +527,33 @@ public class ThemeFilePlannerTests
             Assert.Contains("&IncludeAudio=", content, StringComparison.Ordinal);
             Assert.Contains("&IncludeVideo=", content, StringComparison.Ordinal);
             Assert.Contains("&IncludeExtras=", content, StringComparison.Ordinal);
+            Assert.Contains("&DisplayTitle=", content, StringComparison.Ordinal);
+            Assert.Contains("data-row-id", content, StringComparison.Ordinal);
+            Assert.Contains("ats-card-download-status", content, StringComparison.Ordinal);
             Assert.DoesNotContain("/Download?force=", content, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void BrowserPages_ExposeSegmentedSettingsAndUniqueDownloadManagerIds()
+    {
+        var root = FindRepositoryRoot();
+        var jellyfinHtml = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+        var embyHtml = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+        var embyController = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js"));
+
+        foreach (var content in new[] { jellyfinHtml, embyHtml })
+        {
+            Assert.Contains("AtsSegmentedDownloadEnabled", content, StringComparison.Ordinal);
+            Assert.Contains("AtsSegmentedDownloadSegments", content, StringComparison.Ordinal);
+            Assert.Equal(1, content.Split("id=\"AnimeThemesDownloadManager\"", StringSplitOptions.None).Length - 1);
+            Assert.DoesNotContain("server theme Efor", content, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("SegmentedDownloadEnabled", jellyfinHtml, StringComparison.Ordinal);
+        Assert.Contains("SegmentedDownloadSegments", jellyfinHtml, StringComparison.Ordinal);
+        Assert.Contains("SegmentedDownloadEnabled", embyController, StringComparison.Ordinal);
+        Assert.Contains("SegmentedDownloadSegments", embyController, StringComparison.Ordinal);
     }
 
     [Fact]
