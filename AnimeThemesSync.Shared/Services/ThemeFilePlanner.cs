@@ -193,7 +193,9 @@ public static class ThemeFilePlanner
                 themeKey)
             {
                 RequiresTranscoding = sourceVideoExtension == null,
-                OutputTarget = outputTarget
+                OutputTarget = outputTarget,
+                SourceRowId = BuildBrowserRowId(candidate),
+                DisplayTitle = BuildDownloadDisplayTitle(candidate)
             };
             mediaFiles.Add(videoPlan);
         }
@@ -214,7 +216,9 @@ public static class ThemeFilePlanner
                 themeKey)
             {
                 RequiresTranscoding = !separateAudio || sourceAudioExtension == null,
-                OutputTarget = outputTarget
+                OutputTarget = outputTarget,
+                SourceRowId = BuildBrowserRowId(candidate),
+                DisplayTitle = BuildDownloadDisplayTitle(candidate)
             });
         }
 
@@ -402,7 +406,9 @@ public static class ThemeFilePlanner
             plans.Add((new ThemeFilePlan(Path.Combine(targetDir, fileName), link, isVideo, count, themeKey)
             {
                 RequiresTranscoding = sourceExtension == null,
-                OutputTarget = outputTarget
+                OutputTarget = outputTarget,
+                SourceRowId = BuildBrowserRowId(candidate),
+                DisplayTitle = BuildDownloadDisplayTitle(candidate)
             }, candidate));
         }
 
@@ -512,8 +518,16 @@ public static class ThemeFilePlanner
             RequiresTranscoding = requiresTranscoding,
             Key = BuildBrowserRowId(candidate),
             LegacyTargetPaths = legacyNames.Select(name => Path.Combine(extrasPath, name)).ToArray(),
-            OutputTarget = outputTarget
+            OutputTarget = outputTarget,
+            DisplayTitle = BuildDownloadDisplayTitle(candidate)
         };
+    }
+
+    private static string BuildDownloadDisplayTitle(ScoredCandidate candidate)
+    {
+        var themeKey = BuildThemeKey(candidate);
+        var songTitle = candidate.Theme.Song?.Title?.Trim();
+        return string.IsNullOrWhiteSpace(songTitle) ? themeKey : themeKey + " · " + songTitle;
     }
 
     private static string PrefixFileName(string fileName, string? prefix)

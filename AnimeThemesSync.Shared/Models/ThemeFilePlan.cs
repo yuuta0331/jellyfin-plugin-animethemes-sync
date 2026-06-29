@@ -27,6 +27,16 @@ public sealed record ThemeFilePlan(
     /// Gets a value indicating whether the downloaded source must be transcoded or remuxed.
     /// </summary>
     public bool RequiresTranscoding { get; init; }
+
+    /// <summary>
+    /// Gets the stable Browser row identifier for the source theme candidate.
+    /// </summary>
+    public string SourceRowId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets the human-readable theme title used by download jobs.
+    /// </summary>
+    public string DisplayTitle { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -60,6 +70,11 @@ public sealed record ThemeExtraPlan(string? SourcePath, string TargetPath)
     /// Gets known pre-manifest target paths that can be renamed to <see cref="TargetPath"/>.
     /// </summary>
     public IReadOnlyList<string> LegacyTargetPaths { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Gets the human-readable theme title used by download jobs.
+    /// </summary>
+    public string DisplayTitle { get; init; } = string.Empty;
 }
 
 /// <summary>

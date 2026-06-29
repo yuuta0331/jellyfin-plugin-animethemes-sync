@@ -35,7 +35,8 @@ public sealed record ThemeDownloadJobStatus(
     DateTimeOffset? StartedAt,
     DateTimeOffset? FinishedAt,
     int? QueuePosition,
-    bool CanCancel);
+    bool CanCancel,
+    bool CanRetry);
 
 public sealed record ThemeDownloadJobDescriptor(
     string JobType,

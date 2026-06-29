@@ -157,6 +157,73 @@ public class ThemeDownloader : IScheduledTask
         return result;
     }
 
+    public async Task<IReadOnlyList<ThemeDownloadJobStartResult>> StartItemDownloadBatchAsync(
+        Guid itemId,
+        bool forceRedownload,
+        CancellationToken cancellationToken)
+    {
+        var config = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
+        if (!config.ThemeDownloadingEnabled)
+        {
+            throw new InvalidOperationException("Theme downloading is disabled in plugin configuration.");
+        }
+
+        var item = _libraryManager.GetItemById(itemId) ?? throw new KeyNotFoundException("The requested item was not found.");
+        if (item is not Series && item is not Movie && item is not Season)
+        {
+            throw new InvalidOperationException("Only Series, Season, and Movie items are supported.");
+        }
+
+        EnsureSeasonThemeDownloadsAllowed(item, config);
+        var audioConfig = CreateThemeConfig(item, config, isVideo: false);
+        var videoConfig = CreateThemeConfig(item, config, isVideo: true);
+        var plan = await ResolveItem(item, audioConfig, videoConfig, cancellationToken).ConfigureAwait(false);
+        if (plan == null)
+        {
+            return Array.Empty<ThemeDownloadJobStartResult>();
+        }
+
+        var overwrite = forceRedownload || config.ForceRedownload;
+        MigrateExtraFiles(plan.ExtraFiles, overwrite);
+        var groups = BuildThemeDownloadGroups(item, plan, config, overwrite);
+        if (groups.Count == 0)
+        {
+            FinalizeThemeDownloadBatch(item, plan, config);
+            return Array.Empty<ThemeDownloadJobStartResult>();
+        }
+
+        ThemeDownloadJobService.Configure(config.MaxConcurrentDownloads);
+        var remainingInitialJobs = groups.Count;
+        var startedJobs = new List<ThemeDownloadJobStartResult>(groups.Count);
+        foreach (var group in groups)
+        {
+            var descriptor = new ThemeDownloadJobDescriptor(
+                "Theme",
+                group.OutputTarget.LogicalItemId,
+                group.RowId,
+                BuildThemeDownloadJobTitle(group));
+            startedJobs.Add(ThemeDownloadJobService.Start(
+                descriptor,
+                (progress, jobCancellationToken) => ExecuteThemeDownloadGroupAsync(group, config, overwrite, progress, jobCancellationToken),
+                () =>
+                {
+                    if (Interlocked.Decrement(ref remainingInitialJobs) == 0)
+                    {
+                        try
+                        {
+                            FinalizeThemeDownloadBatch(item, plan, config);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Failed to finalize the theme download batch for {ItemName}.", item.Name);
+                        }
+                    }
+                }));
+        }
+
+        return startedJobs;
+    }
+
     /// <summary>
     /// Gets browser candidates from AnimeThemes-enabled libraries.
     /// </summary>
@@ -1676,6 +1743,194 @@ public class ThemeDownloader : IScheduledTask
         return new ThemeDownloadExecutionResult(items.Count, allDownloads.Count, completedDownloads, allExtras.Count, completedExtras, failedExtras);
     }
 
+    private List<PlannedThemeDownloadGroup> BuildThemeDownloadGroups(
+        BaseItem sourceItem,
+        ThemeOutputPlan plan,
+        PluginConfiguration config,
+        bool overwrite)
+    {
+        var groups = new Dictionary<string, PlannedThemeDownloadGroup>(StringComparer.OrdinalIgnoreCase);
+        if (!config.AllowAdd)
+        {
+            return [];
+        }
+
+        foreach (var file in plan.MediaFiles)
+        {
+            var outputTarget = file.OutputTarget ?? ResolveThemeOutputTarget(sourceItem);
+            if (outputTarget == null || string.IsNullOrWhiteSpace(file.SourceRowId) || (!overwrite && _fileSystem.FileExists(file.Path)))
+            {
+                continue;
+            }
+
+            var group = GetOrCreateGroup(outputTarget, file.SourceRowId, file.DisplayTitle);
+            group.MediaFiles.Add(file);
+        }
+
+        foreach (var extra in plan.ExtraFiles)
+        {
+            var outputTarget = extra.OutputTarget ?? ResolveThemeOutputTarget(sourceItem);
+            if (outputTarget == null || string.IsNullOrWhiteSpace(extra.Key) || (!overwrite && _fileSystem.FileExists(extra.TargetPath)))
+            {
+                continue;
+            }
+
+            var group = GetOrCreateGroup(outputTarget, extra.Key, extra.DisplayTitle);
+            group.ExtraFiles.Add(extra);
+        }
+
+        return groups.Values
+            .OrderBy(group => group.OutputTarget.LogicalItemId)
+            .ThenBy(group => group.DisplayTitle, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        PlannedThemeDownloadGroup GetOrCreateGroup(ThemeOutputTarget outputTarget, string rowId, string displayTitle)
+        {
+            var key = outputTarget.LogicalItemId.ToString("N") + ":" + rowId;
+            if (!groups.TryGetValue(key, out var group))
+            {
+                group = new PlannedThemeDownloadGroup(outputTarget, rowId, displayTitle);
+                groups[key] = group;
+            }
+
+            return group;
+        }
+    }
+
+    private string BuildThemeDownloadJobTitle(PlannedThemeDownloadGroup group)
+    {
+        var targetItem = _libraryManager.GetItemById(group.OutputTarget.LogicalItemId);
+        var itemTitle = targetItem?.Name ?? "Unknown";
+        if (targetItem is Season season)
+        {
+            var series = FindSeriesForSeason(season);
+            if (!string.IsNullOrWhiteSpace(series?.Name))
+            {
+                itemTitle = series.Name + " / " + itemTitle;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(group.DisplayTitle) ? itemTitle : itemTitle + " · " + group.DisplayTitle;
+    }
+
+    private async Task<ThemeDownloadExecutionResult> ExecuteThemeDownloadGroupAsync(
+        PlannedThemeDownloadGroup group,
+        PluginConfiguration config,
+        bool overwrite,
+        IProgress<double> progress,
+        CancellationToken cancellationToken)
+    {
+        var targetItem = _libraryManager.GetItemById(group.OutputTarget.LogicalItemId)
+            ?? throw new KeyNotFoundException("The download target item was not found.");
+        var audioVolume = CreateThemeConfig(targetItem, config, isVideo: false).Volume;
+        var videoVolume = CreateThemeConfig(targetItem, config, isVideo: true).Volume;
+        var mediaFiles = group.MediaFiles.Where(file => overwrite || !_fileSystem.FileExists(file.Path)).ToList();
+        var extraFiles = group.ExtraFiles.Where(extra => overwrite || !_fileSystem.FileExists(extra.TargetPath)).ToList();
+        var totalSteps = Math.Max(1, mediaFiles.Count + extraFiles.Count);
+        var completedSteps = 0;
+
+        foreach (var file in mediaFiles)
+        {
+            var directory = Path.GetDirectoryName(file.Path);
+            if (directory != null && !_fileSystem.DirectoryExists(directory))
+            {
+                _ = Directory.CreateDirectory(directory);
+            }
+
+            var transferProgress = CreateStepProgress(progress, 0, 100, completedSteps, totalSteps);
+            await DownloadPlannedFileWithRetryAsync(
+                file,
+                file.IsVideo ? videoVolume : audioVolume,
+                transferProgress,
+                cancellationToken).ConfigureAwait(false);
+            _dataStore.UpsertThemeFile(group.OutputTarget, file.ThemeKey, file.IsVideo ? "video" : "audio", file.Path);
+            completedSteps++;
+            progress.Report((double)completedSteps / totalSteps * 100);
+        }
+
+        foreach (var extra in extraFiles)
+        {
+            ThemeExtraFileResult result;
+            if (!string.IsNullOrWhiteSpace(extra.SourcePath))
+            {
+                result = ThemeExtrasFileService.EnsureExtraFileDetailed(
+                    extra.SourcePath,
+                    extra.TargetPath,
+                    config.ExtrasLinkMode,
+                    overwrite);
+            }
+            else if (!string.IsNullOrWhiteSpace(extra.DownloadUrl))
+            {
+                var transferProgress = CreateStepProgress(progress, 0, 100, completedSteps, totalSteps);
+                await DownloadFile(
+                    extra.DownloadUrl,
+                    extra.TargetPath,
+                    videoVolume,
+                    isVideo: true,
+                    requiresTranscoding: extra.RequiresTranscoding,
+                    cancellationToken,
+                    transferProgress).ConfigureAwait(false);
+                result = new ThemeExtraFileResult("downloaded");
+            }
+            else
+            {
+                result = new ThemeExtraFileResult("missing-source");
+            }
+
+            if (string.Equals(result.Action, "missing-source", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new FileNotFoundException("The source theme video for the extra was not found.", extra.SourcePath);
+            }
+
+            ThemeExtrasManifestService.UpdateExtraFile(extra);
+            _dataStore.UpsertThemeFile(group.OutputTarget, extra.Key, "extra", extra.TargetPath);
+            completedSteps++;
+            progress.Report((double)completedSteps / totalSteps * 100);
+        }
+
+        RefreshBrowserCacheForItem(targetItem is Season season ? FindSeriesForSeason(season) ?? targetItem : targetItem);
+        return new ThemeDownloadExecutionResult(1, mediaFiles.Count, mediaFiles.Count, extraFiles.Count, extraFiles.Count, 0);
+    }
+
+    private async Task DownloadPlannedFileWithRetryAsync(
+        ThemeFilePlan file,
+        int volume,
+        IProgress<double>? progress,
+        CancellationToken cancellationToken)
+    {
+        const int MaxAttempts = 3;
+        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+        {
+            try
+            {
+                await DownloadFile(file.Url, file.Path, volume, file.IsVideo, file.RequiresTranscoding, cancellationToken, progress).ConfigureAwait(false);
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (attempt < MaxAttempts)
+            {
+                _logger.LogWarning(ex, "Download attempt {Attempt}/{MaxAttempts} failed for {Url}. Retrying...", attempt, MaxAttempts, file.Url);
+                await Task.Delay(TimeSpan.FromSeconds(attempt * 2), cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private void FinalizeThemeDownloadBatch(BaseItem item, ThemeOutputPlan plan, PluginConfiguration config)
+    {
+        if (config.AllowDelete)
+        {
+            foreach (var cleanup in plan.CleanupPlans)
+            {
+                CleanupDirectory(cleanup.Directory, cleanup.DesiredFiles, cleanup.Themes);
+            }
+        }
+
+        RefreshBrowserCacheForItem(item is Season season ? FindSeriesForSeason(season) ?? item : item);
+    }
+
     /// <inheritdoc />
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
     {
@@ -3049,6 +3304,26 @@ public class ThemeDownloader : IScheduledTask
         string Status,
         string Source,
         bool SameAsSeries);
+
+    private sealed class PlannedThemeDownloadGroup
+    {
+        public PlannedThemeDownloadGroup(ThemeOutputTarget outputTarget, string rowId, string displayTitle)
+        {
+            OutputTarget = outputTarget;
+            RowId = rowId;
+            DisplayTitle = displayTitle;
+        }
+
+        public ThemeOutputTarget OutputTarget { get; }
+
+        public string RowId { get; }
+
+        public string DisplayTitle { get; }
+
+        public List<ThemeFilePlan> MediaFiles { get; } = [];
+
+        public List<ThemeExtraPlan> ExtraFiles { get; } = [];
+    }
 
     private sealed record SeasonThemeMatchState(
         string Status,

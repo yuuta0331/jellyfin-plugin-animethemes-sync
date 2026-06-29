@@ -14,6 +14,13 @@ public enum ThemeDownloadJobRemovalResult
     Active,
 }
 
+public enum ThemeDownloadJobRetryResult
+{
+    Retried,
+    NotFound,
+    NotFailed,
+}
+
 public static class ThemeDownloadJobService
 {
     private static readonly object SyncRoot = new();
@@ -39,7 +46,8 @@ public static class ThemeDownloadJobService
 
     public static ThemeDownloadJobStartResult Start(
         ThemeDownloadJobDescriptor descriptor,
-        Func<IProgress<double>, CancellationToken, Task<ThemeDownloadExecutionResult>> action)
+        Func<IProgress<double>, CancellationToken, Task<ThemeDownloadExecutionResult>> action,
+        System.Action? onFirstTerminal = null)
     {
 #if NETSTANDARD2_1
         if (descriptor == null)
@@ -67,7 +75,7 @@ public static class ThemeDownloadJobService
 
         var jobId = Guid.NewGuid().ToString("N");
         var cts = new CancellationTokenSource();
-        var status = new MutableJobStatus(jobId, descriptor, action, cts);
+        var status = new MutableJobStatus(jobId, descriptor, action, cts, onFirstTerminal);
         List<MutableJobStatus> jobsToStart;
 
         lock (SyncRoot)
@@ -132,6 +140,7 @@ public static class ThemeDownloadJobService
     public static ThemeDownloadJobStatus? Cancel(string jobId)
     {
         CancellationTokenSource? cancellationTokenSource = null;
+        System.Action? terminalCallback = null;
         ThemeDownloadJobStatus? result;
         List<MutableJobStatus> jobsToStart;
 
@@ -151,6 +160,8 @@ public static class ThemeDownloadJobService
                 status.Action = null;
                 cancellationTokenSource = status.CancellationTokenSource;
                 status.CancellationTokenSource = null;
+                terminalCallback = status.TerminalCallback;
+                status.TerminalCallback = null;
             }
             else if (string.Equals(status.Status, "Running", StringComparison.Ordinal))
             {
@@ -167,6 +178,7 @@ public static class ThemeDownloadJobService
         if (result?.Status == "Cancelled")
         {
             cancellationTokenSource?.Dispose();
+            InvokeTerminalCallback(terminalCallback);
         }
 
         StartJobs(jobsToStart);
@@ -190,6 +202,60 @@ public static class ThemeDownloadJobService
 
             Jobs.Remove(jobId);
             return ThemeDownloadJobRemovalResult.Removed;
+        }
+    }
+
+    public static ThemeDownloadJobRetryResult RetryFailed(string jobId, out ThemeDownloadJobStatus? result)
+    {
+        List<MutableJobStatus> jobsToStart;
+        lock (SyncRoot)
+        {
+            PruneTerminalJobsLocked(DateTimeOffset.UtcNow);
+            if (!Jobs.TryGetValue(jobId, out var status))
+            {
+                result = null;
+                return ThemeDownloadJobRetryResult.NotFound;
+            }
+
+            if (!string.Equals(status.Status, "Failed", StringComparison.Ordinal) || status.Action == null)
+            {
+                result = status.ToImmutable(GetQueuePositionsLocked());
+                return ThemeDownloadJobRetryResult.NotFailed;
+            }
+
+            status.Status = "Pending";
+            status.Progress = 0;
+            status.Message = "Queued";
+            status.Result = null;
+            status.Error = null;
+            status.StartedAt = null;
+            status.FinishedAt = null;
+            status.CancellationTokenSource = new CancellationTokenSource();
+            PendingQueue.Enqueue(jobId);
+            jobsToStart = PumpQueueLocked();
+            result = status.ToImmutable(GetQueuePositionsLocked());
+        }
+
+        StartJobs(jobsToStart);
+        return ThemeDownloadJobRetryResult.Retried;
+    }
+
+    public static int RemoveFinishedHistory()
+    {
+        lock (SyncRoot)
+        {
+            PruneTerminalJobsLocked(DateTimeOffset.UtcNow);
+            var ids = Jobs.Values
+                .Where(job => string.Equals(job.Status, "Completed", StringComparison.Ordinal) ||
+                              string.Equals(job.Status, "Cancelled", StringComparison.Ordinal))
+                .Select(job => job.JobId)
+                .ToList();
+            foreach (var jobId in ids)
+            {
+                Jobs.Remove(jobId);
+            }
+
+            return ids.Count;
         }
     }
 
@@ -301,6 +367,7 @@ public static class ThemeDownloadJobService
         string? error)
     {
         CancellationTokenSource? cancellationTokenSource;
+        System.Action? terminalCallback;
         List<MutableJobStatus> jobsToStart;
         lock (SyncRoot)
         {
@@ -310,16 +377,35 @@ public static class ThemeDownloadJobService
             job.Error = error;
             job.Progress = string.Equals(status, "Completed", StringComparison.Ordinal) ? 100 : job.Progress;
             job.FinishedAt = DateTimeOffset.UtcNow;
-            job.Action = null;
+            if (!string.Equals(status, "Failed", StringComparison.Ordinal))
+            {
+                job.Action = null;
+            }
+
             cancellationTokenSource = job.CancellationTokenSource;
             job.CancellationTokenSource = null;
+            terminalCallback = job.TerminalCallback;
+            job.TerminalCallback = null;
             _runningCount = Math.Max(0, _runningCount - 1);
             PruneTerminalJobsLocked(DateTimeOffset.UtcNow);
             jobsToStart = PumpQueueLocked();
         }
 
         cancellationTokenSource?.Dispose();
+        InvokeTerminalCallback(terminalCallback);
         StartJobs(jobsToStart);
+    }
+
+    private static void InvokeTerminalCallback(System.Action? callback)
+    {
+        try
+        {
+            callback?.Invoke();
+        }
+        catch
+        {
+            // A terminal observer must not change the completed job state.
+        }
     }
 
     private static Dictionary<string, int> GetQueuePositionsLocked()
@@ -369,12 +455,18 @@ public static class ThemeDownloadJobService
 
     private sealed class MutableJobStatus
     {
-        public MutableJobStatus(string jobId, ThemeDownloadJobDescriptor descriptor, Func<IProgress<double>, CancellationToken, Task<ThemeDownloadExecutionResult>> action, CancellationTokenSource cancellationTokenSource)
+        public MutableJobStatus(
+            string jobId,
+            ThemeDownloadJobDescriptor descriptor,
+            Func<IProgress<double>, CancellationToken, Task<ThemeDownloadExecutionResult>> action,
+            CancellationTokenSource cancellationTokenSource,
+            System.Action? terminalCallback)
         {
             JobId = jobId;
             Descriptor = descriptor;
             Action = action;
             CancellationTokenSource = cancellationTokenSource;
+            TerminalCallback = terminalCallback;
             Status = "Pending";
             Message = "Queued";
             CreatedAt = DateTimeOffset.UtcNow;
@@ -404,6 +496,8 @@ public static class ThemeDownloadJobService
 
         public CancellationTokenSource? CancellationTokenSource { get; set; }
 
+        public System.Action? TerminalCallback { get; set; }
+
         public ThemeDownloadJobStartResult ToStartResult()
         {
             return new ThemeDownloadJobStartResult(JobId, Status, Progress, Message, Descriptor.JobType, Descriptor.ItemId, Descriptor.RowId, Descriptor.DisplayTitle);
@@ -426,7 +520,8 @@ public static class ThemeDownloadJobService
                 StartedAt,
                 FinishedAt,
                 queuePositions.TryGetValue(JobId, out var queuePosition) ? queuePosition : null,
-                string.Equals(Status, "Pending", StringComparison.Ordinal) || string.Equals(Status, "Running", StringComparison.Ordinal));
+                string.Equals(Status, "Pending", StringComparison.Ordinal) || string.Equals(Status, "Running", StringComparison.Ordinal),
+                string.Equals(Status, "Failed", StringComparison.Ordinal) && Action != null);
         }
     }
 

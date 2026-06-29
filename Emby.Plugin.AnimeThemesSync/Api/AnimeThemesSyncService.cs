@@ -230,6 +230,14 @@ public class StartAnimeThemesItemDownloadJob : IReturn<ThemeDownloadJobStartResu
     public string? DisplayTitle { get; set; }
 }
 
+[Route("/AnimeThemesSync/Jobs/ItemDownloadBatch", "POST", Summary = "Starts settings-aware AnimeThemes theme download jobs for an item.")]
+public class StartAnimeThemesItemDownloadBatch : IReturn<List<ThemeDownloadJobStartResult>>
+{
+    public Guid ItemId { get; set; }
+
+    public bool Force { get; set; }
+}
+
 [Route("/AnimeThemesSync/Jobs/ThemeDownload", "POST", Summary = "Starts an AnimeThemes theme download job.")]
 public class StartAnimeThemesThemeDownloadJob : IReturn<ThemeDownloadJobStartResult>
 {
@@ -263,6 +271,17 @@ public class GetAnimeThemesDownloadJobs : IReturn<List<ThemeDownloadJobStatus>>
 public class CancelAnimeThemesDownloadJob : IReturn<ThemeDownloadJobStatus>
 {
     public string JobId { get; set; } = string.Empty;
+}
+
+[Route("/AnimeThemesSync/Jobs/{JobId}/Retry", "POST", Summary = "Retries a failed AnimeThemes download job.")]
+public class RetryAnimeThemesDownloadJob : IReturn<ThemeDownloadJobStatus>
+{
+    public string JobId { get; set; } = string.Empty;
+}
+
+[Route("/AnimeThemesSync/Jobs/History", "DELETE", Summary = "Removes completed and cancelled AnimeThemes download history.")]
+public class RemoveAnimeThemesFinishedDownloadHistory : IReturnVoid
+{
 }
 
 [Route("/AnimeThemesSync/Jobs/{JobId}", "DELETE", Summary = "Removes a completed AnimeThemes download job from history.")]
@@ -555,6 +574,22 @@ public class AnimeThemesSyncService : IService, IRequiresRequest
             (progress, cancellationToken) => _themeDownloader.DownloadItemByIdAsync(request.ItemId, request.Force, progress, cancellationToken));
     }
 
+    public object Post(StartAnimeThemesItemDownloadBatch request)
+    {
+        try
+        {
+            return _themeDownloader.StartItemDownloadBatchAsync(request.ItemId, request.Force, CancellationToken.None).GetAwaiter().GetResult().ToList();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new ArgumentException(ex.Message, nameof(request));
+        }
+    }
+
     public object Post(StartAnimeThemesThemeDownloadJob request)
     {
         ThemeDownloadJobService.Configure(Plugin.Instance?.Configuration.MaxConcurrentDownloads ?? 1);
@@ -586,6 +621,22 @@ public class AnimeThemesSyncService : IService, IRequiresRequest
     {
         return ThemeDownloadJobService.Cancel(request.JobId)
             ?? throw new ArgumentException("The requested download job was not found.", nameof(request));
+    }
+
+    public object Post(RetryAnimeThemesDownloadJob request)
+    {
+        return ThemeDownloadJobService.RetryFailed(request.JobId, out var status) switch
+        {
+            ThemeDownloadJobRetryResult.Retried => status!,
+            ThemeDownloadJobRetryResult.NotFound => throw new ArgumentException("The requested download job was not found.", nameof(request)),
+            _ => throw new ArgumentException("Only failed download jobs can be retried.", nameof(request)),
+        };
+    }
+
+    public void Delete(RemoveAnimeThemesFinishedDownloadHistory request)
+    {
+        _ = ThemeDownloadJobService.RemoveFinishedHistory();
+        Request.Response.StatusCode = 204;
     }
 
     public void Delete(RemoveAnimeThemesDownloadJob request)

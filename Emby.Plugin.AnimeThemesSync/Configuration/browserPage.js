@@ -60,6 +60,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             browserRebuildRunning: false,
             browserRefreshTimer: null,
             browserRequestToken: 0,
+            browserObserver: null,
             librarySearchTimer: null,
             libraryScrollTop: null,
             activeDownloads: [],
@@ -137,6 +138,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         var dmBadge = page.querySelector('#AnimeThemesDmBadge');
         var dmToggle = page.querySelector('#AnimeThemesDmToggle');
         var dmContent = page.querySelector('#AnimeThemesDmContent');
+        var dmClearHistory = page.querySelector('#AnimeThemesDmClearHistory');
         var progressPanel = page.querySelector('#AnimeThemesBrowserProgress');
         var progressText = page.querySelector('#AnimeThemesBrowserProgressText');
         var progressPercent = page.querySelector('#AnimeThemesBrowserProgressPercent');
@@ -691,6 +693,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 loader.className = 'ats-load-more-indicator';
                 loader.style.height = '1px';
                 itemGrid.appendChild(loader);
+                observeBrowserSentinel(loader);
+            } else if (state.browserObserver) {
+                state.browserObserver.disconnect();
+                state.browserObserver = null;
             }
 
             attachScrollListener();
@@ -701,6 +707,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             button.type = 'button';
             button.className = 'ats-item-card ats-fade-in';
             var name = value(item, 'Name', 'name') || 'Unknown';
+            button.setAttribute('data-item-id', value(item, 'Id', 'id'));
             button.setAttribute('aria-label', name);
             button.title = name;
 
@@ -872,31 +879,64 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         }
 
         function getScrollContainer() {
-            var scroller = page.closest('.scroller') || page.closest('.page') || page.closest('.skinHeader-withScroller');
-            return scroller || window;
+            var candidates = [page, page.closest('.scroller'), page.closest('.page'), page.closest('.skinHeader-withScroller'), document.scrollingElement].filter(Boolean);
+            var active = candidates.find(function (candidate) { return Number(candidate.scrollTop) > 0; });
+            if (active) return active;
+            var scrollable = candidates.find(function (candidate) {
+                if (candidate === document.body || candidate === document.documentElement) return false;
+                var style = window.getComputedStyle(candidate);
+                return /(auto|scroll)/.test(style.overflowY || '') && candidate.scrollHeight > candidate.clientHeight;
+            });
+            return scrollable || document.scrollingElement || window;
         }
 
         function getScrollPosition() {
             var container = getScrollContainer();
-            if (container === window) {
-                return { element: window, top: window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop };
-            }
-            return { element: container, top: container.scrollTop };
+            var top = container === window || container === document.scrollingElement
+                ? window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop
+                : container.scrollTop;
+            var viewportTop = container === window || container === document.scrollingElement ? 0 : container.getBoundingClientRect().top;
+            var anchor = Array.prototype.find.call(itemGrid.querySelectorAll('.ats-item-card[data-item-id]'), function (card) {
+                return card.getBoundingClientRect().bottom > viewportTop;
+            });
+            return { top: top, anchorId: anchor ? anchor.getAttribute('data-item-id') : '', anchorOffset: anchor ? anchor.getBoundingClientRect().top - viewportTop : 0 };
         }
 
         function restoreScrollPosition(scrollPos) {
             if (!scrollPos) return;
-            if (scrollPos.element === window) {
-                window.scrollTo(0, scrollPos.top);
-                document.documentElement.scrollTop = scrollPos.top;
-                document.body.scrollTop = scrollPos.top;
-            } else {
-                scrollPos.element.scrollTop = scrollPos.top;
+            var container = getScrollContainer();
+            function currentTop() {
+                return container === window || container === document.scrollingElement ? window.pageYOffset : container.scrollTop;
             }
+            function setTop(top) {
+                if (container === window || container === document.scrollingElement) {
+                    window.scrollTo(0, top);
+                    document.documentElement.scrollTop = top;
+                    document.body.scrollTop = top;
+                } else container.scrollTop = top;
+            }
+            setTop(scrollPos.top);
+            requestAnimationFrame(function () {
+                var anchor = scrollPos.anchorId && Array.prototype.find.call(itemGrid.querySelectorAll('.ats-item-card[data-item-id]'), function (card) {
+                    return card.getAttribute('data-item-id') === scrollPos.anchorId;
+                });
+                if (!anchor) return;
+                var viewportTop = container === window || container === document.scrollingElement ? 0 : container.getBoundingClientRect().top;
+                setTop(currentTop() + anchor.getBoundingClientRect().top - viewportTop - scrollPos.anchorOffset);
+            });
+        }
+
+        function scrollDetailToTop() {
+            var container = getScrollContainer();
+            if (container === window || container === document.scrollingElement) {
+                window.scrollTo(0, 0);
+                document.documentElement.scrollTop = 0;
+                document.body.scrollTop = 0;
+            } else container.scrollTop = 0;
         }
 
         function handleScroll() {
-            if (state.itemsLoading) return;
+            if (state.browserObserver || state.itemsLoading) return;
             if (state.items.length >= state.browserTotalRecordCount) return;
 
             var indicator = itemGrid.querySelector('.ats-load-more-indicator');
@@ -912,11 +952,25 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         }
 
         var scrollListenerAttached = false;
+        var scrollListenerContainer = null;
         function attachScrollListener() {
-            if (scrollListenerAttached) return;
+            if (window.IntersectionObserver) return;
             var container = getScrollContainer();
+            if (scrollListenerAttached && scrollListenerContainer === container) return;
+            if (scrollListenerContainer) scrollListenerContainer.removeEventListener('scroll', handleScroll);
             container.addEventListener('scroll', handleScroll);
             scrollListenerAttached = true;
+            scrollListenerContainer = container;
+        }
+
+        function observeBrowserSentinel(sentinel) {
+            if (state.browserObserver) state.browserObserver.disconnect();
+            state.browserObserver = null;
+            if (!sentinel || state.items.length >= state.browserTotalRecordCount || !window.IntersectionObserver) return;
+            state.browserObserver = new IntersectionObserver(function (entries) {
+                if (entries.some(function (entry) { return entry.isIntersecting; }) && !state.itemsLoading) loadItems(true);
+            }, { root: null, rootMargin: '300px 0px' });
+            state.browserObserver.observe(sentinel);
         }
 
         function openLibraryView() {
@@ -933,10 +987,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             itemSelect.value = '';
             syncLayout();
             if (state.libraryScrollTop) {
-                setTimeout(function () {
+                requestAnimationFrame(function () {
                     restoreScrollPosition(state.libraryScrollTop);
                     state.libraryScrollTop = null;
-                }, 0);
+                });
             }
         }
 
@@ -955,14 +1009,11 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             renderDetailLoading();
             syncLayout();
 
-            var container = getScrollContainer();
-            if (container === window) {
-                window.scrollTo(0, 0);
-                document.documentElement.scrollTop = 0;
-                document.body.scrollTop = 0;
-            } else {
-                container.scrollTop = 0;
-            }
+            scrollDetailToTop();
+            requestAnimationFrame(function () {
+                if (state.detailLoading) scrollDetailToTop();
+                requestAnimationFrame(function () { if (state.detailLoading) scrollDetailToTop(); });
+            });
 
             loadThemes(state.detailToken);
         }
@@ -999,8 +1050,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function loadItems(append, options) {
             options = options || {};
+            if (append && state.itemsLoading) return Promise.resolve(state.items);
             var silent = options.silent === true;
             var startIndex = append ? state.items.length : 0;
+            var targetCount = !append && options.preserveCount === true ? Math.max(state.items.length, state.browserLimit) : state.browserLimit;
             var token = ++state.browserRequestToken;
             state.itemsLoading = true;
             state.summaryLoading = true;
@@ -1009,7 +1062,17 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 renderSummarySkeleton();
                 Dashboard.showLoadingMsg();
             }
-            return Promise.all([apiGet(browserItemsPath(startIndex)), apiGet('AnimeThemesSync/Summary'), apiGet('AnimeThemesSync/Storage')]).then(function (results) {
+            function fetchBrowserItems(accumulated) {
+                return apiGet(browserItemsPath(startIndex + accumulated.length)).then(function (result) {
+                    var rows = value(result, 'Items', 'items') || [];
+                    accumulated = accumulated.concat(rows);
+                    var total = Number(value(result, 'TotalRecordCount', 'totalRecordCount') || accumulated.length);
+                    if (rows.length && accumulated.length < targetCount && startIndex + accumulated.length < total) return fetchBrowserItems(accumulated);
+                    result.Items = result.items = accumulated;
+                    return result;
+                });
+            }
+            return Promise.all([fetchBrowserItems([]), apiGet('AnimeThemesSync/Summary'), apiGet('AnimeThemesSync/Storage')]).then(function (results) {
                 if (token !== state.browserRequestToken) return state.items;
                 var page = results[0] || {};
                 var items = value(page, 'Items', 'items') || (Array.isArray(page) ? page : []);
@@ -1562,12 +1625,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 state.mappingExplorerRows = [];
                 scheduleUiRefresh({ finder: true, mappings: true });
                 if (downloadAfterSave) {
-                    startDownloadJob({
-                        path: 'AnimeThemesSync/Jobs/ItemDownload?ItemId=' + encodeURIComponent(payload.SeasonItemId) + '&Force=false',
-                        jobType: 'Item',
+                    startDownloadBatch({
+                        path: 'AnimeThemesSync/Jobs/ItemDownloadBatch?ItemId=' + encodeURIComponent(payload.SeasonItemId) + '&Force=false',
                         itemId: payload.SeasonItemId,
-                        rowId: '',
-                        title: value(state.selectedSeason, 'Name', 'name') || 'Item download'
+                        title: [value(state.selectedSeason, 'SeriesName', 'seriesName'), value(state.selectedSeason, 'SeasonName', 'seasonName')].filter(Boolean).join(' / ') || 'Season download'
                     });
                 } else {
                     finderState.textContent = 'Mapping saved.';
@@ -2125,7 +2186,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             var selectedSeasonId = state.selectedSeason ? seasonRowId(state.selectedSeason) : null;
             var detailItemId = itemSelect.value || (state.currentItem ? value(state.currentItem, 'Id', 'id') : null);
             var refreshDetail = !!detailItemId && (state.detailLoading || state.detailError || !!state.currentResult);
-            var tasks = [loadItems(false, { silent: true })];
+            var tasks = [loadItems(false, { silent: true, preserveCount: true })];
             if (refreshDetail) {
                 var detailToken = ++state.detailToken;
                 tasks.push(loadThemes(detailToken, { silent: true, itemId: detailItemId }));
@@ -3218,6 +3279,43 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             });
         }
 
+        function startDownloadBatch(request) {
+            var temporaryId = 'starting-' + (++state.downloadSequence);
+            state.activeDownloads.unshift({
+                jobId: temporaryId,
+                clientOnly: true,
+                status: 'Starting',
+                progress: 0,
+                message: 'Planning downloads...',
+                error: '',
+                jobType: 'Item',
+                itemId: request.itemId || '',
+                rowId: '',
+                title: request.title || 'Season download',
+                queuePosition: null,
+                canCancel: false,
+                canRetry: false
+            });
+            renderDownloadManager();
+            if (downloadManager) {
+                downloadManager.style.display = 'flex';
+                downloadManager.classList.remove('collapsed');
+                downloadManager.removeAttribute('aria-hidden');
+            }
+            apiPost(request.path).then(function (jobs) {
+                state.activeDownloads = state.activeDownloads.filter(function (current) { return current.jobId !== temporaryId; });
+                (jobs || []).map(normalizeDownloadJob).reverse().forEach(function (job) { state.activeDownloads.unshift(job); });
+                renderDownloadManager();
+                updateThemeCardDownloadStatuses();
+                startDownloadsPolling();
+                if (!jobs || !jobs.length) finderState.textContent = 'Mapping saved. No downloads were needed.';
+            }).catch(function (err) {
+                state.activeDownloads = state.activeDownloads.filter(function (current) { return current.jobId !== temporaryId; });
+                renderDownloadManager();
+                Dashboard.alert({ title: 'Download Error', message: 'Failed to plan downloads: ' + getErrorMessage(err) });
+            });
+        }
+
         function startDownloadsPolling() {
             state.downloadsPollingEnabled = true;
             if (state.downloadsInterval) return;
@@ -3274,7 +3372,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 rowId: value(job, 'RowId', 'rowId') || '',
                 title: value(job, 'DisplayTitle', 'displayTitle') || 'Download job',
                 queuePosition: value(job, 'QueuePosition', 'queuePosition'),
-                canCancel: !!value(job, 'CanCancel', 'canCancel')
+                canCancel: !!value(job, 'CanCancel', 'canCancel'),
+                canRetry: !!value(job, 'CanRetry', 'canRetry')
             };
         }
 
@@ -3352,6 +3451,33 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             });
         }
 
+        function retryDownloadJob(jobId) {
+            apiPost('AnimeThemesSync/Jobs/' + encodeURIComponent(jobId) + '/Retry').then(function (job) {
+                var updated = normalizeDownloadJob(job || {});
+                state.activeDownloads = state.activeDownloads.map(function (current) {
+                    return current.jobId === jobId && updated.jobId ? updated : current;
+                });
+                renderDownloadManager();
+                updateThemeCardDownloadStatuses();
+                startDownloadsPolling();
+            }).catch(function (err) {
+                Dashboard.alert({ title: 'Download Retry Error', message: getErrorMessage(err) });
+            });
+        }
+
+        function clearFinishedDownloadHistory() {
+            var previousJobs = state.activeDownloads.slice();
+            state.activeDownloads = state.activeDownloads.filter(function (job) { return job.status !== 'Completed' && job.status !== 'Cancelled'; });
+            renderDownloadManager();
+            updateThemeCardDownloadStatuses();
+            apiDeleteNoContent('AnimeThemesSync/Jobs/History').catch(function (err) {
+                state.activeDownloads = previousJobs;
+                renderDownloadManager();
+                updateThemeCardDownloadStatuses();
+                Dashboard.alert({ title: 'Download History Error', message: getErrorMessage(err) });
+            });
+        }
+
         function toggleDownloadManager() {
             if (downloadManager) {
                 downloadManager.classList.toggle('collapsed');
@@ -3424,6 +3550,16 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 if (jobId) cancelDownloadJob(jobId);
             });
             headerActions.appendChild(cancelBtn);
+            var retryBtn = document.createElement('button');
+            retryBtn.type = 'button';
+            retryBtn.className = 'emby-button ats-dm-item-retry';
+            retryBtn.textContent = 'Retry';
+            retryBtn.addEventListener('click', function (event) {
+                event.stopPropagation();
+                var jobId = item.getAttribute('data-job-id');
+                if (jobId) retryDownloadJob(jobId);
+            });
+            headerActions.appendChild(retryBtn);
             var dismissBtn = document.createElement('button');
             dismissBtn.type = 'button';
             dismissBtn.className = 'emby-button ats-dm-item-dismiss';
@@ -3467,6 +3603,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             cancelBtn.hidden = !job.canCancel;
             cancelBtn.disabled = !job.canCancel;
             cancelBtn.setAttribute('aria-label', 'Cancel ' + job.title);
+            var retryBtn = item.querySelector('.ats-dm-item-retry');
+            retryBtn.hidden = job.clientOnly || !job.canRetry;
+            retryBtn.disabled = job.clientOnly || !job.canRetry;
+            retryBtn.setAttribute('aria-label', 'Retry ' + job.title);
             var dismissBtn = item.querySelector('.ats-dm-item-dismiss');
             dismissBtn.hidden = job.clientOnly || !isTerminalDownloadStatus(job.status);
             dismissBtn.disabled = job.clientOnly || !isTerminalDownloadStatus(job.status);
@@ -3482,18 +3622,24 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             if (!downloadManager) return;
             var activeJobs = state.activeDownloads.filter(function (job) { return isActiveDownloadStatus(job.status); });
             if (dmBadge) dmBadge.textContent = activeJobs.length;
+            if (dmClearHistory) {
+                var hasClearableHistory = state.activeDownloads.some(function (job) { return job.status === 'Completed' || job.status === 'Cancelled'; });
+                dmClearHistory.hidden = !hasClearableHistory;
+                dmClearHistory.disabled = !hasClearableHistory;
+            }
 
             if (state.activeDownloads.length === 0) {
-                downloadManager.style.display = 'none';
-                downloadManager.setAttribute('aria-hidden', 'true');
-                downloadManager.classList.add('collapsed');
-                if (dmContent) dmContent.innerHTML = '';
+                downloadManager.style.display = 'flex';
+                downloadManager.removeAttribute('aria-hidden');
+                if (dmContent) dmContent.innerHTML = '<div class="ats-dm-empty">No active downloads</div>';
                 return;
             }
 
             downloadManager.style.display = 'flex';
             downloadManager.removeAttribute('aria-hidden');
             if (!dmContent) return;
+            var emptyState = dmContent.querySelector('.ats-dm-empty');
+            if (emptyState) emptyState.remove();
 
             var retained = {};
             state.activeDownloads.forEach(function (job) {
@@ -3542,6 +3688,15 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                     if (jobId) cancelDownloadJob(jobId);
                 });
                 container.appendChild(cancel);
+                var retry = document.createElement('button');
+                retry.type = 'button';
+                retry.className = 'emby-button ats-card-download-retry';
+                retry.textContent = 'Retry';
+                retry.addEventListener('click', function () {
+                    var jobId = container.getAttribute('data-job-id');
+                    if (jobId) retryDownloadJob(jobId);
+                });
+                container.appendChild(retry);
             }
 
             container.querySelector('.ats-card-download-copy').textContent = downloadStatusText(job);
@@ -3549,6 +3704,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             cancelButton.hidden = !job.canCancel;
             cancelButton.disabled = !job.canCancel;
             cancelButton.setAttribute('aria-label', 'Cancel ' + job.title);
+            var retryButton = container.querySelector('.ats-card-download-retry');
+            retryButton.hidden = !job.canRetry;
+            retryButton.disabled = !job.canRetry;
+            retryButton.setAttribute('aria-label', 'Retry ' + job.title);
             updateProgressTrack(container.querySelector('.ats-card-download-track'), container.querySelector('.ats-card-download-bar'), job, isNew);
         }
 
@@ -3558,22 +3717,25 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 if (!downloadBtn) return;
                 var itemId = card.getAttribute('data-item-id') || '';
                 var rowId = card.getAttribute('data-row-id') || '';
-                var activeJob = state.activeDownloads.find(function (d) {
-                    return isActiveDownloadStatus(d.status) && d.jobType === 'Theme' &&
+                var matchingJobs = state.activeDownloads.filter(function (d) {
+                    return d.jobType === 'Theme' &&
                         String(d.itemId).toLowerCase() === String(itemId).toLowerCase() && String(d.rowId) === String(rowId);
                 });
+                var activeJob = matchingJobs.find(function (job) { return isActiveDownloadStatus(job.status); });
+                var failedJob = matchingJobs.find(function (job) { return job.status === 'Failed' && job.canRetry; });
+                var visibleJob = activeJob || failedJob;
 
-                if (activeJob) {
-                    downloadBtn.classList.add('ats-downloading');
-                    downloadBtn.disabled = true;
-                    downloadBtn.title = downloadStatusText(activeJob);
+                if (visibleJob) {
+                    downloadBtn.classList.toggle('ats-downloading', !!activeJob);
+                    downloadBtn.disabled = !!activeJob;
+                    downloadBtn.title = downloadStatusText(visibleJob);
                     var status = card.querySelector('.ats-card-download-status');
                     if (!status) {
                         status = document.createElement('div');
                         status.className = 'ats-card-download-status';
                         card.appendChild(status);
                     }
-                    renderInlineDownloadStatus(status, activeJob);
+                    renderInlineDownloadStatus(status, visibleJob);
                 } else {
                     downloadBtn.classList.remove('ats-downloading');
                     downloadBtn.disabled = false;
@@ -4184,7 +4346,21 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         // Download manager setup
         var dmHeader = page.querySelector('.ats-dm-header');
         if (dmHeader) {
-            dmHeader.addEventListener('click', toggleDownloadManager);
+            dmHeader.addEventListener('click', function (event) {
+                if (!event.target.closest('button')) toggleDownloadManager();
+            });
+        }
+        if (dmToggle) {
+            dmToggle.addEventListener('click', function (event) {
+                event.stopPropagation();
+                toggleDownloadManager();
+            });
+        }
+        if (dmClearHistory) {
+            dmClearHistory.addEventListener('click', function (event) {
+                event.stopPropagation();
+                clearFinishedDownloadHistory();
+            });
         }
 
         setupClearButtons();
@@ -4204,9 +4380,11 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             startDownloadsPolling();
         });
         page.addEventListener('pagehide', function () {
-            var container = getScrollContainer();
-            container.removeEventListener('scroll', handleScroll);
+            if (scrollListenerContainer) scrollListenerContainer.removeEventListener('scroll', handleScroll);
             scrollListenerAttached = false;
+            scrollListenerContainer = null;
+            if (state.browserObserver) state.browserObserver.disconnect();
+            state.browserObserver = null;
             stopDownloadsPolling();
             if (state.uiRefreshTimer) clearTimeout(state.uiRefreshTimer);
             state.uiRefreshTimer = null;

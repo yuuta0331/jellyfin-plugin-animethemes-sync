@@ -38,52 +38,14 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Extracted version: $VERSION"
 
-      - name: Sync build.yaml Version
+      - name: Validate synchronized release version
+        shell: pwsh
         run: |
-          set -euo pipefail
-          
-          # build.yaml の現在のバージョンを取得
-          BUILD_VERSION="$(python - <<'PY'
-          from pathlib import Path
-          for line in Path("build.yaml").read_text(encoding="utf-8").splitlines():
-              if line.startswith("version:"):
-                  print(line.split(":", 1)[1].strip().strip('"').strip("'"))
-                  break
-          else:
-              raise SystemExit("build.yaml version was not found")
-          PY
-          )"
-          
-          echo "build.yaml version: ${BUILD_VERSION}"
-          echo "Tag version: ${VERSION}"
-          
-          if [ "${BUILD_VERSION}" != "${VERSION}" ]; then
-            echo "Updating build.yaml to version ${VERSION}..."
-            
-            # build.yaml を更新
-            python -c "
-          import os
-          from pathlib import Path
-          p = Path('build.yaml')
-          content = p.read_text(encoding='utf-8')
-          lines = []
-          for line in content.splitlines():
-              if line.startswith('version:'):
-                  lines.append('version: \"' + '${{ env.VERSION }}' + '\"')
-              else:
-                  lines.append(line)
-          p.write_text('\n'.join(lines) + '\n', encoding='utf-8')
-          "
-            
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
-            
-            git add build.yaml
-            git commit -m "chore: auto-bump version to ${VERSION} in build.yaml [skip ci]"
-            
-            # main ブランチへプッシュ
-            git push origin HEAD:main
-          fi
+          ./update-version.ps1 -Version $env:VERSION
+          if (git status --porcelain) {
+            git diff -- build.yaml Directory.Build.props AnimeThemesSync.Shared/Constants.cs Jellyfin.Plugin.AnimeThemesSync/Configuration Emby.Plugin.AnimeThemesSync/Configuration
+            throw "Release metadata and UI versions are not synchronized. Run ./update-version.ps1 -Version $env:VERSION and commit the result before tagging."
+          }
 
       - name: Generate Release Notes
         run: |

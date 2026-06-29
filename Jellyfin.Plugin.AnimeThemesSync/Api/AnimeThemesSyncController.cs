@@ -325,6 +325,29 @@ public sealed class AnimeThemesSyncController : ControllerBase
         return Ok(job);
     }
 
+    [HttpPost("Jobs/ItemDownloadBatch")]
+    [ProducesResponseType(typeof(IReadOnlyList<ThemeDownloadJobStartResult>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<ThemeDownloadJobStartResult>>> StartItemDownloadBatch(
+        [FromQuery] Guid itemId,
+        [FromQuery] bool force,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _themeDownloader.StartItemDownloadBatchAsync(itemId, force, cancellationToken).ConfigureAwait(false));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpPost("Jobs/ThemeDownload")]
     [ProducesResponseType(typeof(ThemeDownloadJobStartResult), StatusCodes.Status200OK)]
     public ActionResult<ThemeDownloadJobStartResult> StartThemeDownloadJob(
@@ -374,6 +397,28 @@ public sealed class AnimeThemesSyncController : ControllerBase
     {
         var status = ThemeDownloadJobService.Cancel(jobId);
         return status == null ? NotFound() : Ok(status);
+    }
+
+    [HttpPost("Jobs/{jobId}/Retry")]
+    [ProducesResponseType(typeof(ThemeDownloadJobStatus), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public ActionResult<ThemeDownloadJobStatus> RetryDownloadJob(string jobId)
+    {
+        return ThemeDownloadJobService.RetryFailed(jobId, out var status) switch
+        {
+            ThemeDownloadJobRetryResult.Retried => Ok(status),
+            ThemeDownloadJobRetryResult.NotFound => NotFound(),
+            _ => Conflict(new { error = "Only failed download jobs can be retried." }),
+        };
+    }
+
+    [HttpDelete("Jobs/History")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public IActionResult RemoveFinishedDownloadHistory()
+    {
+        _ = ThemeDownloadJobService.RemoveFinishedHistory();
+        return NoContent();
     }
 
     [HttpDelete("Jobs/{jobId}")]

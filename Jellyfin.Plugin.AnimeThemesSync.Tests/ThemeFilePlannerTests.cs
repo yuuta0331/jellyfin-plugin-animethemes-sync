@@ -78,6 +78,49 @@ public class ThemeFilePlannerTests
     }
 
     [Fact]
+    public void BuildPlan_AttachesSharedRowAndDisplayMetadataToThemeOutputs()
+    {
+        var plan = ThemeFilePlanner.BuildPlan(
+            CreateAnime(),
+            Path.Combine("Media", "Bakemonogatari"),
+            Enabled(maxThemes: 1),
+            Enabled(maxThemes: 1),
+            extrasEnabled: true);
+
+        var audio = plan.MediaFiles.Single(file => !file.IsVideo);
+        var video = plan.MediaFiles.Single(file => file.IsVideo);
+        var extra = plan.ExtraFiles.Single();
+        Assert.False(string.IsNullOrWhiteSpace(audio.SourceRowId));
+        Assert.Equal(audio.SourceRowId, video.SourceRowId);
+        Assert.Equal(audio.SourceRowId, extra.Key);
+        Assert.Equal("OP1 · staple stable", audio.DisplayTitle);
+        Assert.Equal(audio.DisplayTitle, video.DisplayTitle);
+        Assert.Equal(audio.DisplayTitle, extra.DisplayTitle);
+    }
+
+    [Fact]
+    public void BuildPlan_MetadataGroupsOnlyOutputsSelectedByEachMediaSetting()
+    {
+        var plan = ThemeFilePlanner.BuildPlan(
+            CreateAnime(),
+            Path.Combine("Media", "Bakemonogatari"),
+            Enabled(maxThemes: 1),
+            Enabled(maxThemes: 2),
+            extrasEnabled: true);
+        var outputRows = plan.MediaFiles
+            .Select(file => (RowId: file.SourceRowId, Kind: file.IsVideo ? "video" : "audio"))
+            .Concat(plan.ExtraFiles.Select(extra => (RowId: extra.Key, Kind: "extra")))
+            .GroupBy(output => output.RowId)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group => group.Select(output => output.Kind).OrderBy(kind => kind, StringComparer.Ordinal).ToArray())
+            .ToList();
+
+        Assert.Equal(2, outputRows.Count);
+        Assert.Contains(outputRows, kinds => kinds.SequenceEqual(new[] { "audio", "extra", "video" }));
+        Assert.Contains(outputRows, kinds => kinds.SequenceEqual(new[] { "extra", "video" }));
+    }
+
+    [Fact]
     public void BuildPlan_FallsBackWhenSequenceIsMissingAndSanitizesNames()
     {
         var anime = new AnimeThemesAnime
@@ -440,11 +483,14 @@ public class ThemeFilePlannerTests
     }
 
     [Fact]
-    public void UiAssetVersion_IsSynchronizedAcrossRegisteredPages()
+    public void PluginVersion_IsSynchronizedAcrossBuildAndRegisteredPages()
     {
         var root = FindRepositoryRoot();
         var assetVersion = Constants.UiAssetVersion;
-        var displayVersion = Constants.UiDisplayVersion;
+        var pluginVersion = Constants.PluginVersion;
+        var build = File.ReadAllText(Path.Combine(root, "build.yaml"));
+        var props = File.ReadAllText(Path.Combine(root, "Directory.Build.props"));
+        var releaseWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "github-release.yaml"));
         var jellyfinConfig = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "configPage.html"));
         var jellyfinBrowser = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
         var embyConfig = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "configPage.html"));
@@ -454,8 +500,23 @@ public class ThemeFilePlannerTests
         Assert.Contains("#/configurationpage?name=animethemessyncbrowser" + assetVersion, embyConfig, StringComparison.Ordinal);
         Assert.Contains("__plugin/animethemessyncconfigjs" + assetVersion, embyConfig, StringComparison.Ordinal);
         Assert.Contains("__plugin/animethemessyncbrowserjs" + assetVersion, embyBrowser, StringComparison.Ordinal);
-        Assert.Contains("UI version: " + displayVersion, jellyfinBrowser, StringComparison.Ordinal);
-        Assert.Contains("UI version: " + displayVersion, embyBrowser, StringComparison.Ordinal);
+        Assert.Contains("version: \"" + pluginVersion + "\"", build, StringComparison.Ordinal);
+        Assert.Contains(">" + pluginVersion + "</Version>", props, StringComparison.Ordinal);
+        Assert.Contains("./update-version.ps1 -Version $env:VERSION", releaseWorkflow, StringComparison.Ordinal);
+        var isReleaseDisplay = jellyfinBrowser.Contains("Version: " + pluginVersion, StringComparison.Ordinal);
+        Assert.Equal(isReleaseDisplay, embyBrowser.Contains("Version: " + pluginVersion, StringComparison.Ordinal));
+        if (isReleaseDisplay)
+        {
+            Assert.Equal("v" + pluginVersion.Replace(".", string.Empty, StringComparison.Ordinal), assetVersion);
+            Assert.DoesNotContain("UI version:", jellyfinBrowser, StringComparison.Ordinal);
+            Assert.DoesNotContain("UI version:", embyBrowser, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Matches(@"^\d{8}[a-z]$", assetVersion);
+            Assert.Contains("UI version:", jellyfinBrowser, StringComparison.Ordinal);
+            Assert.Contains("UI version:", embyBrowser, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -549,13 +610,25 @@ public class ThemeFilePlannerTests
             Assert.Contains("ats-skeleton-shimmer-only::after", page, StringComparison.Ordinal);
             Assert.Contains("animation: atsShimmer 1.25s", page, StringComparison.Ordinal);
             Assert.Contains("ats-dm-item-dismiss", page, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesDmClearHistory", page, StringComparison.Ordinal);
+            Assert.Contains("ats-dm-item-retry", page, StringComparison.Ordinal);
+            Assert.Contains("ats-card-download-retry", page, StringComparison.Ordinal);
+            Assert.Contains("No active downloads", page, StringComparison.Ordinal);
         }
 
         foreach (var script in new[] { jellyfinPage, embyController })
         {
             Assert.Contains("function dismissDownloadJob(jobId)", script, StringComparison.Ordinal);
+            Assert.Contains("function retryDownloadJob(jobId)", script, StringComparison.Ordinal);
+            Assert.Contains("function clearFinishedDownloadHistory()", script, StringComparison.Ordinal);
+            Assert.Contains("dmContent.innerHTML = '<div class=\"ats-dm-empty\">No active downloads</div>'", script, StringComparison.Ordinal);
+            Assert.Contains("if (emptyState) emptyState.remove();", script, StringComparison.Ordinal);
             Assert.Contains("isTerminalDownloadStatus(job.status)", script, StringComparison.Ordinal);
             Assert.Contains("AnimeThemesSync/Jobs/", script, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesSync/Jobs/History", script, StringComparison.Ordinal);
+            Assert.Contains("AnimeThemesSync/Jobs/ItemDownloadBatch", script, StringComparison.Ordinal);
+            Assert.Contains("observeBrowserSentinel", script, StringComparison.Ordinal);
+            Assert.Contains("preserveCount: true", script, StringComparison.Ordinal);
             Assert.Contains("function loadPlayerAttempt", script, StringComparison.Ordinal);
             Assert.Contains("createButton('Retry', true)", script, StringComparison.Ordinal);
             Assert.Contains("ThemeFiles/DeleteFile?ItemId=", script, StringComparison.Ordinal);
@@ -569,6 +642,13 @@ public class ThemeFilePlannerTests
         var embyService = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Api", "AnimeThemesSyncService.cs"));
         Assert.Contains("SupportsRangeRequests = true", embyService, StringComparison.Ordinal);
         Assert.Contains("GetStaticFileResult", embyService, StringComparison.Ordinal);
+        Assert.Contains("RetryAnimeThemesDownloadJob", embyService, StringComparison.Ordinal);
+        Assert.Contains("RemoveAnimeThemesFinishedDownloadHistory", embyService, StringComparison.Ordinal);
+
+        var jellyfinController = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Api", "AnimeThemesSyncController.cs"));
+        Assert.Contains("Jobs/ItemDownloadBatch", jellyfinController, StringComparison.Ordinal);
+        Assert.Contains("Jobs/{jobId}/Retry", jellyfinController, StringComparison.Ordinal);
+        Assert.Contains("Jobs/History", jellyfinController, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1176,7 +1256,7 @@ public class ThemeFilePlannerTests
             Assert.Contains("function scheduleUiRefresh(options)", script, StringComparison.Ordinal);
             Assert.Contains("if (terminalTransition) scheduleUiRefresh();", script, StringComparison.Ordinal);
             Assert.Contains("token !== state.browserRequestToken", script, StringComparison.Ordinal);
-            Assert.Contains("loadItems(false, { silent: true })", script, StringComparison.Ordinal);
+            Assert.Contains("loadItems(false, { silent: true, preserveCount: true })", script, StringComparison.Ordinal);
             Assert.Contains("normalizeApiError", script, StringComparison.Ordinal);
             Assert.Contains("response.text()", script, StringComparison.Ordinal);
             Assert.Contains("function releasePlayerMedia()", script, StringComparison.Ordinal);

@@ -13,12 +13,12 @@ public static class Constants
     /// <summary>
     /// UI asset version used to force web clients to pick up changed embedded pages.
     /// </summary>
-    public const string UiAssetVersion = "20260628d";
+    public const string UiAssetVersion = "v231";
 
     /// <summary>
-    /// Human-readable UI version displayed on plugin pages.
+    /// Plugin version displayed on plugin pages and synchronized with releases.
     /// </summary>
-    public const string UiDisplayVersion = "2026.06.28-d";
+    public const string PluginVersion = "2.3.1";
 
     /// <summary>
     /// The display name used by the metadata provider (matches AnimeThemesMetadataProvider.Name).

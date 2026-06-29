@@ -1,8 +1,8 @@
-<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260628d" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjsv231" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.06.28-d.</div>
+                <div class="fieldDescription">Version: 2.3.1.</div>
 
                 <div class="verticalSection ats-tabs" id="AnimeThemesBrowserTabs">
                     <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-tab active" id="AnimeThemesBrowserLibraryTab" data-ats-tab="library">
@@ -515,20 +515,21 @@
             </div>
         </div>
 
-        <div id="AnimeThemesDownloadManager" class="ats-download-manager collapsed" role="region" aria-label="Downloads" aria-hidden="true" style="display: none;">
+        <div id="AnimeThemesDownloadManager" class="ats-download-manager collapsed" role="region" aria-label="Downloads">
             <div class="ats-dm-header">
                 <div class="ats-dm-title-wrap">
                     <i class="md-icon ats-icon" aria-hidden="true">&#xE2C4;</i>
                     <span class="ats-dm-title">Downloads</span>
                     <span class="ats-dm-badge" id="AnimeThemesDmBadge">0</span>
                 </div>
-                <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-dm-toggle-btn" id="AnimeThemesDmToggle" aria-label="Expand downloads" aria-expanded="false">
-                    <i class="md-icon ats-icon" aria-hidden="true">&#xE5CE;</i>
-                </button>
+                <div class="ats-dm-header-actions">
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-dm-clear-btn" id="AnimeThemesDmClearHistory" hidden>Clear history</button>
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-dm-toggle-btn" id="AnimeThemesDmToggle" aria-label="Expand downloads" aria-expanded="false">
+                        <i class="md-icon ats-icon" aria-hidden="true">&#xE5CE;</i>
+                    </button>
+                </div>
             </div>
-            <div class="ats-dm-content" id="AnimeThemesDmContent" aria-live="polite">
-                <div class="ats-dm-empty">No active downloads</div>
-            </div>
+            <div class="ats-dm-content" id="AnimeThemesDmContent" aria-live="polite"><div class="ats-dm-empty">No active downloads</div></div>
         </div>
 
         <div id="AnimeThemesBrowserPlayer" class="ats-player" aria-hidden="true">
@@ -2471,6 +2472,27 @@
                 font-size: 0.95rem;
             }
 
+            #AnimeThemesBrowserPage #AnimeThemesBrowserDetailView {
+                overflow-anchor: none;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-header-actions {
+                display: flex;
+                align-items: center;
+                gap: .4rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-dm-clear-btn,
+            #AnimeThemesBrowserPage .ats-dm-item-retry,
+            #AnimeThemesBrowserPage .ats-card-download-retry {
+                margin: 0 !important;
+                padding: .3rem .6rem !important;
+                min-height: 2rem !important;
+                min-width: 3.75rem !important;
+                font-size: .75rem !important;
+                line-height: 1.1 !important;
+            }
+
             #AnimeThemesBrowserPage .ats-dm-badge {
                 background: var(--ats-accent, #00a4dc);
                 color: #fff;
@@ -2568,6 +2590,9 @@
 
             #AnimeThemesBrowserPage .ats-dm-item-cancel[hidden],
             #AnimeThemesBrowserPage .ats-card-download-cancel[hidden],
+            #AnimeThemesBrowserPage .ats-dm-item-retry[hidden],
+            #AnimeThemesBrowserPage .ats-card-download-retry[hidden],
+            #AnimeThemesBrowserPage .ats-dm-clear-btn[hidden],
             #AnimeThemesBrowserPage .ats-dm-item-dismiss[hidden] {
                 display: none !important;
             }
@@ -2770,6 +2795,9 @@
 
                 #AnimeThemesBrowserPage .ats-dm-item-cancel,
                 #AnimeThemesBrowserPage .ats-card-download-cancel,
+                #AnimeThemesBrowserPage .ats-dm-item-retry,
+                #AnimeThemesBrowserPage .ats-card-download-retry,
+                #AnimeThemesBrowserPage .ats-dm-clear-btn,
                 #AnimeThemesBrowserPage .ats-dm-item-dismiss {
                     min-height: 44px !important;
                 }
