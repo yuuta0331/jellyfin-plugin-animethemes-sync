@@ -84,7 +84,6 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         };
         var browserToolbar = page.querySelector('.ats-browser-toolbar');
         var itemSelect = page.querySelector('#AnimeThemesBrowserItemSelect');
-        var libraryLimit = page.querySelector('#AnimeThemesBrowserLimit');
         var libraryView = page.querySelector('#AnimeThemesBrowserLibraryView');
         var detailView = page.querySelector('#AnimeThemesBrowserDetailView');
         var manageView = page.querySelector('#AnimeThemesBrowserManageView');
@@ -1030,9 +1029,6 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         }
 
         function browserItemsPath(startIndex) {
-            if (libraryLimit) {
-                state.browserLimit = Number(libraryLimit.value) || 80;
-            }
             var params = [
                 ['startIndex', startIndex || 0],
                 ['limit', state.browserLimit],

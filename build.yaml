@@ -18,9 +18,9 @@ owner: "CassisCloud"
 artifacts:
 - "Jellyfin.Plugin.AnimeThemesSync.dll"
 changelog: >
-  - Restores Library Browser scroll position after returning from details and always opens details at the top, including on mobile.
-  - Adds reliable infinite scrolling to Library Browser.
-  - Starts Season Finder downloads as settings-aware per-theme queue jobs with series, season, theme, and song titles.
-  - Adds retry controls for failed jobs in the download queue and matching theme cards.
-  - Adds completed/cancelled history cleanup while preserving failed jobs for retry.
-  - Keeps the download manager visible and shows No active downloads only when the queue is empty.
+  - Restores the previous Library Browser position when returning from details.
+  - Adds infinite scrolling to Library Browser.
+  - Improves Save & Download so Season Finder downloads are shown per song.
+  - Keeps the download queue visible and shows No active downloads when it is empty.
+  - Adds Clear history for Completed and Cancelled downloads.
+  - Adds Retry for Failed downloads in the queue and matching song cards.

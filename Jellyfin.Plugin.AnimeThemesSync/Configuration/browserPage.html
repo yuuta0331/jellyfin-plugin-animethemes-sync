@@ -100,15 +100,6 @@
                                     <option value="desc">Descending</option>
                                 </select>
                             </div>
-                            <div class="selectContainer">
-                                <label class="selectLabel" for="AnimeThemesBrowserLimit">Limit</label>
-                                <select is="emby-select" id="AnimeThemesBrowserLimit" class="emby-select-withcolor emby-select">
-                                    <option value="40">40</option>
-                                    <option value="80" selected>80</option>
-                                    <option value="150">150</option>
-                                    <option value="300">300</option>
-                                </select>
-                            </div>
                             <div class="selectContainer ats-item-select" style="display: none;">
                                 <label class="selectLabel" for="AnimeThemesBrowserItemSelect">Library Item</label>
                                 <select is="emby-select" id="AnimeThemesBrowserItemSelect" class="emby-select-withcolor emby-select"></select>
@@ -2996,7 +2987,6 @@
                 };
                 var browserToolbar = page.querySelector('.ats-browser-toolbar');
                 var itemSelect = page.querySelector('#AnimeThemesBrowserItemSelect');
-                var libraryLimit = page.querySelector('#AnimeThemesBrowserLimit');
                 var libraryView = page.querySelector('#AnimeThemesBrowserLibraryView');
                 var detailView = page.querySelector('#AnimeThemesBrowserDetailView');
                 var manageView = page.querySelector('#AnimeThemesBrowserManageView');
@@ -3942,9 +3932,6 @@
                 }
 
                 function browserItemsPath(startIndex) {
-                    if (libraryLimit) {
-                        state.browserLimit = Number(libraryLimit.value) || 80;
-                    }
                     var params = [
                         ['startIndex', startIndex || 0],
                         ['limit', state.browserLimit],

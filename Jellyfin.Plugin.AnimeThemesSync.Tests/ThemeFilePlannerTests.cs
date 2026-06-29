@@ -1113,6 +1113,8 @@ public class ThemeFilePlannerTests
             Assert.Contains("if (!hasMatch) addChip(chips, 'Needs match', 'missing');", content, StringComparison.Ordinal);
             Assert.Contains("IntersectionObserver", content, StringComparison.Ordinal);
             Assert.Contains("rootMargin: '300px 0px'", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("AnimeThemesBrowserLimit", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("libraryLimit", content, StringComparison.Ordinal);
             Assert.Contains("AnimeThemesSync/SeasonFinder?", content, StringComparison.Ordinal);
             Assert.Contains("finderRequestToken", content, StringComparison.Ordinal);
             Assert.Contains("finderCacheVersion", content, StringComparison.Ordinal);
