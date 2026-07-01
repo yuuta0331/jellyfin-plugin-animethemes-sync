@@ -103,6 +103,49 @@ public class GetAnimeThemesBrowserSummary : IReturn<ThemeBrowserSummary>
 {
 }
 
+[Route("/AnimeThemesSync/Maintenance/Cleanup/Scans", "POST", Summary = "Starts a local theme media cleanup scan.")]
+public class StartAnimeThemesCleanupScan : IReturn<LocalMediaCleanupTaskStatus>
+{
+}
+
+[Route("/AnimeThemesSync/Maintenance/Cleanup/Scans/{ScanId}", "GET", Summary = "Gets a cleanup scan status.")]
+public class GetAnimeThemesCleanupScan : IReturn<LocalMediaCleanupTaskStatus>
+{
+    public string ScanId { get; set; } = string.Empty;
+}
+
+[Route("/AnimeThemesSync/Maintenance/Cleanup/Scans/{ScanId}/Files", "GET", Summary = "Gets filtered local media cleanup candidates.")]
+public class GetAnimeThemesCleanupFiles : IReturn<LocalMediaCleanupScanPage>
+{
+    public string ScanId { get; set; } = string.Empty;
+    public int? StartIndex { get; set; }
+    public int? Limit { get; set; }
+    public string? Status { get; set; }
+    public string? Sources { get; set; }
+    public string? Kinds { get; set; }
+    public string? Library { get; set; }
+    public string? SearchTerm { get; set; }
+}
+
+[Route("/AnimeThemesSync/Maintenance/Cleanup/Scans/{ScanId}/Delete", "POST", Summary = "Deletes selected cleanup candidates.")]
+public class StartAnimeThemesCleanupDelete : IReturn<LocalMediaCleanupTaskStatus>
+{
+    public string ScanId { get; set; } = string.Empty;
+    public List<string> CandidateIds { get; set; } = [];
+}
+
+[Route("/AnimeThemesSync/Maintenance/Cleanup/Tasks/{TaskId}", "GET", Summary = "Gets a cleanup task status.")]
+public class GetAnimeThemesCleanupTask : IReturn<LocalMediaCleanupTaskStatus>
+{
+    public string TaskId { get; set; } = string.Empty;
+}
+
+[Route("/AnimeThemesSync/Maintenance/Cleanup/Tasks/{TaskId}", "POST", Summary = "Cancels a cleanup task.")]
+public class CancelAnimeThemesCleanupTask : IReturn<LocalMediaCleanupTaskStatus>
+{
+    public string TaskId { get; set; } = string.Empty;
+}
+
 [Route("/AnimeThemesSync/SeasonMappings", "GET", Summary = "Gets AnimeThemes season mapping status.")]
 public class GetAnimeThemesSeasonMappings : IReturn<IReadOnlyList<SeasonThemeMappingRow>>
 {
@@ -361,6 +404,47 @@ public class AnimeThemesSyncService : IService, IRequiresRequest
     public object Get(GetAnimeThemesBrowserSummary request)
     {
         return _themeDownloader.GetBrowserSummary();
+    }
+
+    public object Post(StartAnimeThemesCleanupScan request)
+    {
+        return _themeDownloader.StartLocalMediaCleanupScan();
+    }
+
+    public object Get(GetAnimeThemesCleanupScan request)
+    {
+        return _themeDownloader.GetLocalMediaCleanupTask(request.ScanId)
+            ?? throw new ArgumentException("The requested cleanup scan was not found.", nameof(request));
+    }
+
+    public object Get(GetAnimeThemesCleanupFiles request)
+    {
+        return _themeDownloader.GetLocalMediaCleanupFiles(
+            request.ScanId,
+            request.StartIndex,
+            request.Limit,
+            request.Status,
+            request.Sources,
+            request.Kinds,
+            request.Library,
+            request.SearchTerm);
+    }
+
+    public object Post(StartAnimeThemesCleanupDelete request)
+    {
+        return _themeDownloader.StartLocalMediaCleanupDelete(request.ScanId, request.CandidateIds);
+    }
+
+    public object Get(GetAnimeThemesCleanupTask request)
+    {
+        return _themeDownloader.GetLocalMediaCleanupTask(request.TaskId)
+            ?? throw new ArgumentException("The requested cleanup task was not found.", nameof(request));
+    }
+
+    public object Post(CancelAnimeThemesCleanupTask request)
+    {
+        return _themeDownloader.CancelLocalMediaCleanupTask(request.TaskId)
+            ?? throw new ArgumentException("The requested cleanup task was not found.", nameof(request));
     }
 
     public object Get(GetAnimeThemesSeasonMappings request)

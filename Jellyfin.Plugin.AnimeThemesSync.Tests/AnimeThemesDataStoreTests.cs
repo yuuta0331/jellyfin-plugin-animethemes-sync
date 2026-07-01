@@ -223,12 +223,41 @@ public sealed class AnimeThemesDataStoreTests
             });
 
             var json = File.ReadAllText(store.DatabasePath);
-            Assert.Contains("\"SchemaVersion\":2", json, StringComparison.Ordinal);
+            Assert.Contains("\"SchemaVersion\":3", json, StringComparison.Ordinal);
             Assert.Contains("\"LogicalItemId\":\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"", json, StringComparison.Ordinal);
             Assert.Contains("\"LogicalItemId\":\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\"", json, StringComparison.Ordinal);
             Assert.Contains("\"OutputRootItemId\":\"cccccccc-cccc-cccc-cccc-cccccccccccc\"", json, StringComparison.Ordinal);
             Assert.Contains("\"OutputScope\":\"SeriesRoot\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"Source\":\"TrackedUnknown\"", json, StringComparison.Ordinal);
             Assert.Contains("\"Key\":\"extra-key\",\"LogicalItemId\":\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\"", json, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void ClearBrowserCache_PreservesThemeFileOwnershipRegistry()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var target = new ThemeOutputTarget(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                Path.Combine(directory, "Series"),
+                ThemeOutputScope.SeriesRoot,
+                false);
+            var path = Path.Combine(target.OutputRootPath, "theme-music", "theme.mp3");
+            store.UpsertThemeFile(target, "OP1", "audio", path, "BrowserManual");
+
+            store.ClearBrowserCache();
+
+            var file = Assert.Single(store.GetThemeFiles());
+            Assert.Equal(path, file.Path);
+            Assert.Equal("BrowserManual", file.Source);
         }
         finally
         {

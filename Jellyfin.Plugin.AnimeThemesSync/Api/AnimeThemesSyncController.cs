@@ -87,6 +87,78 @@ public sealed class AnimeThemesSyncController : ControllerBase
         return Ok(_themeDownloader.GetBrowserSummary());
     }
 
+    [HttpPost("Maintenance/Cleanup/Scans")]
+    [ProducesResponseType(typeof(LocalMediaCleanupTaskStatus), StatusCodes.Status200OK)]
+    public ActionResult<LocalMediaCleanupTaskStatus> StartCleanupScan()
+    {
+        return Ok(_themeDownloader.StartLocalMediaCleanupScan());
+    }
+
+    [HttpGet("Maintenance/Cleanup/Scans/{scanId}")]
+    [ProducesResponseType(typeof(LocalMediaCleanupTaskStatus), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<LocalMediaCleanupTaskStatus> GetCleanupScan(string scanId)
+    {
+        var status = _themeDownloader.GetLocalMediaCleanupTask(scanId);
+        return status == null ? NotFound() : Ok(status);
+    }
+
+    [HttpGet("Maintenance/Cleanup/Scans/{scanId}/Files")]
+    [ProducesResponseType(typeof(LocalMediaCleanupScanPage), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public ActionResult<LocalMediaCleanupScanPage> GetCleanupFiles(
+        string scanId,
+        [FromQuery] int? startIndex,
+        [FromQuery] int? limit,
+        [FromQuery] string? status,
+        [FromQuery] string? sources,
+        [FromQuery] string? kinds,
+        [FromQuery] string? library,
+        [FromQuery] string? searchTerm)
+    {
+        try
+        {
+            return Ok(_themeDownloader.GetLocalMediaCleanupFiles(scanId, startIndex, limit, status, sources, kinds, library, searchTerm));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("Maintenance/Cleanup/Scans/{scanId}/Delete")]
+    [ProducesResponseType(typeof(LocalMediaCleanupTaskStatus), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public ActionResult<LocalMediaCleanupTaskStatus> StartCleanupDelete(string scanId, [FromBody] LocalMediaCleanupDeleteRequest request)
+    {
+        try
+        {
+            return Ok(_themeDownloader.StartLocalMediaCleanupDelete(scanId, request.CandidateIds));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("Maintenance/Cleanup/Tasks/{taskId}")]
+    [ProducesResponseType(typeof(LocalMediaCleanupTaskStatus), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<LocalMediaCleanupTaskStatus> GetCleanupTask(string taskId)
+    {
+        var status = _themeDownloader.GetLocalMediaCleanupTask(taskId);
+        return status == null ? NotFound() : Ok(status);
+    }
+
+    [HttpPost("Maintenance/Cleanup/Tasks/{taskId}")]
+    [ProducesResponseType(typeof(LocalMediaCleanupTaskStatus), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<LocalMediaCleanupTaskStatus> CancelCleanupTask(string taskId)
+    {
+        var status = _themeDownloader.CancelLocalMediaCleanupTask(taskId);
+        return status == null ? NotFound() : Ok(status);
+    }
+
     [HttpGet("SeasonMappings")]
     [ProducesResponseType(typeof(IReadOnlyList<SeasonThemeMappingRow>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<SeasonThemeMappingRow>>> GetSeasonMappings(CancellationToken cancellationToken)

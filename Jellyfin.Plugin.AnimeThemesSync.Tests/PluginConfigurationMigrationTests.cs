@@ -124,7 +124,7 @@ public sealed class PluginConfigurationMigrationTests
         var changed = config.Normalize();
 
         Assert.True(changed);
-        Assert.Equal(4, config.ConfigurationVersion);
+        Assert.Equal(5, config.ConfigurationVersion);
         Assert.Equal(4, config.Series.Audio.MaxThemes);
         Assert.False(config.Series.Video.UseAsTheme);
         Assert.Equal(ExtrasFileSuffix.Other, config.ExtrasFileSuffix);
@@ -142,7 +142,7 @@ public sealed class PluginConfigurationMigrationTests
         var changed = config.Normalize();
 
         Assert.True(changed);
-        Assert.Equal(4, config.ConfigurationVersion);
+        Assert.Equal(5, config.ConfigurationVersion);
         Assert.Equal(3, config.Series.Audio.MaxThemes);
         Assert.True(config.SegmentedDownloadEnabled);
         Assert.Equal(4, config.SegmentedDownloadSegments);
@@ -163,11 +163,26 @@ public sealed class PluginConfigurationMigrationTests
         serializer.Serialize(writer, config);
         var xml = writer.ToString();
 
-        Assert.Contains("<ConfigurationVersion>4</ConfigurationVersion>", xml);
+        Assert.Contains("<ConfigurationVersion>5</ConfigurationVersion>", xml);
         Assert.Contains("<Series>", xml);
         Assert.Contains("<Movie>", xml);
         Assert.DoesNotContain("SeriesAudioMaxThemes", xml);
         Assert.DoesNotContain("MovieVideoVolume", xml);
+        Assert.DoesNotContain("AllowDelete", xml);
+    }
+
+    [Fact]
+    public void AllowDelete_LegacyValueIsAlwaysDisabledAndNotSerialized()
+    {
+        var config = new PluginConfiguration { AllowDelete = true, ConfigurationVersion = 4 };
+
+        Assert.True(config.Normalize());
+        Assert.False(config.AllowDelete);
+
+        var serializer = new XmlSerializer(typeof(PluginConfiguration));
+        using var writer = new StringWriter();
+        serializer.Serialize(writer, config);
+        Assert.DoesNotContain("AllowDelete", writer.ToString(), StringComparison.Ordinal);
     }
 }
 

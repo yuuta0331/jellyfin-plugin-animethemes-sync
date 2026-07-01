@@ -13,7 +13,7 @@ public static class Constants
     /// <summary>
     /// UI asset version used to force web clients to pick up changed embedded pages.
     /// </summary>
-    public const string UiAssetVersion = "v231";
+    public const string UiAssetVersion = "20260702g";
 
     /// <summary>
     /// Plugin version displayed on plugin pages and synchronized with releases.

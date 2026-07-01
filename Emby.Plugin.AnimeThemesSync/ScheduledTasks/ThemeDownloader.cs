@@ -584,6 +584,252 @@ public class ThemeDownloader : IScheduledTask
         return _dataStore.GetBrowserSummary();
     }
 
+    public LocalMediaCleanupTaskStatus StartLocalMediaCleanupScan()
+    {
+        return LocalMediaCleanupTaskService.StartScan(ScanLocalMediaAsync);
+    }
+
+    public LocalMediaCleanupScanPage GetLocalMediaCleanupFiles(
+        string scanId,
+        int? startIndex,
+        int? limit,
+        string? status,
+        string? sources,
+        string? kinds,
+        string? library,
+        string? searchTerm)
+    {
+        return LocalMediaCleanupTaskService.GetFiles(scanId, startIndex, limit, status, sources, kinds, library, searchTerm);
+    }
+
+    public LocalMediaCleanupTaskStatus StartLocalMediaCleanupDelete(string scanId, IReadOnlyCollection<string> candidateIds)
+    {
+        return LocalMediaCleanupTaskService.StartDelete(scanId, candidateIds, DeleteScannedLocalMediaAsync);
+    }
+
+    public LocalMediaCleanupTaskStatus? GetLocalMediaCleanupTask(string taskId) => LocalMediaCleanupTaskService.GetTask(taskId);
+
+    public LocalMediaCleanupTaskStatus? CancelLocalMediaCleanupTask(string taskId) => LocalMediaCleanupTaskService.Cancel(taskId);
+
+    private async Task<IReadOnlyList<LocalMediaCleanupFile>> ScanLocalMediaAsync(IProgress<double> progress, CancellationToken cancellationToken)
+    {
+        var config = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
+        var entries = GetEnabledLibraryItemsWithLibraries();
+        var registry = _dataStore.GetThemeFiles()
+            .GroupBy(file => Path.GetFullPath(file.Path), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var found = new Dictionary<string, LocalMediaCleanupFile>(StringComparer.OrdinalIgnoreCase);
+
+        for (var index = 0; index < entries.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var entry = entries[index];
+            var audioConfig = CreateThemeConfig(entry.Item, config, isVideo: false);
+            var videoConfig = CreateThemeConfig(entry.Item, config, isVideo: true);
+            ThemeOutputPlan? plan = null;
+            var resolved = false;
+            try
+            {
+                if (audioConfig.MaxThemes <= 0 && videoConfig.MaxThemes <= 0)
+                {
+                    resolved = true;
+                }
+                else
+                {
+                    plan = await ResolveItem(entry.Item, audioConfig, videoConfig, cancellationToken).ConfigureAwait(false);
+                    resolved = plan != null;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not evaluate local media for {ItemName}; files will be marked Unknown.", entry.Item.Name);
+            }
+
+            var directories = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            if (plan != null)
+            {
+                foreach (var cleanup in plan.CleanupPlans)
+                {
+                    if (!directories.TryGetValue(cleanup.Directory, out var desired))
+                    {
+                        desired = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        directories[cleanup.Directory] = desired;
+                    }
+
+                    desired.UnionWith(cleanup.DesiredFiles.Select(Path.GetFullPath));
+                }
+            }
+
+            AddCleanupDirectories(ResolveThemeOutputTarget(entry.Item)?.OutputRootPath, directories);
+            if (entry.Item is Series cleanupSeries)
+            {
+                foreach (var season in GetSeasonItems(cleanupSeries))
+                {
+                    AddCleanupDirectories(ResolveThemeOutputTarget(season, cleanupSeries)?.OutputRootPath, directories);
+                }
+            }
+
+            foreach (var directory in directories)
+            {
+                if (!_fileSystem.DirectoryExists(directory.Key))
+                {
+                    continue;
+                }
+
+                foreach (var path in _fileSystem.GetFilePaths(directory.Key, false))
+                {
+                    if (!IsSupportedThemeFile(path))
+                    {
+                        continue;
+                    }
+
+                    var fullPath = Path.GetFullPath(path);
+                    var info = new FileInfo(fullPath);
+                    registry.TryGetValue(fullPath, out var tracked);
+                    var logicalItem = tracked == null ? entry.Item : _libraryManager.GetItemById(tracked.LogicalItemId) ?? entry.Item;
+                    var status = !resolved ? "Unknown" : directory.Value.Contains(fullPath) ? "Desired" : "Undesired";
+                    found[fullPath] = new LocalMediaCleanupFile(
+                        Guid.NewGuid().ToString("N"),
+                        logicalItem.Id,
+                        logicalItem.Name ?? entry.Item.Name ?? "Unknown",
+                        logicalItem is Season ? "Season" : logicalItem is Series ? "Series" : "Movie",
+                        entry.LibraryName,
+                        fullPath,
+                        Path.GetFileName(fullPath),
+                        CleanupFileKind(directory.Key),
+                        status,
+                        tracked?.Source ?? "Untracked",
+                        info.Exists ? info.Length : 0,
+                        new DateTimeOffset(DateTime.SpecifyKind(info.LastWriteTimeUtc, DateTimeKind.Utc)));
+                }
+            }
+
+            progress.Report((double)(index + 1) / Math.Max(1, entries.Count) * 100);
+        }
+
+        return found.Values.ToList();
+    }
+
+    private async Task<LocalMediaCleanupDeleteResult> DeleteScannedLocalMediaAsync(
+        IReadOnlyList<LocalMediaCleanupFile> files,
+        IProgress<double> progress,
+        CancellationToken cancellationToken)
+    {
+        var roots = GetCleanupOutputRoots();
+        var deletedPaths = new List<string>();
+        var deleted = 0;
+        var skipped = 0;
+        var failed = 0;
+        long bytes = 0;
+        for (var index = 0; index < files.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var file = files[index];
+            try
+            {
+                var path = Path.GetFullPath(file.Path);
+                if (!IsWithinCleanupRoots(path, roots) || !_fileSystem.FileExists(path))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                var info = new FileInfo(path);
+                var lastWrite = new DateTimeOffset(DateTime.SpecifyKind(info.LastWriteTimeUtc, DateTimeKind.Utc));
+                if (info.Length != file.Size || lastWrite != file.LastWriteTimeUtc)
+                {
+                    skipped++;
+                    continue;
+                }
+
+                await DeleteFileWithRetryAsync(path, cancellationToken).ConfigureAwait(false);
+                deleted++;
+                bytes += file.Size;
+                deletedPaths.Add(path);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                _logger.LogWarning(ex, "Failed to delete cleanup candidate {Path}.", file.Path);
+            }
+            finally
+            {
+                progress.Report((double)(index + 1) / files.Count * 100);
+            }
+        }
+
+        _dataStore.RemoveThemeFilesByPaths(deletedPaths);
+        _ = StartBrowserCacheRebuild();
+        return new LocalMediaCleanupDeleteResult(deleted, bytes, skipped, failed);
+    }
+
+    private static void AddCleanupDirectories(string? root, Dictionary<string, HashSet<string>> directories)
+    {
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            return;
+        }
+
+        Add(Path.Combine(root, "theme-music"));
+        Add(Path.Combine(root, "backdrops"));
+        Add(Path.Combine(root, "extras"));
+
+        void Add(string directory)
+        {
+            if (!directories.ContainsKey(directory))
+            {
+                directories[directory] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+    }
+
+    private static string CleanupFileKind(string directory)
+    {
+        var name = Path.GetFileName(directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return string.Equals(name, "theme-music", StringComparison.OrdinalIgnoreCase) ? "Audio" :
+            string.Equals(name, "extras", StringComparison.OrdinalIgnoreCase) ? "Extra" : "Video";
+    }
+
+    private List<string> GetCleanupOutputRoots()
+    {
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in GetEnabledLibraryItems())
+        {
+            var target = ResolveThemeOutputTarget(item);
+            if (target != null)
+            {
+                roots.Add(Path.GetFullPath(target.OutputRootPath));
+            }
+
+            if (item is Series series)
+            {
+                foreach (var season in GetSeasonItems(series))
+                {
+                    var seasonTarget = ResolveThemeOutputTarget(season, series);
+                    if (seasonTarget != null)
+                    {
+                        roots.Add(Path.GetFullPath(seasonTarget.OutputRootPath));
+                    }
+                }
+            }
+        }
+
+        return roots.ToList();
+    }
+
+    private static bool IsWithinCleanupRoots(string path, IEnumerable<string> roots)
+    {
+        return roots.Any(root => path.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+    }
+
     public Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -1026,7 +1272,7 @@ public class ThemeDownloader : IScheduledTask
             _logger.LogInformation("Downloading AnimeThemes row media [{ItemName}] {Filename}", item.Name, Path.GetFileName(file.Path));
             var transferProgress = CreateStepProgress(progress, 20, 75, finishedSteps, totalSteps);
             await DownloadFile(file.Url, file.Path, file.IsVideo ? videoConfig.Volume : audioConfig.Volume, file.IsVideo, file.RequiresTranscoding, cancellationToken, transferProgress).ConfigureAwait(false);
-            _dataStore.UpsertThemeFile(file.OutputTarget ?? outputTarget, file.ThemeKey, file.IsVideo ? "video" : "audio", file.Path);
+            _dataStore.UpsertThemeFile(file.OutputTarget ?? outputTarget, file.ThemeKey, file.IsVideo ? "video" : "audio", file.Path, "BrowserManual");
             downloadsCompleted++;
             finishedSteps++;
             progress?.Report(20 + ((double)finishedSteps / totalSteps * 75));
@@ -1071,7 +1317,7 @@ public class ThemeDownloader : IScheduledTask
                 }
 
                 ThemeExtrasManifestService.UpdateExtraFile(extra);
-                _dataStore.UpsertThemeFile(extra.OutputTarget ?? outputTarget, extra.Key, "extra", extra.TargetPath);
+                _dataStore.UpsertThemeFile(extra.OutputTarget ?? outputTarget, extra.Key, "extra", extra.TargetPath, "BrowserManual");
                 extrasCompleted++;
                 _logger.LogInformation(
                     "Extras {Action} [{ItemName}] {Filename} (HardLinkVerified={HardLinkVerified}, LinkCount={LinkCount}, FallbackReason={FallbackReason})",
@@ -1520,7 +1766,6 @@ public class ThemeDownloader : IScheduledTask
 
         var allDownloads = new List<(ThemeFilePlan File, int Volume, string ItemName, ThemeOutputTarget OutputTarget)>();
         var allExtras = new List<(ThemeExtraPlan Extra, string ItemName, ThemeOutputTarget OutputTarget, int VideoVolume)>();
-        var cleanupTasks = new List<(string Directory, HashSet<string> DesiredFiles, List<AnimeThemesTheme> Themes)>();
 
         for (var i = 0; i < items.Count; i++)
         {
@@ -1560,11 +1805,6 @@ public class ThemeDownloader : IScheduledTask
                             allExtras.Add((extra, itemName, outputTarget, videoConfig.Volume));
                         }
                     }
-                }
-
-                if (config.AllowDelete && result.Themes != null)
-                {
-                    cleanupTasks.AddRange(result.CleanupPlans.Select(c => (c.Directory, c.DesiredFiles, c.Themes)));
                 }
             }
 
@@ -1633,7 +1873,7 @@ public class ThemeDownloader : IScheduledTask
                                         }
                                     });
                                 await DownloadFile(dl.File.Url, dl.File.Path, dl.Volume, dl.File.IsVideo, dl.File.RequiresTranscoding, cancellationToken, transferProgress).ConfigureAwait(false);
-                                _dataStore.UpsertThemeFile(dl.OutputTarget, dl.File.ThemeKey, dl.File.IsVideo ? "video" : "audio", dl.File.Path);
+                                _dataStore.UpsertThemeFile(dl.OutputTarget, dl.File.ThemeKey, dl.File.IsVideo ? "video" : "audio", dl.File.Path, "Scheduled");
                                 _ = Interlocked.Increment(ref completedDownloads);
                                 _logger.LogInformation("Downloaded [{ItemName}] {Filename}", dl.ItemName, Path.GetFileName(dl.File.Path));
                                 break;
@@ -1707,7 +1947,7 @@ public class ThemeDownloader : IScheduledTask
                 }
 
                 ThemeExtrasManifestService.UpdateExtraFile(extra.Extra);
-                _dataStore.UpsertThemeFile(extra.OutputTarget, extra.Extra.Key, "extra", extra.Extra.TargetPath);
+                _dataStore.UpsertThemeFile(extra.OutputTarget, extra.Extra.Key, "extra", extra.Extra.TargetPath, "Scheduled");
                 _logger.LogInformation(
                     "Extras {Action} [{ItemName}] {Filename} (HardLinkVerified={HardLinkVerified}, LinkCount={LinkCount}, FallbackReason={FallbackReason})",
                     result.Action,
@@ -1728,11 +1968,6 @@ public class ThemeDownloader : IScheduledTask
         }
 
         // ── Cleanup ──
-        foreach (var cleanup in cleanupTasks)
-        {
-            CleanupDirectory(cleanup.Directory, cleanup.DesiredFiles, cleanup.Themes);
-        }
-
         foreach (var item in items)
         {
             RefreshBrowserCacheForItem(item);
@@ -1843,7 +2078,7 @@ public class ThemeDownloader : IScheduledTask
                 file.IsVideo ? videoVolume : audioVolume,
                 transferProgress,
                 cancellationToken).ConfigureAwait(false);
-            _dataStore.UpsertThemeFile(group.OutputTarget, file.ThemeKey, file.IsVideo ? "video" : "audio", file.Path);
+            _dataStore.UpsertThemeFile(group.OutputTarget, file.ThemeKey, file.IsVideo ? "video" : "audio", file.Path, "BrowserManual");
             completedSteps++;
             progress.Report((double)completedSteps / totalSteps * 100);
         }
@@ -1883,7 +2118,7 @@ public class ThemeDownloader : IScheduledTask
             }
 
             ThemeExtrasManifestService.UpdateExtraFile(extra);
-            _dataStore.UpsertThemeFile(group.OutputTarget, extra.Key, "extra", extra.TargetPath);
+            _dataStore.UpsertThemeFile(group.OutputTarget, extra.Key, "extra", extra.TargetPath, "BrowserManual");
             completedSteps++;
             progress.Report((double)completedSteps / totalSteps * 100);
         }
@@ -1920,14 +2155,6 @@ public class ThemeDownloader : IScheduledTask
 
     private void FinalizeThemeDownloadBatch(BaseItem item, ThemeOutputPlan plan, PluginConfiguration config)
     {
-        if (config.AllowDelete)
-        {
-            foreach (var cleanup in plan.CleanupPlans)
-            {
-                CleanupDirectory(cleanup.Directory, cleanup.DesiredFiles, cleanup.Themes);
-            }
-        }
-
         RefreshBrowserCacheForItem(item is Season season ? FindSeriesForSeason(season) ?? item : item);
     }
 
@@ -3059,34 +3286,6 @@ public class ThemeDownloader : IScheduledTask
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to migrate browseable extra name: {Path}", extra.TargetPath);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Cleans up files from a directory that are no longer desired.
-    /// </summary>
-    private void CleanupDirectory(
-        string directory,
-        HashSet<string> desiredFiles,
-        List<AnimeThemesTheme> themes)
-    {
-        if (!_fileSystem.DirectoryExists(directory))
-        {
-            return;
-        }
-
-        foreach (var file in _fileSystem.GetFilePaths(directory, false))
-        {
-            if (desiredFiles.Contains(file))
-            {
-                continue;
-            }
-
-            if (ThemeFilePlanner.IsPluginOwnedFile(file, themes))
-            {
-                _logger.LogInformation("Deleting unwanted theme file: {Path}", file);
-                _fileSystem.DeleteFile(file);
             }
         }
     }

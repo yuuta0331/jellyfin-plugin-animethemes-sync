@@ -14,7 +14,7 @@ namespace AnimeThemesSync.Shared.Services;
 /// </summary>
 public sealed class AnimeThemesDataStore
 {
-    private const int CurrentSchemaVersion = 2;
+    private const int CurrentSchemaVersion = 3;
     private const int DefaultLimit = 80;
     private const int MaxLimit = 100;
     private readonly IAnimeThemesDataPathProvider _pathProvider;
@@ -54,7 +54,8 @@ public sealed class AnimeThemesDataStore
     }
 
     /// <summary>
-    /// Clears BrowserItems, ThemeFiles, and LibrarySyncState rows for the current server.
+    /// Clears BrowserItems and LibrarySyncState rows for the current server.
+    /// ThemeFiles is an ownership registry and intentionally survives cache clears.
     /// </summary>
     public void ClearBrowserCache()
     {
@@ -62,7 +63,6 @@ public sealed class AnimeThemesDataStore
         {
             var document = LoadDocument();
             document.BrowserItems.RemoveAll(i => IsCurrentServer(i.ServerKind));
-            document.ThemeFiles.RemoveAll(i => IsCurrentServer(i.ServerKind));
             document.LibrarySyncState.RemoveAll(i => IsCurrentServer(i.ServerKind));
             var state = GetOrCreateServerCacheState(document);
             state.BrowserCacheReady = false;
@@ -355,7 +355,7 @@ public sealed class AnimeThemesDataStore
     /// <summary>
     /// Upserts one ThemeFiles row.
     /// </summary>
-    public void UpsertThemeFile(ThemeOutputTarget outputTarget, string themeKey, string fileKind, string path)
+    public void UpsertThemeFile(ThemeOutputTarget outputTarget, string themeKey, string fileKind, string path, string source = "TrackedUnknown")
     {
         var logicalItemId = outputTarget.LogicalItemId.ToString("D");
         var info = new FileInfo(path);
@@ -377,11 +377,44 @@ public sealed class AnimeThemesDataStore
                 ThemeKey = themeKey,
                 FileKind = fileKind,
                 Path = path,
+                Source = string.IsNullOrWhiteSpace(source) ? "TrackedUnknown" : source,
                 ExistsFlag = info.Exists,
                 FileSize = info.Exists ? info.Length : null,
                 LastWriteTimeUtc = info.Exists ? FormatDate(info.LastWriteTimeUtc) : null,
                 UpdatedAtUtc = FormatDate(DateTimeOffset.UtcNow)
             });
+            SaveDocument(document);
+        }
+    }
+
+    public IReadOnlyList<ThemeFileRegistryEntry> GetThemeFiles()
+    {
+        lock (_syncRoot)
+        {
+            return LoadDocument().ThemeFiles
+                .Where(file => IsCurrentServer(file.ServerKind) && Guid.TryParse(file.LogicalItemId, out _))
+                .Select(file => new ThemeFileRegistryEntry(
+                    Guid.Parse(file.LogicalItemId),
+                    file.ThemeKey,
+                    file.FileKind,
+                    file.Path,
+                    string.IsNullOrWhiteSpace(file.Source) ? "TrackedUnknown" : file.Source))
+                .ToList();
+        }
+    }
+
+    public void RemoveThemeFilesByPaths(IEnumerable<string> paths)
+    {
+        var normalized = paths.Where(path => !string.IsNullOrWhiteSpace(path)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (normalized.Count == 0)
+        {
+            return;
+        }
+
+        lock (_syncRoot)
+        {
+            var document = LoadDocument();
+            document.ThemeFiles.RemoveAll(file => IsCurrentServer(file.ServerKind) && normalized.Contains(file.Path));
             SaveDocument(document);
         }
     }
@@ -415,6 +448,11 @@ public sealed class AnimeThemesDataStore
                 if (string.IsNullOrWhiteSpace(themeFile.LogicalItemId))
                 {
                     themeFile.LogicalItemId = themeFile.ItemId ?? string.Empty;
+                }
+
+                if (string.IsNullOrWhiteSpace(themeFile.Source))
+                {
+                    themeFile.Source = "TrackedUnknown";
                 }
             }
 
@@ -814,6 +852,8 @@ public sealed class AnimeThemesDataStore
         public string FileKind { get; set; } = string.Empty;
 
         public string Path { get; set; } = string.Empty;
+
+        public string Source { get; set; } = "TrackedUnknown";
 
         public bool ExistsFlag { get; set; }
 

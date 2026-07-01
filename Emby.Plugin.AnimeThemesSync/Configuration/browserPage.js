@@ -80,7 +80,15 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             playerLoadTimer: null,
             themeObserver: null,
             themeMediaQuery: null,
-            themeMediaHandler: null
+            themeMediaHandler: null,
+            cleanupScanId: null,
+            cleanupTaskId: null,
+            cleanupTimer: null,
+            cleanupItems: [],
+            cleanupSelected: {},
+            cleanupStartIndex: 0,
+            cleanupTotal: 0,
+            cleanupPageSize: 50
         };
         var browserToolbar = page.querySelector('.ats-browser-toolbar');
         var itemSelect = page.querySelector('#AnimeThemesBrowserItemSelect');
@@ -155,6 +163,21 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         var cacheItems = page.querySelector('#AnimeThemesCacheItems');
         var cacheState = page.querySelector('#AnimeThemesCacheState');
         var cachePath = page.querySelector('#AnimeThemesCachePath');
+        var cacheLastScan = page.querySelector('#AnimeThemesCacheLastScan');
+        var summaryMatchRate = page.querySelector('#AnimeThemesSummaryMatchRate');
+        var cleanupWorkspace = page.querySelector('#AtsCleanupWorkspace');
+        var cleanupState = page.querySelector('#AtsCleanupState');
+        var cleanupSummary = page.querySelector('#AtsCleanupSummary');
+        var cleanupProgress = page.querySelector('#AtsCleanupProgress');
+        var cleanupResults = page.querySelector('#AtsCleanupResults');
+        var cleanupSearch = page.querySelector('#AtsCleanupSearch');
+        var cleanupStatus = page.querySelector('#AtsCleanupStatus');
+        var cleanupSource = page.querySelector('#AtsCleanupSource');
+        var cleanupKind = page.querySelector('#AtsCleanupKind');
+        var cleanupSelected = page.querySelector('#AtsCleanupSelected');
+        var cleanupDelete = page.querySelector('#AtsCleanupDelete');
+        var cleanupCancel = page.querySelector('#AtsCleanupCancel');
+        var cleanupPage = page.querySelector('#AtsCleanupPage');
         var summaryManualSeasonMappings = page.querySelector('#AnimeThemesSummaryManualSeasonMappings');
         var summaryAutoSeasonMappings = page.querySelector('#AnimeThemesSummaryAutoSeasonMappings');
         var summaryDirectSeasonMappings = page.querySelector('#AnimeThemesSummaryDirectSeasonMappings');
@@ -195,7 +218,6 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             SegmentedDownloadOptions: page.querySelector('#AtsSegmentedDownloadOptions'),
             AllowAdd: page.querySelector('#AtsAllowAdd'),
             ForceRedownload: page.querySelector('#AtsForceRedownload'),
-            AllowDelete: page.querySelector('#AtsAllowDelete'),
             SeasonThemeDownloadsEnabled: page.querySelector('#AtsSeasonThemeDownloadsEnabled'),
             ExtrasEnabled: page.querySelector('#AtsExtrasEnabled'),
             ExtrasOptions: page.querySelector('#AtsExtrasOptions'),
@@ -217,6 +239,59 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             SaveButton: page.querySelector('#AtsSettingsSave'),
             ResetDefaultsButton: page.querySelector('#AtsResetDefaults')
         };
+
+        function cleanupRecommendationLabel(status) {
+            return status === 'Undesired' ? 'Suggested for removal' : status === 'Desired' ? 'Matches current settings' : 'Could not evaluate';
+        }
+
+        function cleanupSourceLabel(source) {
+            return source === 'Scheduled' ? 'Scheduled synchronization' : source === 'BrowserManual' ? 'Browser download' : source === 'TrackedUnknown' ? 'Earlier plugin version' : 'Outside this plugin';
+        }
+
+        function promoteOverviewMetric(id, label) {
+            var metric = page.querySelector(id);
+            var grid = metric && metric.closest('.ats-summary-grid');
+            if (!metric || !grid) return;
+            var holder = metric.parentElement;
+            var caption = holder.querySelector('span');
+            metric.classList.add('ats-overview-primary');
+            grid.parentElement.insertBefore(metric, grid);
+            caption.className = 'fieldDescription';
+            caption.textContent = label;
+            grid.parentElement.insertBefore(caption, grid);
+            holder.remove();
+        }
+
+        function initializeManagerCopy() {
+            var setText = function (selector, copy) { var element = page.querySelector(selector); if (element) element.textContent = copy; };
+            setText('.ats-manager-header .fieldDescription', 'Monitor the plugin, run maintenance, and review local theme files.');
+            setText('#AnimeThemesBrowserSummary > .ats-panel-head .fieldDescription', 'A quick view of library coverage, saved media, matching, and plugin data.');
+            setText('#AtsManagerTasks > .ats-panel-head .fieldDescription', 'Run synchronization, review local media, or refresh plugin data.');
+            var cards = page.querySelectorAll('#AtsManagerTasks .ats-task-card');
+            if (cards[0]) cards[0].querySelector('.fieldDescription').textContent = 'Find files that no longer match the saved download settings. The scan only builds a review list; you choose what to delete.';
+            if (cards[1]) cards[1].querySelector('.fieldDescription').textContent = 'Download missing theme media using the saved Settings.';
+            if (cards[2]) cards[2].querySelector('.fieldDescription').textContent = 'Rebuild Manager data, clear display cache, or import records from an older plugin version.';
+            setText('label[for="AtsCleanupStatus"]', 'Recommendation');
+            setText('label[for="AtsCleanupSource"]', 'Added by');
+            setText('label[for="AtsCleanupKind"]', 'Media type');
+            cleanupStatus.options[0].textContent = 'Suggested for removal';
+            cleanupStatus.options[1].textContent = 'Matches current settings';
+            cleanupStatus.options[2].textContent = 'Could not evaluate';
+            cleanupStatus.options[3].textContent = 'All recommendations';
+            cleanupSource.options[0].textContent = 'Hide Browser downloads';
+            cleanupSource.options[1].textContent = 'All sources';
+            cleanupSource.options[2].textContent = 'Outside this plugin';
+            cleanupSource.options[3].textContent = 'Scheduled synchronization';
+            cleanupSource.options[4].textContent = 'Browser download';
+            cleanupSource.options[5].textContent = 'Earlier plugin version';
+            promoteOverviewMetric('#AnimeThemesSummaryItems', 'items');
+            promoteOverviewMetric('#AnimeThemesSummarySavedItems', 'items with saved media');
+            cleanupState.textContent = 'Start a scan to review local files.';
+            cleanupSelected.textContent = 'No files selected';
+            setText('.ats-danger-zone .fieldDescription', 'Bulk deletion bypasses the review list. Use it only when you intentionally want to remove an entire media type.');
+        }
+
+        initializeManagerCopy();
 
         function value(obj, pascal, camel) {
             return obj ? obj[pascal] !== undefined ? obj[pascal] : obj[camel] : null;
@@ -1668,6 +1743,9 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             summaryDirectSeasonMappings.textContent = text(value(summary, 'DirectSeasonMappings', 'directSeasonMappings'));
             summarySeriesSharedSeasons.textContent = text(value(summary, 'SeriesSharedSeasons', 'seriesSharedSeasons'));
             summaryUnmatchedSeasons.textContent = text(value(summary, 'UnmatchedSeasons', 'unmatchedSeasons'));
+            var seasons = Number(value(summary, 'SeasonItems', 'seasonItems')) || 0;
+            var unmatched = Number(value(summary, 'UnmatchedSeasons', 'unmatchedSeasons')) || 0;
+            if (summaryMatchRate) summaryMatchRate.textContent = seasons ? Math.round(Math.max(0, seasons - unmatched) / seasons * 100) + '%' : '100%';
         }
 
         function renderStorage(storage) {
@@ -1678,12 +1756,160 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             if (cacheBytes) cacheBytes.textContent = formatBytes(value(storage, 'DatabaseBytes', 'databaseBytes'));
             if (cacheItems) cacheItems.textContent = text(value(storage, 'BrowserItemCount', 'browserItemCount')) + ' browser / ' + text(value(finderStorage, 'ItemCount', 'itemCount')) + ' seasons';
             if (cacheState) cacheState.textContent = rebuilding ? 'Updating' : (ready ? 'Ready' : 'Starting');
+            if (cacheLastScan) cacheLastScan.textContent = text(value(storage, 'LastFullScanUtc', 'lastFullScanUtc'));
             if (cachePath) {
                 var path = value(storage, 'DatabasePath', 'databasePath');
                 var lastError = value(storage, 'LastError', 'lastError');
                 var finderPath = value(finderStorage, 'DatabasePath', 'databasePath');
-                cachePath.textContent = (lastError ? ('Cache file: ' + path + ' | Last error: ' + lastError) : ('Cache file: ' + path)) + (finderPath ? (' | Season Finder DB: ' + finderPath) : '');
+                cachePath.textContent = lastError ? ('Last error: ' + lastError) : 'Browser and Season Finder data are available.';
+                cachePath.title = [path, finderPath].filter(Boolean).join(' | ');
             }
+        }
+
+        function cleanupSourcesValue() {
+            return cleanupSource.value === 'default' ? 'Scheduled,TrackedUnknown,Untracked' : cleanupSource.value;
+        }
+
+        function updateCleanupSelection() {
+            var selected = Object.keys(state.cleanupSelected).map(function (key) { return state.cleanupSelected[key]; });
+            var bytes = selected.reduce(function (total, file) { return total + (Number(value(file, 'Size', 'size')) || 0); }, 0);
+            cleanupSelected.textContent = selected.length ? selected.length + ' files selected · ' + formatBytes(bytes) : 'No files selected';
+            cleanupDelete.disabled = selected.length === 0;
+        }
+
+        function renderCleanupFiles() {
+            cleanupResults.innerHTML = '';
+            if (!state.cleanupItems.length) {
+                var empty = document.createElement('div');
+                empty.className = 'ats-empty';
+                empty.textContent = 'No files match the current filters.';
+                cleanupResults.appendChild(empty);
+            }
+            state.cleanupItems.forEach(function (file) {
+                var id = value(file, 'CandidateId', 'candidateId');
+                var status = value(file, 'Status', 'status');
+                var row = document.createElement('label');
+                row.className = 'ats-cleanup-row';
+                var checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = !!state.cleanupSelected[id];
+                checkbox.addEventListener('change', function () {
+                    if (checkbox.checked) state.cleanupSelected[id] = file;
+                    else delete state.cleanupSelected[id];
+                    updateCleanupSelection();
+                });
+                row.appendChild(checkbox);
+                var body = document.createElement('div');
+                var title = document.createElement('div');
+                title.className = 'ats-cleanup-row-title';
+                title.textContent = value(file, 'ItemName', 'itemName') + ' · ' + value(file, 'FileName', 'fileName');
+                body.appendChild(title);
+                var path = document.createElement('div');
+                path.className = 'ats-cleanup-row-path';
+                path.textContent = value(file, 'Path', 'path');
+                body.appendChild(path);
+                var meta = document.createElement('div');
+                meta.className = 'ats-cleanup-row-meta';
+                [cleanupRecommendationLabel(status), cleanupSourceLabel(value(file, 'Source', 'source')), value(file, 'FileKind', 'fileKind'), value(file, 'LibraryName', 'libraryName')].filter(Boolean).forEach(function (label) {
+                    var badge = document.createElement('span');
+                    badge.className = 'ats-cleanup-badge';
+                    badge.textContent = label;
+                    meta.appendChild(badge);
+                });
+                body.appendChild(meta);
+                row.appendChild(body);
+                var size = document.createElement('strong');
+                size.textContent = formatBytes(value(file, 'Size', 'size'));
+                row.appendChild(size);
+                cleanupResults.appendChild(row);
+            });
+            cleanupPage.textContent = state.cleanupTotal ? (state.cleanupStartIndex + 1) + '–' + Math.min(state.cleanupStartIndex + state.cleanupItems.length, state.cleanupTotal) + ' of ' + state.cleanupTotal : '0 files';
+            page.querySelector('#AtsCleanupPrev').disabled = state.cleanupStartIndex <= 0;
+            page.querySelector('#AtsCleanupNext').disabled = state.cleanupStartIndex + state.cleanupItems.length >= state.cleanupTotal;
+            updateCleanupSelection();
+        }
+
+        function loadCleanupFiles() {
+            if (!state.cleanupScanId) return;
+            var path = 'AnimeThemesSync/Maintenance/Cleanup/Scans/' + encodeURIComponent(state.cleanupScanId) + '/Files?StartIndex=' + state.cleanupStartIndex + '&Limit=' + state.cleanupPageSize + '&Status=' + encodeURIComponent(cleanupStatus.value) + '&Sources=' + encodeURIComponent(cleanupSourcesValue()) + '&Kinds=' + encodeURIComponent(cleanupKind.value) + '&SearchTerm=' + encodeURIComponent(cleanupSearch.value.trim());
+            cleanupState.textContent = 'Loading cleanup results...';
+            apiGet(path).then(function (result) {
+                state.cleanupItems = value(result, 'Items', 'items') || [];
+                state.cleanupTotal = Number(value(result, 'TotalRecordCount', 'totalRecordCount')) || 0;
+                cleanupSummary.textContent = state.cleanupTotal + ' matching files · ' + formatBytes(value(result, 'TotalBytes', 'totalBytes'));
+                cleanupState.textContent = cleanupStatus.value === 'Desired' ? 'These files match the saved settings. You can still select them for manual removal.' : cleanupStatus.value === 'Unknown' ? 'These files could not be evaluated automatically. Review them before selecting.' : 'Review the list, adjust the filters, then select only the files you want to remove.';
+                renderCleanupFiles();
+            }).catch(function (err) {
+                cleanupState.textContent = 'Could not load results: ' + getErrorMessage(err);
+            });
+        }
+
+        function pollCleanupTask(taskId, taskType) {
+            if (state.cleanupTimer) clearTimeout(state.cleanupTimer);
+            apiGet('AnimeThemesSync/Maintenance/Cleanup/Tasks/' + encodeURIComponent(taskId)).then(function (task) {
+                var status = value(task, 'Status', 'status');
+                var progress = Number(value(task, 'Progress', 'progress')) || 0;
+                cleanupState.textContent = value(task, 'Message', 'message') || status;
+                cleanupProgress.style.width = progress + '%';
+                if (status === 'Running') {
+                    state.cleanupTimer = setTimeout(function () { pollCleanupTask(taskId, taskType); }, 750);
+                    return;
+                }
+                cleanupCancel.hidden = true;
+                page.querySelector('#AtsCleanupScan').disabled = false;
+                state.cleanupTaskId = null;
+                if (status === 'Completed' && taskType === 'Scan') {
+                    state.cleanupScanId = value(task, 'ScanId', 'scanId');
+                    state.cleanupStartIndex = 0;
+                    loadCleanupFiles();
+                } else if (status === 'Completed') {
+                    var result = value(task, 'Result', 'result') || {};
+                    cleanupState.textContent = 'Deleted ' + (value(result, 'FilesDeleted', 'filesDeleted') || 0) + ' files; skipped ' + (value(result, 'FilesSkipped', 'filesSkipped') || 0) + '; failed ' + (value(result, 'FilesFailed', 'filesFailed') || 0) + '.';
+                    state.cleanupSelected = {};
+                    updateCleanupSelection();
+                    scheduleUiRefresh();
+                    setTimeout(startCleanupScan, 800);
+                } else if (status === 'Failed') {
+                    cleanupState.textContent = 'Task failed: ' + (value(task, 'Error', 'error') || 'Unknown error');
+                }
+            }).catch(function (err) {
+                cleanupCancel.hidden = true;
+                page.querySelector('#AtsCleanupScan').disabled = false;
+                cleanupState.textContent = 'Task status failed: ' + getErrorMessage(err);
+            });
+        }
+
+        function startCleanupScan() {
+            cleanupWorkspace.hidden = false;
+            cleanupState.textContent = 'Starting local media review...';
+            cleanupSummary.textContent = '';
+            cleanupProgress.style.width = '0%';
+            cleanupCancel.hidden = false;
+            page.querySelector('#AtsCleanupScan').disabled = true;
+            apiPost('AnimeThemesSync/Maintenance/Cleanup/Scans').then(function (task) {
+                state.cleanupTaskId = value(task, 'TaskId', 'taskId');
+                state.cleanupScanId = value(task, 'ScanId', 'scanId');
+                pollCleanupTask(state.cleanupTaskId, 'Scan');
+            }).catch(function (err) {
+                cleanupCancel.hidden = true;
+                page.querySelector('#AtsCleanupScan').disabled = false;
+                cleanupState.textContent = 'Could not start review: ' + getErrorMessage(err);
+            });
+        }
+
+        function deleteCleanupSelection() {
+            var ids = Object.keys(state.cleanupSelected);
+            if (!ids.length || !state.cleanupScanId) return;
+            if (!window.confirm('Delete ' + ids.length + ' selected local media files? Review filters do not protect selected files. This cannot be undone.')) return;
+            cleanupState.textContent = 'Starting cleanup...';
+            cleanupCancel.hidden = false;
+            apiPostJson('AnimeThemesSync/Maintenance/Cleanup/Scans/' + encodeURIComponent(state.cleanupScanId) + '/Delete', { CandidateIds: ids }).then(function (task) {
+                state.cleanupTaskId = value(task, 'TaskId', 'taskId');
+                pollCleanupTask(state.cleanupTaskId, 'Delete');
+            }).catch(function (err) {
+                cleanupCancel.hidden = true;
+                cleanupState.textContent = 'Could not start cleanup: ' + getErrorMessage(err);
+            });
         }
 
         function setImportState(message) {
@@ -2599,7 +2825,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function ensureSettingsConfig(config) {
             config = config || {};
-            config.ConfigurationVersion = 4;
+            config.ConfigurationVersion = 5;
             config.Series = ensureMediaConfig(getConfigValue(config, 'Series', null));
             config.Movie = ensureMediaConfig(getConfigValue(config, 'Movie', null));
             if (!Array.isArray(getConfigValue(config, 'SeasonThemeMappings', []))) {
@@ -2638,7 +2864,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function defaultSettingsConfig(existingConfig) {
             return ensureSettingsConfig({
-                ConfigurationVersion: 4,
+                ConfigurationVersion: 5,
                 ThemeDownloadingEnabled: true,
                 MaxConcurrentDownloads: 1,
                 DownloadTimeoutSeconds: 600,
@@ -2646,7 +2872,6 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 SegmentedDownloadSegments: 4,
                 AllowAdd: true,
                 ForceRedownload: false,
-                AllowDelete: false,
                 SeasonThemeDownloadsEnabled: true,
                 ExtrasEnabled: false,
                 ExtrasLinkMode: 0,
@@ -2666,7 +2891,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         function canonicalizeSettings(config) {
             config = ensureSettingsConfig(cloneSettings(config || {}));
             return {
-                ConfigurationVersion: 4,
+                ConfigurationVersion: 5,
                 ThemeDownloadingEnabled: !!getConfigValue(config, 'ThemeDownloadingEnabled', true),
                 MaxConcurrentDownloads: Math.max(1, parseInt(getConfigValue(config, 'MaxConcurrentDownloads', 1), 10) || 1),
                 DownloadTimeoutSeconds: Math.max(1, parseInt(getConfigValue(config, 'DownloadTimeoutSeconds', 600), 10) || 600),
@@ -2674,7 +2899,6 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 4), 10) || 4)),
                 AllowAdd: !!getConfigValue(config, 'AllowAdd', true),
                 ForceRedownload: !!getConfigValue(config, 'ForceRedownload', false),
-                AllowDelete: !!getConfigValue(config, 'AllowDelete', false),
                 SeasonThemeDownloadsEnabled: !!getConfigValue(config, 'SeasonThemeDownloadsEnabled', true),
                 ExtrasEnabled: !!getConfigValue(config, 'ExtrasEnabled', false),
                 ExtrasLinkMode: parseInt(normalizeExtrasLinkMode(getConfigValue(config, 'ExtrasLinkMode', 0)), 10) || 0,
@@ -2991,7 +3215,6 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             settingsFields.SegmentedDownloadSegments.value = Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 4), 10) || 4));
             settingsFields.AllowAdd.checked = !!getConfigValue(config, 'AllowAdd', true);
             settingsFields.ForceRedownload.checked = !!getConfigValue(config, 'ForceRedownload', false);
-            settingsFields.AllowDelete.checked = !!getConfigValue(config, 'AllowDelete', false);
             settingsFields.SeasonThemeDownloadsEnabled.checked = !!getConfigValue(config, 'SeasonThemeDownloadsEnabled', true);
             settingsFields.ExtrasEnabled.checked = !!getConfigValue(config, 'ExtrasEnabled', false);
             settingsFields.ExtrasLinkMode.value = normalizeExtrasLinkMode(getConfigValue(config, 'ExtrasLinkMode', 0));
@@ -3015,7 +3238,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function removeLegacySettings(config) {
             [
-                'SeriesAudioMaxThemes', 'SeriesAudioVolume', 'SeriesAudioIgnoreOp', 'SeriesAudioIgnoreEd', 'SeriesAudioIgnoreOverlaps', 'SeriesAudioIgnoreCredits',
+                    'AllowDelete', 'SeriesAudioMaxThemes', 'SeriesAudioVolume', 'SeriesAudioIgnoreOp', 'SeriesAudioIgnoreEd', 'SeriesAudioIgnoreOverlaps', 'SeriesAudioIgnoreCredits',
                 'SeriesVideoMaxThemes', 'SeriesVideoVolume', 'SeriesVideoIgnoreOp', 'SeriesVideoIgnoreEd', 'SeriesVideoIgnoreOverlaps', 'SeriesVideoIgnoreCredits',
                 'MovieAudioMaxThemes', 'MovieAudioVolume', 'MovieAudioIgnoreOp', 'MovieAudioIgnoreEd', 'MovieAudioIgnoreOverlaps', 'MovieAudioIgnoreCredits',
                 'MovieVideoMaxThemes', 'MovieVideoVolume', 'MovieVideoIgnoreOp', 'MovieVideoIgnoreEd', 'MovieVideoIgnoreOverlaps', 'MovieVideoIgnoreCredits'
@@ -3027,7 +3250,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function readSettingsForm() {
             return {
-                ConfigurationVersion: 4,
+                ConfigurationVersion: 5,
                 ThemeDownloadingEnabled: settingsFields.ThemeDownloadingEnabled.checked,
                 MaxConcurrentDownloads: parseInt(settingsFields.MaxConcurrentDownloads.value, 10) || 1,
                 DownloadTimeoutSeconds: parseInt(settingsFields.DownloadTimeoutSeconds.value, 10) || 600,
@@ -3035,7 +3258,6 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(settingsFields.SegmentedDownloadSegments.value, 10) || 4)),
                 AllowAdd: settingsFields.AllowAdd.checked,
                 ForceRedownload: settingsFields.ForceRedownload.checked,
-                AllowDelete: settingsFields.AllowDelete.checked,
                 SeasonThemeDownloadsEnabled: settingsFields.SeasonThemeDownloadsEnabled.checked,
                 ExtrasEnabled: settingsFields.ExtrasEnabled.checked,
                 ExtrasLinkMode: parseInt(settingsFields.ExtrasLinkMode.value, 10) || 0,
@@ -4212,6 +4434,32 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         page.querySelector('#AnimeThemesBrowserRefreshItems').addEventListener('click', function () {
             loadItems(false);
         });
+        page.querySelector('#AtsManagerRefresh').addEventListener('click', function () {
+            scheduleUiRefresh({ mappings: true });
+            loadCleanupFiles();
+        });
+        page.querySelector('#AtsCleanupScan').addEventListener('click', startCleanupScan);
+        cleanupCancel.addEventListener('click', function () {
+            if (!state.cleanupTaskId) return;
+            apiPost('AnimeThemesSync/Maintenance/Cleanup/Tasks/' + encodeURIComponent(state.cleanupTaskId));
+        });
+        [cleanupStatus, cleanupSource, cleanupKind].forEach(function (control) {
+            control.addEventListener('change', function () { state.cleanupStartIndex = 0; loadCleanupFiles(); });
+        });
+        cleanupSearch.addEventListener('input', function () {
+            if (state.cleanupSearchTimer) clearTimeout(state.cleanupSearchTimer);
+            state.cleanupSearchTimer = setTimeout(function () { state.cleanupStartIndex = 0; loadCleanupFiles(); }, 250);
+        });
+        page.querySelector('#AtsCleanupSelectVisible').addEventListener('click', function () {
+            state.cleanupItems.forEach(function (file) {
+                state.cleanupSelected[value(file, 'CandidateId', 'candidateId')] = file;
+            });
+            renderCleanupFiles();
+        });
+        page.querySelector('#AtsCleanupClearSelection').addEventListener('click', function () { state.cleanupSelected = {}; renderCleanupFiles(); });
+        cleanupDelete.addEventListener('click', deleteCleanupSelection);
+        page.querySelector('#AtsCleanupPrev').addEventListener('click', function () { state.cleanupStartIndex = Math.max(0, state.cleanupStartIndex - state.cleanupPageSize); loadCleanupFiles(); });
+        page.querySelector('#AtsCleanupNext').addEventListener('click', function () { state.cleanupStartIndex += state.cleanupPageSize; loadCleanupFiles(); });
         var rebuildButton = page.querySelector('#AnimeThemesBrowserRebuildCache');
         if (rebuildButton) {
             rebuildButton.addEventListener('click', function () {
@@ -4264,6 +4512,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             settingsFields.ResetDefaultsButton.addEventListener('click', resetSettingsDefaults);
         }
         page.querySelector('#AtsRunTask').addEventListener('click', runScheduledTask);
+        page.querySelector('#AtsSettingsRunTask').addEventListener('click', runScheduledTask);
         settingsView.addEventListener('input', syncSettingsDirty);
         settingsView.addEventListener('change', syncSettingsDirty);
         if (settingsFields.CopyCssButton) {
@@ -4384,6 +4633,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             stopDownloadsPolling();
             if (state.uiRefreshTimer) clearTimeout(state.uiRefreshTimer);
             state.uiRefreshTimer = null;
+            if (state.cleanupTimer) clearTimeout(state.cleanupTimer);
+            state.cleanupTimer = null;
             hideDetailLoading();
             teardownThemeObserver();
         });

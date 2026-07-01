@@ -14,7 +14,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Configuration;
 /// </summary>
 public class PluginConfiguration : BasePluginConfiguration
 {
-    public const int CurrentConfigurationVersion = 4;
+    public const int CurrentConfigurationVersion = 5;
 
     private int _maxConcurrentDownloads = 1;
     private string _tagSeasonSpring = "Spring";
@@ -50,7 +50,6 @@ public class PluginConfiguration : BasePluginConfiguration
         SegmentedDownloadSegments = 4;
         AllowAdd = true;
         ForceRedownload = false;
-        AllowDelete = false;
         ExtrasEnabled = false;
         ExtrasLinkMode = ExtrasLinkMode.HardLinkWithCopyFallback;
         ExtrasFileSuffix = ExtrasFileSuffix.Other;
@@ -87,7 +86,13 @@ public class PluginConfiguration : BasePluginConfiguration
 
     public bool ForceRedownload { get; set; }
 
-    public bool AllowDelete { get; set; }
+    [Obsolete("Automatic cleanup was removed. Use the Manager cleanup task.")]
+    [JsonIgnore]
+    public bool AllowDelete
+    {
+        get => false;
+        set { }
+    }
 
     public bool ExtrasEnabled { get; set; }
 
@@ -430,6 +435,8 @@ public class PluginConfiguration : BasePluginConfiguration
     }
 
     public bool ShouldSerializeSeriesAudioMaxThemes() => false;
+
+    public bool ShouldSerializeAllowDelete() => false;
 
     public bool ShouldSerializeSeriesAudioVolume() => false;
 
