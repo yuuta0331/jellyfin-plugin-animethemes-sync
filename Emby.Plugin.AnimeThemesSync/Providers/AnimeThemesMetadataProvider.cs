@@ -65,20 +65,20 @@ public class AnimeThemesMetadataProvider : IRemoteMetadataProvider<Series, Serie
 
         seriesName = Regex.Replace(seriesName, @"\s\(\d{4}\)$", string.Empty).Trim();
 
-        _logger.LogDebug("Resolving metadata for '{SeriesName}' ({Year})", seriesName, year);
+        _logger.LogDebug("Resolving metadata for '{0}' ({1})", seriesName, year);
 
         int? aniListId = TryParseProviderId(info, Constants.AniListProviderId);
         int? malId = TryParseProviderId(info, Constants.MyAnimeListProviderId);
 
         if (aniListId == null && malId == null)
         {
-            _logger.LogDebug("No external IDs found. Searching AniList for '{SeriesName}'...", seriesName);
+            _logger.LogDebug("No external IDs found. Searching AniList for '{0}'...", seriesName);
             (aniListId, malId) = await _aniListService.SearchAnime(seriesName, year, cancellationToken).ConfigureAwait(false);
         }
 
         if (aniListId == null && malId == null)
         {
-            _logger.LogWarning("Could not resolve any IDs for '{SeriesName}'. Skipping AnimeThemes lookup.", seriesName);
+            _logger.LogWarning("Could not resolve any IDs for '{0}'. Skipping AnimeThemes lookup.", seriesName);
             return result;
         }
 
@@ -86,7 +86,7 @@ public class AnimeThemesMetadataProvider : IRemoteMetadataProvider<Series, Serie
 
         if (anime == null)
         {
-            _logger.LogDebug("ID lookup failed. Falling back to name search for '{SeriesName}'.", seriesName);
+            _logger.LogDebug("ID lookup failed. Falling back to name search for '{0}'.", seriesName);
             (var newAniListId, var newMalId) = await _aniListService.SearchAnime(seriesName, year, cancellationToken).ConfigureAwait(false);
 
             if (newAniListId.HasValue || newMalId.HasValue)
@@ -96,7 +96,7 @@ public class AnimeThemesMetadataProvider : IRemoteMetadataProvider<Series, Serie
                 {
                     aniListId = newAniListId ?? aniListId;
                     malId = newMalId ?? malId;
-                    _logger.LogDebug("Fallback found AnimeThemes entry: AniList:{AniListId}, MAL:{MalId}", aniListId, malId);
+                    _logger.LogDebug("Fallback found AnimeThemes entry: AniList:{0}, MAL:{1}", aniListId, malId);
                 }
             }
         }
@@ -221,7 +221,9 @@ public class AnimeThemesMetadataProvider : IRemoteMetadataProvider<Series, Serie
 
     private static void ApplyTags(Series item, AnimeThemesAnime? anime)
     {
-        if (!(Plugin.Instance?.Configuration.TagsEnabled ?? false) || anime?.Year == null)
+        if (!(Plugin.Instance?.Configuration.TagsEnabled ?? false) ||
+            !SeasonMetadataPlanner.AppliesToSeries(Plugin.Instance!.Configuration.SeasonTagTarget) ||
+            anime?.Year == null)
         {
             return;
         }

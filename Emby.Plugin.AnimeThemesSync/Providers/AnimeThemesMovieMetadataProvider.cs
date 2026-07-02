@@ -63,27 +63,27 @@ public class AnimeThemesMovieMetadataProvider : IRemoteMetadataProvider<Movie, M
         var movieName = Regex.Replace(info.Name, @"\s\(\d{4}\)$", string.Empty).Trim();
         var year = info.Year;
 
-        _logger.LogDebug("Resolving movie metadata for '{MovieName}' ({Year})", movieName, year);
+        _logger.LogDebug("Resolving movie metadata for '{0}' ({1})", movieName, year);
 
         int? aniListId = TryParseProviderId(info, Constants.AniListProviderId);
         int? malId = TryParseProviderId(info, Constants.MyAnimeListProviderId);
 
         if (aniListId == null && malId == null)
         {
-            _logger.LogDebug("No external IDs found. Searching AniList for movie '{MovieName}'...", movieName);
+            _logger.LogDebug("No external IDs found. Searching AniList for movie '{0}'...", movieName);
             (aniListId, malId) = await _aniListService.SearchAnime(movieName, year, cancellationToken).ConfigureAwait(false);
         }
 
         if (aniListId == null && malId == null)
         {
-            _logger.LogWarning("Could not resolve any IDs for movie '{MovieName}'. Skipping AnimeThemes lookup.", movieName);
+            _logger.LogWarning("Could not resolve any IDs for movie '{0}'. Skipping AnimeThemes lookup.", movieName);
             return result;
         }
 
         AnimeThemesAnime? anime = await LookupAnimeThemes(aniListId, malId, cancellationToken).ConfigureAwait(false);
         if (anime == null)
         {
-            _logger.LogDebug("ID lookup failed. Falling back to name search for movie '{MovieName}'.", movieName);
+            _logger.LogDebug("ID lookup failed. Falling back to name search for movie '{0}'.", movieName);
             (var newAniListId, var newMalId) = await _aniListService.SearchAnime(movieName, year, cancellationToken).ConfigureAwait(false);
 
             if (newAniListId.HasValue || newMalId.HasValue)
@@ -93,7 +93,7 @@ public class AnimeThemesMovieMetadataProvider : IRemoteMetadataProvider<Movie, M
                 {
                     aniListId = newAniListId ?? aniListId;
                     malId = newMalId ?? malId;
-                    _logger.LogDebug("Fallback found AnimeThemes movie entry: AniList:{AniListId}, MAL:{MalId}", aniListId, malId);
+                    _logger.LogDebug("Fallback found AnimeThemes movie entry: AniList:{0}, MAL:{1}", aniListId, malId);
                 }
             }
         }
