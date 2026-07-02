@@ -6,6 +6,7 @@ using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace Emby.Plugin.AnimeThemesSync;
 
@@ -23,6 +24,10 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         : base(applicationPaths, xmlSerializer)
     {
         Instance = this;
+        if (Configuration.Normalize())
+        {
+            UpdateConfiguration(Configuration);
+        }
     }
 
     /// <summary>
@@ -38,6 +43,34 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 
     /// <inheritdoc />
     public override string Description => "Syncs anime themes from AnimeThemes.moe to Emby.";
+
+    /// <summary>
+    /// Gets the configuration file name. Emby 4.9 does not call <c>SetAttributes</c>
+    /// until after the constructor completes, so the default implementation (which
+    /// derives the name from <see cref="BasePlugin{T}.AssemblyFileName"/>) returns
+    /// <c>null</c> during construction and causes <see cref="ArgumentNullException"/>
+    /// in <see cref="System.IO.Path.Combine(string, string)"/>. Returning a fixed
+    /// name avoids that dependency.
+    /// </summary>
+    public override string ConfigurationFileName => "Emby.Plugin.AnimeThemesSync.xml";
+
+    /// <summary>
+    /// Saves the configuration to disk. Emby 4.9 does not call
+    /// <c>SetStartupInfo</c> until after the constructor completes, so the base
+    /// implementation (which relies on <c>_directoryCreateFn</c>) throws
+    /// <see cref="NullReferenceException"/> during construction. This override
+    /// creates the directory directly, mirroring the Jellyfin implementation.
+    /// </summary>
+    public override void SaveConfiguration()
+    {
+        var dir = Path.GetDirectoryName(ConfigurationFilePath);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        XmlSerializer.SerializeToFile(Configuration, ConfigurationFilePath);
+    }
 
     /// <inheritdoc />
     public IEnumerable<PluginPageInfo> GetPages()
