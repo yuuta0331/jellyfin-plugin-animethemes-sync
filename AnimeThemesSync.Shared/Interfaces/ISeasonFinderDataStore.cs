@@ -25,7 +25,13 @@ public interface ISeasonFinderDataStore
 
     void UpsertRow(SeasonFinderRowRecord record);
 
-    SeasonFinderItemsPage QueryRows(string? libraryId, int? startIndex, int? limit, string? searchTerm, string? status, string? sortBy, string? sortOrder);
+    SeasonFinderItemsPage QueryRows(string? libraryId, int? startIndex, int? limit, string? searchTerm, string? status, int? seasonNumber, string? sortBy, string? sortOrder);
+
+    SeasonAutomationState GetSeasonAutomationState(string seriesItemId);
+
+    void SaveSeasonAutomationState(SeasonAutomationState state);
+
+    IReadOnlyList<SeasonSummary> GetSeasonSummaries(string seriesItemId);
 
     IReadOnlyList<SeasonThemeMappingRow> GetAllRows();
 

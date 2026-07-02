@@ -206,7 +206,8 @@ public class AnimeThemesMetadataProvider : IRemoteMetadataProvider<Series, Serie
 
     private static void ApplyTags(Series item, AnimeThemesAnime anime)
     {
-        if (!(Plugin.Instance?.Configuration.TagsEnabled ?? false))
+        if (!(Plugin.Instance?.Configuration.TagsEnabled ?? false) ||
+            !SeasonMetadataPlanner.AppliesToSeries(Plugin.Instance!.Configuration.SeasonTagTarget))
         {
             return;
         }

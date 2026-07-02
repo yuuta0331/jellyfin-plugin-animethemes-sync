@@ -104,6 +104,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         var seasonGroups = page.querySelector('#AnimeThemesBrowserSeasonGroups');
         var searchInput = page.querySelector('#AnimeThemesBrowserSearch');
         var libraryTypeFilter = page.querySelector('#AnimeThemesBrowserLibraryTypeFilter');
+        var librarySeasonFilter = page.querySelector('#AnimeThemesBrowserLibrarySeasonFilter');
         var libraryLinkFilter = page.querySelector('#AnimeThemesBrowserLibraryLinkFilter');
         var librarySavedFilter = page.querySelector('#AnimeThemesBrowserLibrarySavedFilter');
         var librarySort = page.querySelector('#AnimeThemesBrowserLibrarySort');
@@ -184,6 +185,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         var summarySeriesSharedSeasons = page.querySelector('#AnimeThemesSummarySeriesSharedSeasons');
         var summaryUnmatchedSeasons = page.querySelector('#AnimeThemesSummaryUnmatchedSeasons');
         var seasonFilter = page.querySelector('#AnimeThemesSeasonFilter');
+        var seasonNumberFilter = page.querySelector('#AnimeThemesSeasonNumberFilter');
         var seasonList = page.querySelector('#AnimeThemesSeasonList');
         var seasonSearch = page.querySelector('#AnimeThemesSeasonSearch');
         var seasonSort = page.querySelector('#AnimeThemesSeasonSort');
@@ -226,7 +228,15 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             ExtrasFileNameFormat: page.querySelector('#AtsExtrasFileNameFormat'),
             ExtrasFormatPreview: page.querySelector('#AtsExtrasFormatPreview'),
             TagsEnabled: page.querySelector('#AtsTagsEnabled'),
+            SeasonTagTarget: page.querySelector('#AtsSeasonTagTarget'),
+            SeasonCollectionsEnabled: page.querySelector('#AtsSeasonCollectionsEnabled'),
+            SeasonOneCollectionUseSeries: page.querySelector('#AtsSeasonOneCollectionUseSeries'),
+            SeasonOneCollectionOption: page.querySelector('#AtsSeasonOneCollectionOption'),
+            SeasonCollectionFormat: page.querySelector('#AtsSeasonCollectionFormat'),
+            SeasonCollectionFormatPreview: page.querySelector('#AtsSeasonCollectionFormatPreview'),
             TagOptions: page.querySelector('#AtsTagOptions'),
+            CollectionOptions: page.querySelector('#AtsCollectionOptions'),
+            SeasonLabelOptions: page.querySelector('#AtsSeasonLabelOptions'),
             TagFormat: page.querySelector('#AtsTagFormat'),
             TagFormatPreview: page.querySelector('#AtsTagFormatPreview'),
             TagSeasonSpring: page.querySelector('#AtsTagSeasonSpring'),
@@ -1111,6 +1121,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 ['sortOrder', librarySortDirection && librarySortDirection.value === 'desc' ? 'Descending' : 'Ascending'],
                 ['searchTerm', searchInput.value.trim()],
                 ['itemType', libraryTypeFilter ? libraryTypeFilter.value : 'all'],
+                ['broadcastSeason', librarySeasonFilter ? librarySeasonFilter.value : 'all'],
                 ['linkFilter', libraryLinkFilter ? libraryLinkFilter.value : 'all'],
                 ['savedFilter', librarySavedFilter ? librarySavedFilter.value : 'all']
             ].filter(function (pair) { return pair[1] !== null && pair[1] !== undefined && String(pair[1]).length; });
@@ -1153,6 +1164,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 state.browserTotalRecordCount = Number(value(page, 'TotalRecordCount', 'totalRecordCount') || state.items.length || 0);
                 state.browserCacheVersion = String(value(page, 'CacheVersion', 'cacheVersion') || '');
                 state.browserCacheReady = !!value(page, 'CacheReady', 'cacheReady');
+                renderBroadcastSeasonOptions(value(page, 'BroadcastSeasons', 'broadcastSeasons') || []);
                 state.browserRebuildRunning = !!value(storage, 'RebuildRunning', 'rebuildRunning');
                 state.itemsLoading = false;
                 state.summaryLoading = false;
@@ -1179,6 +1191,25 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 }
                 return state.items;
             });
+        }
+
+        function renderBroadcastSeasonOptions(options) {
+            if (!librarySeasonFilter) return;
+            var selected = librarySeasonFilter.value || 'all';
+            librarySeasonFilter.innerHTML = '';
+            var all = document.createElement('option');
+            all.value = 'all';
+            all.textContent = 'All';
+            librarySeasonFilter.appendChild(all);
+            options.forEach(function (option) {
+                var key = value(option, 'Key', 'key');
+                if (!key) return;
+                var element = document.createElement('option');
+                element.value = key;
+                element.textContent = value(option, 'Label', 'label') || key;
+                librarySeasonFilter.appendChild(element);
+            });
+            librarySeasonFilter.value = Array.prototype.some.call(librarySeasonFilter.options, function (option) { return option.value === selected; }) ? selected : 'all';
         }
 
         function scheduleLoadItems() {
@@ -1226,6 +1257,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 ['limit', state.finderLimit],
                 ['searchTerm', seasonSearch.value.trim()],
                 ['status', seasonFilter.value || 'unmatched'],
+                ['seasonNumber', seasonNumberFilter ? seasonNumberFilter.value : ''],
                 ['sortBy', seasonSort.value || 'seriesName'],
                 ['sortOrder', seasonSortDirection.value || 'asc']
             ].filter(function (pair) { return String(pair[1] === null || pair[1] === undefined ? '' : pair[1]).length; });
@@ -1263,6 +1295,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                     state.finderTotalRecordCount = Number(value(result, 'TotalRecordCount', 'totalRecordCount') || 0);
                     state.finderCacheVersion = String(value(result, 'CacheVersion', 'cacheVersion') || '');
                     state.finderCacheReady = value(result, 'CacheReady', 'cacheReady') !== false;
+                    renderSeasonNumberOptions(value(result, 'SeasonNumbers', 'seasonNumbers') || []);
                     if (rows.length && accumulated.length < targetCount && accumulated.length < state.finderTotalRecordCount) {
                         return fetchNextPage();
                     }
@@ -1299,6 +1332,19 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function reloadSeasonMappingsPreservingState(selectedId) {
             return loadSeasonMappings(false, { preserve: true, selectedId: selectedId });
+        }
+
+        function renderSeasonNumberOptions(numbers) {
+            if (!seasonNumberFilter) return;
+            var selected = seasonNumberFilter.value;
+            seasonNumberFilter.innerHTML = '<option value="">All season numbers</option>';
+            numbers.forEach(function (number) {
+                var option = document.createElement('option');
+                option.value = String(number);
+                option.textContent = Number(number) === 0 ? 'Specials (0)' : 'Season ' + number;
+                seasonNumberFilter.appendChild(option);
+            });
+            seasonNumberFilter.value = Array.prototype.some.call(seasonNumberFilter.options, function (option) { return option.value === selected; }) ? selected : '';
         }
 
         function loadAllSeasonMappings() {
@@ -2305,12 +2351,24 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
             seasonGroups.style.display = '';
             seasonGroups.innerHTML = '';
-            for (var i = 0; i < 2; i++) {
-                var pill = document.createElement('div');
-                pill.className = 'ats-season-pill ats-placeholder-card ats-skeleton-shimmer-only';
-                pill.style.height = '2.25rem';
-                pill.style.width = '6rem';
-                seasonGroups.appendChild(pill);
+            var cachedSeasons = value(item, 'SeasonSummaries', 'seasonSummaries') || [];
+            if (cachedSeasons.length) {
+                cachedSeasons.forEach(function (summary) {
+                    var cachedPill = document.createElement('div');
+                    cachedPill.className = 'ats-season-pill';
+                    var seasonName = value(summary, 'SeasonName', 'seasonName') || ('Season ' + value(summary, 'SeasonNumber', 'seasonNumber'));
+                    var broadcastLabel = value(summary, 'BroadcastSeasonLabel', 'broadcastSeasonLabel');
+                    cachedPill.textContent = broadcastLabel ? seasonName + ' · ' + broadcastLabel : seasonName;
+                    seasonGroups.appendChild(cachedPill);
+                });
+            } else {
+                for (var i = 0; i < 2; i++) {
+                    var pill = document.createElement('div');
+                    pill.className = 'ats-season-pill ats-placeholder-card ats-skeleton-shimmer-only';
+                    pill.style.height = '2.25rem';
+                    pill.style.width = '6rem';
+                    seasonGroups.appendChild(pill);
+                }
             }
             rowsContainer.innerHTML = '';
             for (var row = 0; row < 3; row++) {
@@ -2825,7 +2883,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function ensureSettingsConfig(config) {
             config = config || {};
-            config.ConfigurationVersion = 5;
+            config.ConfigurationVersion = 8;
             config.Series = ensureMediaConfig(getConfigValue(config, 'Series', null));
             config.Movie = ensureMediaConfig(getConfigValue(config, 'Movie', null));
             if (!Array.isArray(getConfigValue(config, 'SeasonThemeMappings', []))) {
@@ -2864,7 +2922,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function defaultSettingsConfig(existingConfig) {
             return ensureSettingsConfig({
-                ConfigurationVersion: 5,
+                ConfigurationVersion: 8,
                 ThemeDownloadingEnabled: true,
                 MaxConcurrentDownloads: 1,
                 DownloadTimeoutSeconds: 600,
@@ -2878,6 +2936,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 ExtrasFileSuffix: 1,
                 ExtrasFileNameFormat: '{Order}. {Theme} - {Song}',
                 TagsEnabled: true,
+                SeasonTagTarget: 0,
+                SeasonCollectionsEnabled: false,
+                SeasonOneCollectionUseSeries: false,
+                SeasonCollectionFormat: '{Season} {Year}',
                 TagFormat: '{Season} {Year}',
                 TagSeasonSpring: 'Spring',
                 TagSeasonSummer: 'Summer',
@@ -2891,7 +2953,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         function canonicalizeSettings(config) {
             config = ensureSettingsConfig(cloneSettings(config || {}));
             return {
-                ConfigurationVersion: 5,
+                ConfigurationVersion: 8,
                 ThemeDownloadingEnabled: !!getConfigValue(config, 'ThemeDownloadingEnabled', true),
                 MaxConcurrentDownloads: Math.max(1, parseInt(getConfigValue(config, 'MaxConcurrentDownloads', 1), 10) || 1),
                 DownloadTimeoutSeconds: Math.max(1, parseInt(getConfigValue(config, 'DownloadTimeoutSeconds', 600), 10) || 600),
@@ -2905,6 +2967,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 ExtrasFileSuffix: parseInt(normalizeExtrasFileSuffix(getConfigValue(config, 'ExtrasFileSuffix', 1)), 10),
                 ExtrasFileNameFormat: String(getConfigValue(config, 'ExtrasFileNameFormat', '{Order}. {Theme} - {Song}')),
                 TagsEnabled: !!getConfigValue(config, 'TagsEnabled', true),
+                SeasonTagTarget: normalizeSeasonTagTarget(getConfigValue(config, 'SeasonTagTarget', 0)),
+                SeasonCollectionsEnabled: !!getConfigValue(config, 'SeasonCollectionsEnabled', false),
+                SeasonOneCollectionUseSeries: !!getConfigValue(config, 'SeasonOneCollectionUseSeries', false),
+                SeasonCollectionFormat: String(getConfigValue(config, 'SeasonCollectionFormat', '{Season} {Year}')),
                 TagFormat: String(getConfigValue(config, 'TagFormat', '{Season} {Year}')),
                 TagSeasonSpring: String(getConfigValue(config, 'TagSeasonSpring', 'Spring')),
                 TagSeasonSummer: String(getConfigValue(config, 'TagSeasonSummer', 'Summer')),
@@ -3128,16 +3194,27 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         }
 
         function syncConditionalSettings() {
-            if (settingsFields.SegmentedDownloadOptions) {
-                settingsFields.SegmentedDownloadOptions.hidden = !settingsFields.SegmentedDownloadEnabled.checked;
-            }
-            if (settingsFields.ExtrasOptions) {
-                settingsFields.ExtrasOptions.hidden = !settingsFields.ExtrasEnabled.checked;
-            }
-            if (settingsFields.TagOptions) {
-                settingsFields.TagOptions.hidden = !settingsFields.TagsEnabled.checked;
-            }
+            setConditionalOptions(settingsFields.SegmentedDownloadOptions, settingsFields.SegmentedDownloadEnabled.checked);
+            setConditionalOptions(settingsFields.ExtrasOptions, settingsFields.ExtrasEnabled.checked);
+            setConditionalOptions(settingsFields.TagOptions, settingsFields.TagsEnabled.checked);
+            setConditionalOptions(settingsFields.CollectionOptions, settingsFields.SeasonCollectionsEnabled.checked);
+            setConditionalOptions(settingsFields.SeasonLabelOptions, settingsFields.TagsEnabled.checked || settingsFields.SeasonCollectionsEnabled.checked);
             updateFormatPreviews();
+        }
+
+        function setConditionalOptions(element, expanded) {
+            if (!element) return;
+            element.hidden = false;
+            element.classList.toggle('is-open', !!expanded);
+            element.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+            element.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        }
+
+        function normalizeSeasonTagTarget(value) {
+            var normalized = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+            if (normalized === '1' || normalized === 'season') return 1;
+            if (normalized === '2' || normalized === 'both') return 2;
+            return 0;
         }
 
         function replaceFormatTokens(format, tokens) {
@@ -3173,6 +3250,14 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                     year: '2024'
                 }) || seasonName + ' 2024';
                 settingsFields.TagFormatPreview.textContent = tagPreview;
+            }
+            if (settingsFields.SeasonCollectionFormatPreview && settingsFields.SeasonCollectionFormat) {
+                var collectionSeasonName = settingsFields.TagSeasonWinter && settingsFields.TagSeasonWinter.value ? settingsFields.TagSeasonWinter.value : 'Winter';
+                var collectionPreview = replaceFormatTokens(settingsFields.SeasonCollectionFormat.value || '{Season} {Year}', {
+                    season: collectionSeasonName,
+                    year: '2024'
+                }) || collectionSeasonName + ' 2024';
+                settingsFields.SeasonCollectionFormatPreview.textContent = collectionPreview;
             }
         }
 
@@ -3221,6 +3306,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             settingsFields.ExtrasFileSuffix.value = normalizeExtrasFileSuffix(getConfigValue(config, 'ExtrasFileSuffix', 1));
             settingsFields.ExtrasFileNameFormat.value = getConfigValue(config, 'ExtrasFileNameFormat', '{Order}. {Theme} - {Song}');
             settingsFields.TagsEnabled.checked = !!getConfigValue(config, 'TagsEnabled', true);
+            settingsFields.SeasonTagTarget.value = String(normalizeSeasonTagTarget(getConfigValue(config, 'SeasonTagTarget', 0)));
+            settingsFields.SeasonCollectionsEnabled.checked = !!getConfigValue(config, 'SeasonCollectionsEnabled', false);
+            settingsFields.SeasonOneCollectionUseSeries.checked = !!getConfigValue(config, 'SeasonOneCollectionUseSeries', false);
+            settingsFields.SeasonCollectionFormat.value = getConfigValue(config, 'SeasonCollectionFormat', '{Season} {Year}');
             settingsFields.TagFormat.value = getConfigValue(config, 'TagFormat', '{Season} {Year}');
             settingsFields.TagSeasonSpring.value = getConfigValue(config, 'TagSeasonSpring', 'Spring');
             settingsFields.TagSeasonSummer.value = getConfigValue(config, 'TagSeasonSummer', 'Summer');
@@ -3250,7 +3339,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function readSettingsForm() {
             return {
-                ConfigurationVersion: 5,
+                ConfigurationVersion: 8,
                 ThemeDownloadingEnabled: settingsFields.ThemeDownloadingEnabled.checked,
                 MaxConcurrentDownloads: parseInt(settingsFields.MaxConcurrentDownloads.value, 10) || 1,
                 DownloadTimeoutSeconds: parseInt(settingsFields.DownloadTimeoutSeconds.value, 10) || 600,
@@ -3264,6 +3353,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 ExtrasFileSuffix: parseInt(settingsFields.ExtrasFileSuffix.value, 10),
                 ExtrasFileNameFormat: settingsFields.ExtrasFileNameFormat.value,
                 TagsEnabled: settingsFields.TagsEnabled.checked,
+                SeasonTagTarget: parseInt(settingsFields.SeasonTagTarget.value, 10) || 0,
+                SeasonCollectionsEnabled: settingsFields.SeasonCollectionsEnabled.checked,
+                SeasonOneCollectionUseSeries: settingsFields.SeasonOneCollectionUseSeries.checked,
+                SeasonCollectionFormat: settingsFields.SeasonCollectionFormat.value,
                 TagFormat: settingsFields.TagFormat.value,
                 TagSeasonSpring: settingsFields.TagSeasonSpring.value,
                 TagSeasonSummer: settingsFields.TagSeasonSummer.value,
@@ -3311,7 +3404,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             }
             setSettingsState('Saving settings...');
             return ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                var tagsWereEnabled = !!getConfigValue(config, 'TagsEnabled', true);
+                var collectionsWereEnabled = !!getConfigValue(config, 'SeasonCollectionsEnabled', false);
                 config = collectSettingsFromForm(config || {});
+                var cleanup = {
+                    RemoveManagedTags: tagsWereEnabled && !config.TagsEnabled && window.confirm('Season Tags were turned off. Remove only the tags previously managed by this plugin?\n\nOK: remove managed tags\nCancel: keep existing tags'),
+                    RemoveManagedCollectionMemberships: collectionsWereEnabled && !config.SeasonCollectionsEnabled && window.confirm('Season Collections were turned off. Remove only collection memberships previously managed by this plugin?\n\nOK: remove managed memberships\nCancel: keep existing memberships')
+                };
                 return ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function (result) {
                     state.settingsLoaded = true;
                     captureSettingsSnapshot();
@@ -3319,12 +3418,38 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                     if (showResult) {
                         Dashboard.processPluginConfigurationUpdateResult(result);
                     }
-                    return result;
+                    return apiPostJson('AnimeThemesSync/SeasonMetadata/Sync', cleanup).then(function () {
+                        setSettingsState('Settings saved. Season metadata sync started.');
+                        pollSeasonMetadataSync();
+                        return result;
+                    });
                 });
             }).catch(function (err) {
                 setSettingsState('Failed to save settings.');
                 Dashboard.alert({ title: 'Settings Error', message: getErrorMessage(err) });
                 throw err;
+            });
+        }
+
+        function pollSeasonMetadataSync() {
+            apiGet('AnimeThemesSync/SeasonMetadata/Sync').then(function (status) {
+                var syncState = String(value(status, 'State', 'state') || 'Idle');
+                var processed = Number(value(status, 'Processed', 'processed') || 0);
+                var total = Number(value(status, 'Total', 'total') || 0);
+                if (syncState === 'Running') {
+                    setSettingsState('Settings saved. Synchronizing season metadata ' + processed + '/' + total + '...');
+                    window.setTimeout(pollSeasonMetadataSync, 1000);
+                } else if (syncState === 'Failed') {
+                    setSettingsState('Season metadata sync failed: ' + (value(status, 'Error', 'error') || 'Unknown error'));
+                } else if (syncState === 'CompletedWithErrors') {
+                    setSettingsState('Season metadata synchronized with warnings: ' + (value(status, 'Error', 'error') || 'See the server log for details.'));
+                    loadItems(false, { silent: true, preserveCount: true });
+                } else if (syncState === 'Completed') {
+                    setSettingsState('Settings saved. Season metadata synchronized.');
+                    loadItems(false, { silent: true, preserveCount: true });
+                }
+            }).catch(function () {
+                setSettingsState('Settings saved. Season metadata sync status unavailable.');
             });
         }
 
@@ -4383,7 +4508,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 loadSeasonMappings(false);
             }, 250);
         });
-        [seasonSort, seasonSortDirection].forEach(function (control) {
+        [seasonNumberFilter, seasonSort, seasonSortDirection].forEach(function (control) {
             control.addEventListener('change', function () {
                 state.finderScrollTop = 0;
                 loadSeasonMappings(false);
@@ -4410,7 +4535,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         searchInput.addEventListener('input', function () {
             scheduleLoadItems();
         });
-        [libraryTypeFilter, libraryLinkFilter, librarySavedFilter, librarySort, librarySortDirection].forEach(function (control) {
+        [libraryTypeFilter, librarySeasonFilter, libraryLinkFilter, librarySavedFilter, librarySort, librarySortDirection].forEach(function (control) {
             if (control) {
                 control.addEventListener('change', function () {
                     loadItems(false);
@@ -4499,7 +4624,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         settingsFields.SegmentedDownloadEnabled.addEventListener('change', syncConditionalSettings);
         settingsFields.ExtrasEnabled.addEventListener('change', syncConditionalSettings);
         settingsFields.TagsEnabled.addEventListener('change', syncConditionalSettings);
-        [settingsFields.ExtrasFileNameFormat, settingsFields.ExtrasFileSuffix, settingsFields.TagFormat, settingsFields.TagSeasonWinter].forEach(function (input) {
+        settingsFields.SeasonCollectionsEnabled.addEventListener('change', syncConditionalSettings);
+        [settingsFields.ExtrasFileNameFormat, settingsFields.ExtrasFileSuffix, settingsFields.TagFormat, settingsFields.SeasonCollectionFormat, settingsFields.TagSeasonWinter].forEach(function (input) {
             if (input) {
                 input.addEventListener('input', updateFormatPreviews);
             }

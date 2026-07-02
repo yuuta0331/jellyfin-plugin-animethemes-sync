@@ -14,6 +14,7 @@ using AnimeThemesSync.Shared.Models;
 using AnimeThemesSync.Shared.Services;
 using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.AnimeThemesSync.Configuration;
+using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
@@ -31,6 +32,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.ScheduledTasks;
 /// </summary>
 public sealed class ThemeDownloader : IScheduledTask
 {
+    private static readonly SemaphoreSlim SeasonMetadataSyncGate = new(1, 1);
     private readonly ILibraryManager _libraryManager;
     private readonly IFileSystem _fileSystem;
     private readonly ILogger<ThemeDownloader> _logger;
@@ -40,7 +42,11 @@ public sealed class ThemeDownloader : IScheduledTask
     private readonly AniListService _aniListService;
     private readonly AnimeThemesDataStore _dataStore;
     private readonly ISeasonFinderDataStore _seasonFinderStore;
+    private readonly ICollectionManager _collectionManager;
     private int _browserCacheRebuildRunning;
+    private int _seasonMetadataSyncRunning;
+    private SeasonMetadataSyncStatus _seasonMetadataSyncStatus = new("Idle", 0, 0, null, null, null);
+    private readonly Dictionary<string, string> _seasonMetadataRuleErrors = new(StringComparer.OrdinalIgnoreCase);
     private readonly AdjustableConcurrencyLimiter _downloadLimiter = new();
 
     /// <summary>
@@ -55,6 +61,7 @@ public sealed class ThemeDownloader : IScheduledTask
     /// <param name="aniListService">The AniList service.</param>
     /// <param name="dataStore">The AnimeThemes data store.</param>
     /// <param name="seasonFinderStore">The Season Finder SQLite store.</param>
+    /// <param name="collectionManager">The media-server collection manager.</param>
     public ThemeDownloader(
         ILibraryManager libraryManager,
         IFileSystem fileSystem,
@@ -64,7 +71,8 @@ public sealed class ThemeDownloader : IScheduledTask
         AnimeThemesService animeThemesService,
         AniListService aniListService,
         AnimeThemesDataStore dataStore,
-        ISeasonFinderDataStore seasonFinderStore)
+        ISeasonFinderDataStore seasonFinderStore,
+        ICollectionManager collectionManager)
     {
         _libraryManager = libraryManager;
         _fileSystem = fileSystem;
@@ -75,6 +83,7 @@ public sealed class ThemeDownloader : IScheduledTask
         _aniListService = aniListService;
         _dataStore = dataStore;
         _seasonFinderStore = seasonFinderStore;
+        _collectionManager = collectionManager;
         _seasonFinderStore.MigrateLegacyMappings(Plugin.Instance?.Configuration?.SeasonThemeMappings);
         ThemeExtrasManifestService.ConfigureStore(_dataStore);
         ThemeDownloadJobService.Configure(Plugin.Instance?.Configuration?.MaxConcurrentDownloads ?? 2);
@@ -98,16 +107,18 @@ public sealed class ThemeDownloader : IScheduledTask
         _logger.LogInformation("Starting Anime Themes Download Task...");
 
         var config = Plugin.Instance?.Configuration;
-        if (config == null || !config.ThemeDownloadingEnabled)
+        if (config == null)
         {
-            _logger.LogInformation("Theme downloading is disabled in plugin configuration.");
             return;
         }
 
         var items = GetEnabledLibraryItems();
         _logger.LogInformation("Found {Count} items to process.", items.Count);
 
-        var result = await ProcessItems(items, config, config.ForceRedownload, progress, cancellationToken).ConfigureAwait(false);
+        var result = config.ThemeDownloadingEnabled
+            ? await ProcessItems(items, config, config.ForceRedownload, progress, cancellationToken).ConfigureAwait(false)
+            : new ThemeDownloadExecutionResult(0, 0, 0, 0, 0, 0);
+        await SynchronizeSeasonMetadataAsync(items.OfType<Series>().ToList(), cancellationToken).ConfigureAwait(false);
         await RebuildBrowserCacheAsync(cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Anime Themes Download Task Completed. Downloaded {Count} files.", result.DownloadsCompleted);
     }
@@ -230,10 +241,52 @@ public sealed class ThemeDownloader : IScheduledTask
         string? searchTerm,
         string? itemType,
         string? linkFilter,
-        string? savedFilter)
+        string? savedFilter,
+        string? broadcastSeason = null)
     {
         EnsureBrowserCacheRebuildStarted();
-        return _dataStore.QueryBrowserItems(libraryId, startIndex, limit, sortBy, sortOrder, searchTerm, itemType, linkFilter, savedFilter);
+        return _dataStore.QueryBrowserItems(libraryId, startIndex, limit, sortBy, sortOrder, searchTerm, itemType, linkFilter, savedFilter, broadcastSeason);
+    }
+
+    public SeasonMetadataSyncStatus GetSeasonMetadataSyncStatus() => _seasonMetadataSyncStatus;
+
+    public SeasonMetadataSyncStatus StartSeasonMetadataSync(bool removeManagedTags = false, bool removeManagedCollectionMemberships = false)
+    {
+        if (Interlocked.CompareExchange(ref _seasonMetadataSyncRunning, 1, 0) != 0)
+        {
+            return _seasonMetadataSyncStatus;
+        }
+
+        var series = GetEnabledLibraryItems().OfType<Series>().ToList();
+        _seasonMetadataSyncStatus = new SeasonMetadataSyncStatus("Running", 0, series.Count, DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture), null, null);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await SynchronizeSeasonMetadataAsync(series, CancellationToken.None, removeManagedTags, removeManagedCollectionMemberships).ConfigureAwait(false);
+                await RebuildBrowserCacheAsync(CancellationToken.None).ConfigureAwait(false);
+                _seasonMetadataSyncStatus = _seasonMetadataSyncStatus with
+                {
+                    State = _seasonMetadataSyncStatus.Failed > 0 ? "CompletedWithErrors" : "Completed",
+                    CompletedAtUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Season metadata synchronization failed.");
+                _seasonMetadataSyncStatus = _seasonMetadataSyncStatus with
+                {
+                    State = "Failed",
+                    CompletedAtUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                    Error = ex.Message,
+                };
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _seasonMetadataSyncRunning, 0);
+            }
+        });
+        return _seasonMetadataSyncStatus;
     }
 
     public AnimeThemesStorageStatus GetStorageStatus()
@@ -334,7 +387,7 @@ public sealed class ThemeDownloader : IScheduledTask
         }
     }
 
-    private Task RebuildBrowserCacheCoreAsync(CancellationToken cancellationToken)
+    private async Task RebuildBrowserCacheCoreAsync(CancellationToken cancellationToken)
     {
         var records = new List<BrowserItemRecord>();
         var seasonRecords = new List<SeasonFinderRowRecord>();
@@ -342,14 +395,39 @@ public sealed class ThemeDownloader : IScheduledTask
         foreach (var entry in GetEnabledLibraryItemsWithLibraries())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            records.Add(BuildBrowserItemRecord(entry.Item, entry.LibraryId));
+            IReadOnlyList<BroadcastSeasonValue> broadcastSeasons = [];
             if (entry.Item is Series series)
             {
+                var state = _seasonFinderStore.GetSeasonAutomationState(series.Id.ToString("D"));
+                broadcastSeasons = GetBroadcastSeasons(state);
+                if (state.Rules.Count == 0)
+                {
+                    broadcastSeasons = await SynchronizeSeriesSeasonMetadataAsync(series, cancellationToken).ConfigureAwait(false);
+                }
+
                 seasonRecords.AddRange(GetSeasonItems(series)
                     .Where(IsSeasonEligibleForThemeMatching)
                     .Where(season => !string.IsNullOrWhiteSpace(season.Path))
                     .Select(season => BuildSeasonFinderRecord(series, season, entry.LibraryId)));
             }
+            else if (entry.Item is Movie movie)
+            {
+                var anime = await ResolveAnime(movie, cancellationToken, logMissingIds: false).ConfigureAwait(false);
+                var config = Plugin.Instance?.Configuration;
+                var broadcastSeason = config == null || anime == null
+                    ? null
+                    : SeasonMetadataPlanner.CreateBroadcastSeason(
+                        anime.Year,
+                        anime.Season,
+                        config.TagFormat,
+                        config.TagSeasonSpring,
+                        config.TagSeasonSummer,
+                        config.TagSeasonFall,
+                        config.TagSeasonWinter);
+                broadcastSeasons = broadcastSeason == null ? [] : [broadcastSeason];
+            }
+
+            records.Add(BuildBrowserItemRecord(entry.Item, entry.LibraryId, broadcastSeasons));
 
             libraryCounts.TryGetValue(entry.LibraryId, out var current);
             libraryCounts[entry.LibraryId] = (entry.LibraryName, current.Count + 1);
@@ -360,7 +438,6 @@ public sealed class ThemeDownloader : IScheduledTask
             libraryCounts.Select(pair => (pair.Key.ToString("D"), pair.Value.Name, pair.Value.Count)));
         _seasonFinderStore.ReplaceRows(seasonRecords);
         _logger.LogInformation("Rebuilt AnimeThemes Browser cache. Items={Count}, Seasons={SeasonCount}", records.Count, seasonRecords.Count);
-        return Task.CompletedTask;
     }
 
     private void RefreshBrowserCacheForItem(BaseItem item)
@@ -376,7 +453,10 @@ public sealed class ThemeDownloader : IScheduledTask
         }
 
         var libraryId = ResolveLibraryId(item);
-        _dataStore.UpsertBrowserItem(BuildBrowserItemRecord(item, libraryId));
+        var broadcastSeasons = item is Series seriesItem
+            ? GetBroadcastSeasons(_seasonFinderStore.GetSeasonAutomationState(seriesItem.Id.ToString("D")))
+            : [];
+        _dataStore.UpsertBrowserItem(BuildBrowserItemRecord(item, libraryId, broadcastSeasons));
     }
 
     private void ImportLegacyExtrasManifestForPath(string? itemPath, ref int manifests, ref int files)
@@ -391,7 +471,7 @@ public sealed class ThemeDownloader : IScheduledTask
         files += result.FilesImported;
     }
 
-    private BrowserItemRecord BuildBrowserItemRecord(BaseItem item, Guid? libraryId)
+    private BrowserItemRecord BuildBrowserItemRecord(BaseItem item, Guid? libraryId, IReadOnlyList<BroadcastSeasonValue>? broadcastSeasons = null)
     {
         var (videos, songs, extras, bytes) = CountLocalThemeFilesForBrowserItem(item);
         var directLink = item.ProviderIds.TryGetValue(Constants.AnimeThemesProviderId, out var slug) && !string.IsNullOrWhiteSpace(slug);
@@ -424,7 +504,9 @@ public sealed class ThemeDownloader : IScheduledTask
             HasLocalThemes = videos + songs + extras > 0,
             DateCreatedUtc = new DateTimeOffset(DateTime.SpecifyKind(item.DateCreated, DateTimeKind.Local)).ToUniversalTime(),
             LatestEpisodeDateUtc = item is Series series ? GetLatestEpisodeDateCreated(series)?.ToUniversalTime() : null,
-            LastRefreshedUtc = DateTimeOffset.UtcNow
+            LastRefreshedUtc = DateTimeOffset.UtcNow,
+            BroadcastSeasons = broadcastSeasons?.ToList() ?? [],
+            SeasonSummaries = item is Series browserSeries ? _seasonFinderStore.GetSeasonSummaries(browserSeries.Id.ToString("D")).ToList() : [],
         };
     }
 
@@ -454,8 +536,20 @@ public sealed class ThemeDownloader : IScheduledTask
             item is Series series ? GetLatestEpisodeDateCreated(series) : null,
             linkStatus,
             directLink,
-            string.Equals(seasonLinkStatus, "Manual", StringComparison.OrdinalIgnoreCase));
+            string.Equals(seasonLinkStatus, "Manual", StringComparison.OrdinalIgnoreCase),
+            item is Series browserSeries
+                ? GetBroadcastSeasons(_seasonFinderStore.GetSeasonAutomationState(browserSeries.Id.ToString("D"))).Select(i => i.Key).ToList()
+                : null,
+            item is Series summarySeries ? _seasonFinderStore.GetSeasonSummaries(summarySeries.Id.ToString("D")) : null);
     }
+
+    private static List<BroadcastSeasonValue> GetBroadcastSeasons(SeasonAutomationState state) =>
+        state.Rules
+            .Where(i => i.AnimeYear.HasValue && !string.IsNullOrWhiteSpace(i.AnimeSeason) && !string.IsNullOrWhiteSpace(i.BroadcastSeasonKey))
+            .Select(i => new BroadcastSeasonValue(i.BroadcastSeasonKey!, i.BroadcastSeasonLabel ?? i.BroadcastSeasonKey!, i.AnimeYear!.Value, i.AnimeSeason!))
+            .GroupBy(i => i.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(i => i.First())
+            .ToList();
 
     private (int Videos, int Songs, int Extras, long Bytes) CountLocalThemeFilesForBrowserItem(BaseItem item)
     {
@@ -798,11 +892,12 @@ public sealed class ThemeDownloader : IScheduledTask
         int? limit,
         string? searchTerm,
         string? status,
+        int? seasonNumber,
         string? sortBy,
         string? sortOrder)
     {
         EnsureBrowserCacheRebuildStarted();
-        return _seasonFinderStore.QueryRows(libraryId, startIndex, limit, searchTerm, status, sortBy, sortOrder);
+        return _seasonFinderStore.QueryRows(libraryId, startIndex, limit, searchTerm, status, seasonNumber, sortBy, sortOrder);
     }
 
     public async Task<IReadOnlyList<ThemeFinderSearchResult>> SearchThemeFinderAnimeAsync(
@@ -893,8 +988,9 @@ public sealed class ThemeDownloader : IScheduledTask
             [new SeasonThemeMappingChange(BuildSeasonThemeMappingTarget(series, season), mapping, request.Locked ? "Manual" : "Auto")]);
         var result = BuildSeasonMappingRow(series, season);
         _seasonFinderStore.UpsertRow(BuildSeasonFinderRecord(series, season, ResolveLibraryId(series)));
+        await SynchronizeSeriesSeasonMetadataAsync(series, cancellationToken).ConfigureAwait(false);
         RefreshBrowserCacheForItem(series);
-        return await Task.FromResult(result).ConfigureAwait(false);
+        return result;
     }
 
     public async Task<SeasonThemeMappingRow> DeleteSeasonThemeMappingAsync(Guid seasonItemId, CancellationToken cancellationToken)
@@ -909,8 +1005,9 @@ public sealed class ThemeDownloader : IScheduledTask
             [new SeasonThemeMappingChange(BuildSeasonThemeMappingTarget(series, season), null, "Delete")]);
         var result = BuildSeasonMappingRow(series, season);
         _seasonFinderStore.UpsertRow(BuildSeasonFinderRecord(series, season, ResolveLibraryId(series)));
+        await SynchronizeSeriesSeasonMetadataAsync(series, cancellationToken).ConfigureAwait(false);
         RefreshBrowserCacheForItem(series);
-        return await Task.FromResult(result).ConfigureAwait(false);
+        return result;
     }
 
     public async Task<SeasonThemeMappingImportResult> ImportSeasonThemeMappingsAsync(
@@ -980,6 +1077,7 @@ public sealed class ThemeDownloader : IScheduledTask
 
         foreach (var series in changedSeasons.Select(changed => changed.Series).DistinctBy(series => series.Id))
         {
+            await SynchronizeSeriesSeasonMetadataAsync(series, cancellationToken).ConfigureAwait(false);
             RefreshBrowserCacheForItem(series);
         }
 
@@ -2134,6 +2232,608 @@ public sealed class ThemeDownloader : IScheduledTask
         return GetEnabledLibraryItemsWithLibraries()
             .Select(i => i.Item)
             .ToList();
+    }
+
+    private async Task SynchronizeSeasonMetadataAsync(
+        List<Series> seriesItems,
+        CancellationToken cancellationToken,
+        bool removeManagedTags = false,
+        bool removeManagedCollectionMemberships = false)
+    {
+        for (var index = 0; index < seriesItems.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await SynchronizeSeriesSeasonMetadataAsync(
+                    seriesItems[index],
+                    cancellationToken,
+                    removeManagedTags,
+                    removeManagedCollectionMemberships).ConfigureAwait(false);
+                if (string.Equals(_seasonMetadataSyncStatus.State, "Running", StringComparison.Ordinal))
+                {
+                    _seasonMetadataSyncStatus = _seasonMetadataSyncStatus with { Succeeded = _seasonMetadataSyncStatus.Succeeded + 1 };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Season metadata synchronization failed for {SeriesName}.", seriesItems[index].Name);
+                AddSeasonMetadataSyncError(seriesItems[index], null, "Series", ex);
+            }
+
+            if (string.Equals(_seasonMetadataSyncStatus.State, "Running", StringComparison.Ordinal))
+            {
+                _seasonMetadataSyncStatus = _seasonMetadataSyncStatus with { Processed = index + 1 };
+            }
+        }
+    }
+
+    private async Task<IReadOnlyList<BroadcastSeasonValue>> SynchronizeSeriesSeasonMetadataAsync(
+        Series series,
+        CancellationToken cancellationToken,
+        bool removeManagedTags = false,
+        bool removeManagedCollectionMemberships = false)
+    {
+        await SeasonMetadataSyncGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await SynchronizeSeriesSeasonMetadataCoreAsync(
+                series,
+                removeManagedTags,
+                removeManagedCollectionMemberships,
+                cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            SeasonMetadataSyncGate.Release();
+        }
+    }
+
+    private async Task<IReadOnlyList<BroadcastSeasonValue>> SynchronizeSeriesSeasonMetadataCoreAsync(
+        Series series,
+        bool removeManagedTags,
+        bool removeManagedCollectionMemberships,
+        CancellationToken cancellationToken)
+    {
+        var config = Plugin.Instance?.Configuration
+            ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
+        _seasonMetadataRuleErrors.Clear();
+        var previousAutomation = _seasonFinderStore.GetSeasonAutomationState(series.Id.ToString("D"));
+        var previous = BuildLegacySeasonMetadataState(
+            previousAutomation,
+            _dataStore.GetSeasonMetadataState(series.Id.ToString("D")));
+        var seasons = GetSeasonItems(series).Where(IsSeasonEligibleForThemeMatching).ToList();
+        var seriesAnime = await ResolveAnime(series, cancellationToken, logMissingIds: false).ConfigureAwait(false);
+        var automaticSeasonAnime = seriesAnime == null
+            ? new Dictionary<Guid, AnimeThemesAnime>()
+            : await BuildAutomaticSeasonAnimeMapAsync(series, seasons, seriesAnime, cancellationToken).ConfigureAwait(false);
+        var resolved = new List<(Season Season, BroadcastSeasonValue BroadcastSeason)>();
+        foreach (var season in seasons)
+        {
+            automaticSeasonAnime.TryGetValue(season.Id, out var automaticAnime);
+            var matchState = BuildSeasonThemeMatchState(series, season, automaticAnime);
+            var resolution = await ResolveSeasonBrowserAnimeAsync(series, season, seriesAnime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false);
+            if (resolution.Anime == null)
+            {
+                if (!string.Equals(matchState.Status, "Unmatched", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning("Keeping previous season metadata for {SeriesName} because {SeasonName} could not be resolved.", series.Name, season.Name);
+                    return previous.BroadcastSeasons;
+                }
+
+                continue;
+            }
+
+            var broadcastSeason = SeasonMetadataPlanner.CreateBroadcastSeason(
+                resolution.Anime.Year,
+                resolution.Anime.Season,
+                config.TagFormat,
+                config.TagSeasonSpring,
+                config.TagSeasonSummer,
+                config.TagSeasonFall,
+                config.TagSeasonWinter);
+            if (broadcastSeason != null)
+            {
+                resolved.Add((season, broadcastSeason));
+            }
+        }
+
+        var desiredTags = new Dictionary<Guid, HashSet<string>>();
+        var generatedTags = new Dictionary<Guid, HashSet<string>>();
+        foreach (var entry in resolved)
+        {
+            var tags = SeasonMetadataPlanner.BuildTags(entry.BroadcastSeason);
+            AddTags(generatedTags, series.Id, tags);
+            AddTags(generatedTags, entry.Season.Id, tags);
+            if (config.TagsEnabled)
+            {
+                if (SeasonMetadataPlanner.AppliesToSeries(config.SeasonTagTarget))
+                {
+                    AddTags(desiredTags, series.Id, tags);
+                }
+
+                if (SeasonMetadataPlanner.AppliesToSeason(config.SeasonTagTarget))
+                {
+                    AddTags(desiredTags, entry.Season.Id, tags);
+                }
+            }
+        }
+
+        var managedTags = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var tagItems = new Dictionary<Guid, BaseItem> { [series.Id] = series };
+        foreach (var season in seasons)
+        {
+            tagItems[season.Id] = season;
+        }
+
+        foreach (var item in tagItems.Values)
+        {
+            previous.ManagedTags.TryGetValue(item.Id.ToString("D"), out var oldManagedTags);
+            if (!config.TagsEnabled && !removeManagedTags)
+            {
+                if (oldManagedTags?.Count > 0)
+                {
+                    managedTags[item.Id.ToString("D")] = oldManagedTags.ToList();
+                }
+
+                continue;
+            }
+
+            desiredTags.TryGetValue(item.Id, out var itemDesiredTags);
+            generatedTags.TryGetValue(item.Id, out var itemGeneratedTags);
+            try
+            {
+                var newlyManaged = await ReconcileTagsAsync(
+                    item,
+                    item is Season ? series : item.GetParent(),
+                    oldManagedTags ?? [],
+                    itemDesiredTags ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                    itemGeneratedTags ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                    cancellationToken).ConfigureAwait(false);
+                if (newlyManaged.Count > 0)
+                {
+                    managedTags[item.Id.ToString("D")] = newlyManaged;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Season tag synchronization failed for {SeriesName} / {ItemName}.", series.Name, item.Name);
+                AddSeasonMetadataSyncError(series, item is Season ? "id:" + item.Id.ToString("D") : null, "Tag", ex);
+                if (oldManagedTags?.Count > 0)
+                {
+                    managedTags[item.Id.ToString("D")] = oldManagedTags.ToList();
+                }
+            }
+        }
+
+        var memberships = await ReconcileCollectionsAsync(
+            series,
+            resolved,
+            previous.CollectionMemberships,
+            config,
+            removeManagedCollectionMemberships,
+            cancellationToken).ConfigureAwait(false);
+        var broadcastSeasons = resolved
+            .Select(i => i.BroadcastSeason)
+            .GroupBy(i => i.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(i => i.First())
+            .ToList();
+        var automationState = BuildSeasonAutomationState(
+            series,
+            resolved,
+            automaticSeasonAnime,
+            managedTags,
+            memberships,
+            previousAutomation);
+        PreserveDisabledAutomationState(
+            automationState,
+            previousAutomation,
+            preserveTags: !config.TagsEnabled && !removeManagedTags,
+            preserveCollections: !config.SeasonCollectionsEnabled && !removeManagedCollectionMemberships);
+        _seasonFinderStore.SaveSeasonAutomationState(automationState);
+        RefreshBrowserCacheForItem(series);
+        return broadcastSeasons;
+
+        static void AddTags(Dictionary<Guid, HashSet<string>> target, Guid itemId, IReadOnlyList<string> tags)
+        {
+            if (!target.TryGetValue(itemId, out var values))
+            {
+                values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                target[itemId] = values;
+            }
+
+            values.UnionWith(tags.Where(i => !string.IsNullOrWhiteSpace(i)));
+        }
+    }
+
+    private SeasonAutomationState BuildSeasonAutomationState(
+        Series series,
+        IReadOnlyList<(Season Season, BroadcastSeasonValue BroadcastSeason)> resolved,
+        Dictionary<Guid, AnimeThemesAnime> automaticSeasonAnime,
+        IReadOnlyDictionary<string, List<string>> managedTags,
+        IReadOnlyList<SeasonCollectionMembershipState> memberships,
+        SeasonAutomationState previous)
+    {
+        var now = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+        var state = new SeasonAutomationState { SeriesItemId = series.Id.ToString("D") };
+        foreach (var entry in resolved)
+        {
+            automaticSeasonAnime.TryGetValue(entry.Season.Id, out var automaticAnime);
+            var match = BuildSeasonThemeMatchState(series, entry.Season, automaticAnime);
+            var ruleKey = "id:" + entry.Season.Id.ToString("D");
+            _seasonMetadataRuleErrors.TryGetValue(ruleKey, out var error);
+            state.Rules.Add(new SeasonAutomationRuleRecord
+            {
+                RuleKey = ruleKey, SeriesItemId = series.Id.ToString("D"), SeasonItemId = entry.Season.Id.ToString("D"),
+                SeasonName = entry.Season.Name ?? $"Season {entry.Season.IndexNumber}", SeasonNumber = entry.Season.IndexNumber,
+                AnimeThemesSlug = match.AnimeThemesSlug, AniListId = match.AniListId, MyAnimeListId = match.MyAnimeListId,
+                AnimeYear = entry.BroadcastSeason.Year, AnimeSeason = entry.BroadcastSeason.Season,
+                BroadcastSeasonKey = entry.BroadcastSeason.Key, BroadcastSeasonLabel = entry.BroadcastSeason.Label,
+                Source = match.Source, ResolvedAtUtc = now, LastError = error, UpdatedAtUtc = now,
+            });
+        }
+
+        foreach (var pair in managedTags)
+        {
+            foreach (var entry in resolved.Where(entry =>
+                         string.Equals(pair.Key, series.Id.ToString("D"), StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(pair.Key, entry.Season.Id.ToString("D"), StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (var tag in pair.Value.Intersect(SeasonMetadataPlanner.BuildTags(entry.BroadcastSeason), StringComparer.OrdinalIgnoreCase))
+                {
+                    state.Tags.Add(new SeasonAutomationTagRecord
+                    {
+                        RuleKey = "id:" + entry.Season.Id.ToString("D"), TargetItemId = pair.Key,
+                        TargetItemType = string.Equals(pair.Key, series.Id.ToString("D"), StringComparison.OrdinalIgnoreCase) ? "Series" : "Season",
+                        TagName = tag, Source = "SeasonMetadata", AddedByPlugin = true,
+                        LastAppliedAtUtc = now, UpdatedAtUtc = now,
+                    });
+                }
+            }
+        }
+
+        foreach (var membership in memberships)
+        {
+            var entry = resolved.FirstOrDefault(i =>
+                string.Equals(i.BroadcastSeason.Key, membership.BroadcastSeasonKey, StringComparison.OrdinalIgnoreCase) &&
+                (string.Equals(i.Season.Id.ToString("D"), membership.ItemId, StringComparison.OrdinalIgnoreCase) || i.Season.IndexNumber == 1));
+            if (entry.Season == null)
+            {
+                continue;
+            }
+
+            state.Collections.Add(new ManagedSeasonCollectionRecord
+            {
+                CollectionKey = membership.BroadcastSeasonKey, CollectionName = membership.CollectionName,
+                CollectionItemId = membership.CollectionId,
+                IsPluginCreated = IsPluginManagedCollection(membership.CollectionId, membership.BroadcastSeasonKey) ||
+                    previous.Collections.FirstOrDefault(i => string.Equals(i.CollectionKey, membership.BroadcastSeasonKey, StringComparison.OrdinalIgnoreCase))?.IsPluginCreated == true,
+                UpdatedAtUtc = now,
+            });
+            state.CollectionMembers.Add(new ManagedSeasonCollectionMemberRecord
+            {
+                CollectionKey = membership.BroadcastSeasonKey, RuleKey = "id:" + entry.Season.Id.ToString("D"),
+                TargetItemId = membership.ItemId,
+                TargetItemType = string.Equals(membership.ItemId, series.Id.ToString("D"), StringComparison.OrdinalIgnoreCase) ? "Series" : "Season",
+                AddedByPlugin = membership.AddedByPlugin, LastAppliedAtUtc = now, UpdatedAtUtc = now,
+            });
+        }
+
+        state.Collections = state.Collections.GroupBy(i => i.CollectionKey, StringComparer.OrdinalIgnoreCase).Select(i => i.First()).ToList();
+        foreach (var entry in resolved)
+        {
+            var ruleKey = "id:" + entry.Season.Id.ToString("D");
+            if (!_seasonMetadataRuleErrors.TryGetValue(ruleKey, out var error))
+            {
+                continue;
+            }
+
+            var collectionSeason = SeasonMetadataPlanner.CreateBroadcastSeason(
+                entry.BroadcastSeason.Year,
+                entry.BroadcastSeason.Season,
+                Plugin.Instance?.Configuration?.SeasonCollectionFormat ?? "{Season} {Year}",
+                Plugin.Instance?.Configuration?.TagSeasonSpring ?? "Spring",
+                Plugin.Instance?.Configuration?.TagSeasonSummer ?? "Summer",
+                Plugin.Instance?.Configuration?.TagSeasonFall ?? "Fall",
+                Plugin.Instance?.Configuration?.TagSeasonWinter ?? "Winter");
+            if (collectionSeason != null && state.Collections.All(i => !string.Equals(i.CollectionKey, collectionSeason.Key, StringComparison.OrdinalIgnoreCase)))
+            {
+                var prior = previous.Collections.FirstOrDefault(i => string.Equals(i.CollectionKey, collectionSeason.Key, StringComparison.OrdinalIgnoreCase));
+                state.Collections.Add(new ManagedSeasonCollectionRecord
+                {
+                    CollectionKey = collectionSeason.Key, CollectionName = collectionSeason.Label,
+                    CollectionItemId = prior?.CollectionItemId, IsPluginCreated = prior?.IsPluginCreated == true,
+                    LastError = error, UpdatedAtUtc = now,
+                });
+            }
+        }
+
+        return state;
+    }
+
+    private bool IsPluginManagedCollection(string collectionId, string collectionKey)
+    {
+        const string ProviderKey = "AnimeThemesBroadcastSeason";
+        return Guid.TryParse(collectionId, out var id) &&
+            _libraryManager.GetItemList(new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { BaseItemKind.BoxSet },
+                Recursive = true,
+            }).OfType<BoxSet>().Any(i => i.Id == id && i.ProviderIds != null &&
+                i.ProviderIds.TryGetValue(ProviderKey, out var key) && string.Equals(key, collectionKey, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static SeasonMetadataState BuildLegacySeasonMetadataState(SeasonAutomationState automation, SeasonMetadataState? legacy)
+    {
+        if (automation.Rules.Count == 0)
+        {
+            return legacy ?? new SeasonMetadataState { SeriesItemId = automation.SeriesItemId };
+        }
+
+        var collections = automation.Collections.ToDictionary(i => i.CollectionKey, StringComparer.OrdinalIgnoreCase);
+        return new SeasonMetadataState
+        {
+            SeriesItemId = automation.SeriesItemId,
+            ManagedTags = automation.Tags.Where(i => i.AddedByPlugin).GroupBy(i => i.TargetItemId, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(i => i.Key, i => i.Select(t => t.TagName).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase),
+            CollectionMemberships = automation.CollectionMembers.Select(member =>
+            {
+                collections.TryGetValue(member.CollectionKey, out var collection);
+                return new SeasonCollectionMembershipState
+                {
+                    BroadcastSeasonKey = member.CollectionKey, CollectionId = collection?.CollectionItemId ?? string.Empty,
+                    CollectionName = collection?.CollectionName ?? member.CollectionKey, ItemId = member.TargetItemId,
+                    AddedByPlugin = member.AddedByPlugin,
+                };
+            }).ToList(),
+            BroadcastSeasons = automation.Rules.Where(i => i.AnimeYear.HasValue && !string.IsNullOrWhiteSpace(i.AnimeSeason))
+                .Select(i => new BroadcastSeasonValue(i.BroadcastSeasonKey ?? string.Empty, i.BroadcastSeasonLabel ?? string.Empty, i.AnimeYear!.Value, i.AnimeSeason!))
+                .GroupBy(i => i.Key, StringComparer.OrdinalIgnoreCase).Select(i => i.First()).ToList(),
+        };
+    }
+
+    private static void PreserveDisabledAutomationState(
+        SeasonAutomationState current,
+        SeasonAutomationState previous,
+        bool preserveTags,
+        bool preserveCollections)
+    {
+        if (preserveTags)
+        {
+            current.Tags.AddRange(previous.Tags);
+        }
+
+        if (preserveCollections)
+        {
+            current.Collections.AddRange(previous.Collections);
+            current.CollectionMembers.AddRange(previous.CollectionMembers);
+        }
+
+        var referencedRuleKeys = current.Tags.Select(i => i.RuleKey)
+            .Concat(current.CollectionMembers.Select(i => i.RuleKey))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        current.Rules.AddRange(previous.Rules.Where(i => referencedRuleKeys.Contains(i.RuleKey)));
+        current.Rules = current.Rules.GroupBy(i => i.RuleKey, StringComparer.OrdinalIgnoreCase).Select(i => i.First()).ToList();
+        current.Tags = current.Tags.GroupBy(i => i.RuleKey + "|" + i.TargetItemId + "|" + i.TagName, StringComparer.OrdinalIgnoreCase).Select(i => i.First()).ToList();
+        current.Collections = current.Collections.GroupBy(i => i.CollectionKey, StringComparer.OrdinalIgnoreCase).Select(i => i.First()).ToList();
+        current.CollectionMembers = current.CollectionMembers.GroupBy(i => i.CollectionKey + "|" + i.TargetItemId, StringComparer.OrdinalIgnoreCase).Select(i => i.First()).ToList();
+    }
+
+    private async Task<List<string>> ReconcileTagsAsync(
+        BaseItem item,
+        BaseItem? parent,
+        IReadOnlyList<string> oldManagedTags,
+        HashSet<string> desiredTags,
+        HashSet<string> generatedTags,
+        CancellationToken cancellationToken)
+    {
+        var current = (item.Tags ?? []).ToList();
+        var changed = false;
+        foreach (var oldTag in oldManagedTags.Where(i => !desiredTags.Contains(i)))
+        {
+            changed |= current.RemoveAll(i => string.Equals(i, oldTag, StringComparison.OrdinalIgnoreCase)) > 0;
+        }
+
+        foreach (var generatedTag in generatedTags.Where(i => !desiredTags.Contains(i)))
+        {
+            changed |= current.RemoveAll(i => string.Equals(i, generatedTag, StringComparison.OrdinalIgnoreCase)) > 0;
+        }
+
+        var managed = new List<string>();
+        foreach (var tag in desiredTags)
+        {
+            var existed = current.Any(i => string.Equals(i, tag, StringComparison.OrdinalIgnoreCase));
+            if (!existed)
+            {
+                current.Add(tag);
+                changed = true;
+                managed.Add(tag);
+            }
+            else
+            {
+                managed.Add(tag);
+            }
+        }
+
+        if (changed)
+        {
+            item.Tags = current.ToArray();
+            var updateParent = parent ?? item.GetParent() ?? _libraryManager.RootFolder;
+            await _libraryManager.UpdateItemAsync(item, updateParent, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+        }
+
+        return managed;
+    }
+
+    private async Task<List<SeasonCollectionMembershipState>> ReconcileCollectionsAsync(
+        Series series,
+        IReadOnlyList<(Season Season, BroadcastSeasonValue BroadcastSeason)> resolved,
+        IReadOnlyList<SeasonCollectionMembershipState> previous,
+        PluginConfiguration config,
+        bool removeManagedCollectionMemberships,
+        CancellationToken cancellationToken)
+    {
+        var next = !config.SeasonCollectionsEnabled && !removeManagedCollectionMemberships
+            ? previous.ToList()
+            : new List<SeasonCollectionMembershipState>();
+        if (config.SeasonCollectionsEnabled)
+        {
+            foreach (var entry in resolved)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                var collectionSeason = SeasonMetadataPlanner.CreateBroadcastSeason(
+                    entry.BroadcastSeason.Year,
+                    entry.BroadcastSeason.Season,
+                    config.SeasonCollectionFormat,
+                    config.TagSeasonSpring,
+                    config.TagSeasonSummer,
+                    config.TagSeasonFall,
+                    config.TagSeasonWinter);
+                if (collectionSeason == null)
+                {
+                    continue;
+                }
+
+                BaseItem member = SeasonMetadataPlanner.UsesSeriesForCollection(entry.Season.IndexNumber, config.SeasonOneCollectionUseSeries) ? series : entry.Season;
+                var old = previous.FirstOrDefault(i =>
+                    string.Equals(i.BroadcastSeasonKey, collectionSeason.Key, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(i.ItemId, member.Id.ToString("D"), StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(i.CollectionName, collectionSeason.Label, StringComparison.OrdinalIgnoreCase));
+                var collection = await GetOrCreateSeasonCollectionAsync(collectionSeason, cancellationToken).ConfigureAwait(false);
+                var contains = collection.ContainsLinkedChildByItemId(member.Id);
+                var addedByPlugin = old?.AddedByPlugin == true;
+                if (!contains)
+                {
+                    await _collectionManager.AddToCollectionAsync(collection.Id, new[] { member.Id }).ConfigureAwait(false);
+                    addedByPlugin = true;
+                }
+
+                next.Add(new SeasonCollectionMembershipState
+                {
+                    BroadcastSeasonKey = collectionSeason.Key,
+                    CollectionId = collection.Id.ToString("D"),
+                    CollectionName = collection.Name ?? collectionSeason.Label,
+                    ItemId = member.Id.ToString("D"),
+                    AddedByPlugin = addedByPlugin,
+                });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Season collection synchronization failed for {SeriesName} / {SeasonName}.", series.Name, entry.Season.Name);
+                    AddSeasonMetadataSyncError(series, "id:" + entry.Season.Id.ToString("D"), "Collection", ex);
+                    next.AddRange(previous.Where(i =>
+                        string.Equals(i.BroadcastSeasonKey, entry.BroadcastSeason.Key, StringComparison.OrdinalIgnoreCase) &&
+                        (string.Equals(i.ItemId, entry.Season.Id.ToString("D"), StringComparison.OrdinalIgnoreCase) ||
+                         (entry.Season.IndexNumber == 1 && string.Equals(i.ItemId, series.Id.ToString("D"), StringComparison.OrdinalIgnoreCase)))));
+                }
+            }
+        }
+
+        var collections = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = new[] { BaseItemKind.BoxSet },
+            Recursive = true,
+        }).OfType<BoxSet>().ToList();
+        foreach (var stale in previous.Where(old => (config.SeasonCollectionsEnabled || removeManagedCollectionMemberships) && old.AddedByPlugin && !next.Any(current =>
+                     string.Equals(current.CollectionId, old.CollectionId, StringComparison.OrdinalIgnoreCase) &&
+                     string.Equals(current.ItemId, old.ItemId, StringComparison.OrdinalIgnoreCase))))
+        {
+            if (Guid.TryParse(stale.CollectionId, out var collectionId) &&
+                collections.Any(i => i.Id == collectionId) &&
+                Guid.TryParse(stale.ItemId, out var itemId) &&
+                _libraryManager.GetItemById(itemId) != null)
+            {
+                await _collectionManager.RemoveFromCollectionAsync(collectionId, new[] { itemId }).ConfigureAwait(false);
+            }
+        }
+
+        return next
+            .GroupBy(i => i.CollectionId + "|" + i.ItemId, StringComparer.OrdinalIgnoreCase)
+            .Select(i => i.First())
+            .ToList();
+    }
+
+    private async Task<BoxSet> GetOrCreateSeasonCollectionAsync(BroadcastSeasonValue broadcastSeason, CancellationToken cancellationToken)
+    {
+        const string ProviderKey = "AnimeThemesBroadcastSeason";
+        var collections = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = new[] { BaseItemKind.BoxSet },
+            Recursive = true,
+        }).OfType<BoxSet>().ToList();
+        var managed = collections.FirstOrDefault(i =>
+            i.ProviderIds.TryGetValue(ProviderKey, out var key) && string.Equals(key, broadcastSeason.Key, StringComparison.OrdinalIgnoreCase));
+        if (managed != null)
+        {
+            if (!string.Equals(managed.Name, broadcastSeason.Label, StringComparison.Ordinal))
+            {
+                managed.Name = broadcastSeason.Label;
+                var parent = managed.GetParent()
+                    ?? await _collectionManager.GetCollectionsFolder(true).ConfigureAwait(false)
+                    ?? _libraryManager.RootFolder;
+                await _libraryManager.UpdateItemAsync(managed, parent, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+            }
+
+            return managed;
+        }
+
+        var existing = collections.FirstOrDefault(i => string.Equals(i.Name, broadcastSeason.Label, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+        {
+            return existing;
+        }
+
+        var created = await _collectionManager.CreateCollectionAsync(new CollectionCreationOptions
+        {
+            Name = broadcastSeason.Label,
+            ProviderIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [ProviderKey] = broadcastSeason.Key },
+            ItemIdList = Array.Empty<string>(),
+        }).ConfigureAwait(false);
+        if (created != null)
+        {
+            return created;
+        }
+
+        collections = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = new[] { BaseItemKind.BoxSet },
+            Recursive = true,
+        }).OfType<BoxSet>().ToList();
+        return collections.FirstOrDefault(i =>
+                   i.ProviderIds != null &&
+                   i.ProviderIds.TryGetValue(ProviderKey, out var key) &&
+                   string.Equals(key, broadcastSeason.Key, StringComparison.OrdinalIgnoreCase))
+               ?? collections.FirstOrDefault(i => string.Equals(i.Name, broadcastSeason.Label, StringComparison.OrdinalIgnoreCase))
+               ?? throw new InvalidOperationException($"Jellyfin did not return or persist collection '{broadcastSeason.Label}'.");
+    }
+
+    private void AddSeasonMetadataSyncError(Series series, string? ruleKey, string stage, Exception exception)
+    {
+        if (!string.IsNullOrWhiteSpace(ruleKey))
+        {
+            _seasonMetadataRuleErrors[ruleKey] = stage + ": " + exception.GetBaseException().Message;
+        }
+
+        if (!string.Equals(_seasonMetadataSyncStatus.State, "Running", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var errors = (_seasonMetadataSyncStatus.Errors ?? []).Take(19).ToList();
+        errors.Add(new SeasonMetadataSyncError(
+            series.Id.ToString("D"),
+            series.Name,
+            ruleKey,
+            stage,
+            exception.GetBaseException().Message));
+        _seasonMetadataSyncStatus = _seasonMetadataSyncStatus with
+        {
+            Failed = _seasonMetadataSyncStatus.Failed + 1,
+            Error = errors[0].Message,
+            Errors = errors,
+        };
     }
 
     private List<(BaseItem Item, Guid LibraryId, string? LibraryName)> GetEnabledLibraryItemsWithLibraries()

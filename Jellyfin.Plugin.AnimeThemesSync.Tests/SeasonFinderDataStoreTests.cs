@@ -24,17 +24,22 @@ public sealed class SeasonFinderDataStoreTests
                 CreateRow("cccccccc-cccc-cccc-cccc-cccccccccccc", "Beta", 3, "Unmatched", null),
             });
 
-            var first = store.QueryRows(null, 0, 2, null, "all", "seriesName", "asc");
+            var first = store.QueryRows(null, 0, 2, null, "all", null, "seriesName", "asc");
             Assert.True(first.CacheReady);
             Assert.Equal(3, first.TotalRecordCount);
             Assert.Equal(2, first.Items.Count);
             Assert.Equal("Alpha", first.Items[0].SeriesName);
+            Assert.Equal(new[] { 1, 2, 3 }, first.SeasonNumbers);
 
-            var automatic = store.QueryRows(null, 0, 80, null, "auto", "seriesName", "asc");
+            var seasonTwo = store.QueryRows(null, 0, 80, null, "all", 2, "seriesName", "asc");
+            Assert.Single(seasonTwo.Items);
+            Assert.Equal(2, seasonTwo.Items[0].SeasonNumber);
+
+            var automatic = store.QueryRows(null, 0, 80, null, "auto", null, "seriesName", "asc");
             Assert.Single(automatic.Items);
             Assert.Equal("Direct", automatic.Items[0].Status);
 
-            var search = store.QueryRows(null, 0, 80, "chosen", "all", "seriesName", "asc");
+            var search = store.QueryRows(null, 0, 80, "chosen", "all", null, "seriesName", "asc");
             Assert.Single(search.Items);
             Assert.Equal("Zeta", search.Items[0].SeriesName);
 
@@ -146,6 +151,67 @@ public sealed class SeasonFinderDataStoreTests
     }
 
     [Fact]
+    public void AutomationState_PersistsNormalizedRulesTagsAndCollectionMembers()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var now = DateTimeOffset.UtcNow.ToString("O");
+            store.SaveSeasonAutomationState(new SeasonAutomationState
+            {
+                SeriesItemId = "series-1",
+                Rules =
+                [
+                    new SeasonAutomationRuleRecord
+                    {
+                        RuleKey = "id:season-2", SeriesItemId = "series-1", SeasonItemId = "season-2",
+                        SeasonName = "Season 2", SeasonNumber = 2, AnimeYear = 2024, AnimeSeason = "summer",
+                        BroadcastSeasonKey = "2024-summer", BroadcastSeasonLabel = "Summer 2024",
+                        Source = "SeasonThemeMappings", UpdatedAtUtc = now,
+                    },
+                ],
+                Tags =
+                [
+                    new SeasonAutomationTagRecord
+                    {
+                        RuleKey = "id:season-2", TargetItemId = "series-1", TargetItemType = "Series",
+                        TagName = "Summer 2024", AddedByPlugin = true, UpdatedAtUtc = now,
+                    },
+                ],
+                Collections =
+                [
+                    new ManagedSeasonCollectionRecord
+                    {
+                        CollectionKey = "2024-summer", CollectionName = "Summer 2024",
+                        CollectionItemId = "collection-1", UpdatedAtUtc = now,
+                    },
+                ],
+                CollectionMembers =
+                [
+                    new ManagedSeasonCollectionMemberRecord
+                    {
+                        CollectionKey = "2024-summer", RuleKey = "id:season-2", TargetItemId = "season-2",
+                        TargetItemType = "Season", AddedByPlugin = true, UpdatedAtUtc = now,
+                    },
+                ],
+            });
+
+            var reopened = CreateStore(directory).GetSeasonAutomationState("series-1");
+            Assert.Single(reopened.Rules);
+            Assert.Single(reopened.Tags);
+            Assert.Single(reopened.Collections);
+            Assert.Single(reopened.CollectionMembers);
+            var summary = Assert.Single(CreateStore(directory).GetSeasonSummaries("series-1"));
+            Assert.Equal("Summer 2024", summary.BroadcastSeasonLabel);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
     public void LegacyMappings_DeduplicateWithLockedMappingPriority()
     {
         var directory = CreateTempDirectory();
@@ -212,12 +278,12 @@ public sealed class SeasonFinderDataStoreTests
                 CreateRow(firstId, "Alpha", 1, "Unmatched", null),
                 CreateRow("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "Beta", 2, "Unmatched", null),
             });
-            var before = store.QueryRows(null, 0, 80, null, "all", "seriesName", "asc").CacheVersion;
+            var before = store.QueryRows(null, 0, 80, null, "all", null, "seriesName", "asc").CacheVersion;
             Thread.Sleep(2);
 
             store.UpsertRow(CreateRow(firstId, "Alpha", 1, "Manual", "alpha"));
 
-            var after = store.QueryRows(null, 0, 80, null, "all", "seriesName", "asc");
+            var after = store.QueryRows(null, 0, 80, null, "all", null, "seriesName", "asc");
             Assert.Equal(2, after.TotalRecordCount);
             Assert.NotEqual(before, after.CacheVersion);
             Assert.Equal("Manual", after.Items[0].Status);

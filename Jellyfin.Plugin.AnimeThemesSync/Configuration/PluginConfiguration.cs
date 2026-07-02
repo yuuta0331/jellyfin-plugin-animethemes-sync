@@ -14,7 +14,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Configuration;
 /// </summary>
 public class PluginConfiguration : BasePluginConfiguration
 {
-    public const int CurrentConfigurationVersion = 5;
+    public const int CurrentConfigurationVersion = 8;
 
     private int _maxConcurrentDownloads = 1;
     private string _tagSeasonSpring = "Spring";
@@ -22,6 +22,7 @@ public class PluginConfiguration : BasePluginConfiguration
     private string _tagSeasonFall = "Fall";
     private string _tagSeasonWinter = "Winter";
     private string _tagFormat = "{Season} {Year}";
+    private string _seasonCollectionFormat = "{Season} {Year}";
     private string _extrasFileNameFormat = ThemeFilePlanner.DefaultExtrasFileNameFormat;
     private bool _legacyConfigurationLoaded;
 
@@ -56,6 +57,10 @@ public class PluginConfiguration : BasePluginConfiguration
         ExtrasFileNameFormat = ThemeFilePlanner.DefaultExtrasFileNameFormat;
         SeasonThemeDownloadsEnabled = true;
         TagsEnabled = true;
+        SeasonTagTarget = SeasonTagTarget.Series;
+        SeasonCollectionsEnabled = false;
+        SeasonOneCollectionUseSeries = false;
+        SeasonCollectionFormat = "{Season} {Year}";
         SeasonThemeMappings = [];
         TagLocalization = "None";
         Series = CreateDefaultMediaTypeConfig();
@@ -111,6 +116,18 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool SeasonThemeDownloadsEnabled { get; set; }
 
     public bool TagsEnabled { get; set; }
+
+    public SeasonTagTarget SeasonTagTarget { get; set; }
+
+    public bool SeasonCollectionsEnabled { get; set; }
+
+    public bool SeasonOneCollectionUseSeries { get; set; }
+
+    public string SeasonCollectionFormat
+    {
+        get => _seasonCollectionFormat;
+        set => _seasonCollectionFormat = string.IsNullOrWhiteSpace(value) ? "{Season} {Year}" : value;
+    }
 
     public List<SeasonThemeMapping> SeasonThemeMappings { get; set; }
 
@@ -416,6 +433,12 @@ public class PluginConfiguration : BasePluginConfiguration
         if (SeasonThemeMappings == null)
         {
             SeasonThemeMappings = [];
+            changed = true;
+        }
+
+        if (!Enum.IsDefined(typeof(SeasonTagTarget), SeasonTagTarget))
+        {
+            SeasonTagTarget = SeasonTagTarget.Series;
             changed = true;
         }
 

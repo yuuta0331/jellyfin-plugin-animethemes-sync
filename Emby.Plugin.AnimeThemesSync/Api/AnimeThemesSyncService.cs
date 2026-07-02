@@ -8,6 +8,7 @@ using AnimeThemesSync.Shared.Services;
 using Emby.Plugin.AnimeThemesSync.ScheduledTasks;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.IO;
@@ -76,6 +77,20 @@ public class GetAnimeThemesItems : IReturn<ThemeBrowserItemsPage>
     public string? ItemType { get; set; }
     public string? LinkFilter { get; set; }
     public string? SavedFilter { get; set; }
+    public string? BroadcastSeason { get; set; }
+}
+
+[Route("/AnimeThemesSync/SeasonMetadata/Sync", "POST", Summary = "Starts season metadata synchronization.")]
+public class StartAnimeThemesSeasonMetadataSync : IReturn<SeasonMetadataSyncStatus>
+{
+    public bool RemoveManagedTags { get; set; }
+
+    public bool RemoveManagedCollectionMemberships { get; set; }
+}
+
+[Route("/AnimeThemesSync/SeasonMetadata/Sync", "GET", Summary = "Gets season metadata synchronization status.")]
+public class GetAnimeThemesSeasonMetadataSync : IReturn<SeasonMetadataSyncStatus>
+{
 }
 
 [Route("/AnimeThemesSync/Storage", "GET", Summary = "Gets AnimeThemes Sync storage status.")]
@@ -121,6 +136,7 @@ public class GetAnimeThemesCleanupFiles : IReturn<LocalMediaCleanupScanPage>
     public int? StartIndex { get; set; }
     public int? Limit { get; set; }
     public string? Status { get; set; }
+
     public string? Sources { get; set; }
     public string? Kinds { get; set; }
     public string? Library { get; set; }
@@ -163,6 +179,8 @@ public class GetAnimeThemesSeasonFinder : IReturn<SeasonFinderItemsPage>
     public string? SearchTerm { get; set; }
 
     public string? Status { get; set; }
+
+    public int? SeasonNumber { get; set; }
 
     public string? SortBy { get; set; }
 
@@ -354,9 +372,10 @@ public class AnimeThemesSyncService : IService, IRequiresRequest
         ILogManager logManager,
         IMediaEncoder mediaEncoder,
         IApplicationPaths applicationPaths,
+        ICollectionManager collectionManager,
         IHttpResultFactory httpResultFactory)
     {
-        _themeDownloader = new ThemeDownloader(libraryManager, fileSystem, logManager, mediaEncoder, applicationPaths);
+        _themeDownloader = new ThemeDownloader(libraryManager, fileSystem, logManager, mediaEncoder, applicationPaths, collectionManager);
         _httpResultFactory = httpResultFactory;
     }
 
@@ -378,7 +397,20 @@ public class AnimeThemesSyncService : IService, IRequiresRequest
             request.SearchTerm,
             request.ItemType,
             request.LinkFilter,
-            request.SavedFilter);
+            request.SavedFilter,
+            request.BroadcastSeason);
+    }
+
+    public object Post(StartAnimeThemesSeasonMetadataSync request)
+    {
+        return _themeDownloader.StartSeasonMetadataSync(
+            request.RemoveManagedTags,
+            request.RemoveManagedCollectionMemberships);
+    }
+
+    public object Get(GetAnimeThemesSeasonMetadataSync request)
+    {
+        return _themeDownloader.GetSeasonMetadataSyncStatus();
     }
 
     public object Get(GetAnimeThemesStorage request)
@@ -460,6 +492,7 @@ public class AnimeThemesSyncService : IService, IRequiresRequest
             request.Limit,
             request.SearchTerm,
             request.Status,
+            request.SeasonNumber,
             request.SortBy,
             request.SortOrder);
     }

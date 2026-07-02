@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AnimeThemesSync.Shared.Interfaces;
@@ -59,6 +60,94 @@ public sealed class AnimeThemesDataStoreTests
             var saved = store.QueryBrowserItems(null, 0, 80, "ThemeBytes", "Descending", null, "all", "all", "saved");
             Assert.Equal(2, saved.TotalRecordCount);
             Assert.Equal("Beta", saved.Items[0].Name);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void BrowserItems_QueryFiltersAndReturnsBroadcastSeasons()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var winter = CreateBrowserItem("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "Winter Show", "Series", 0, 0, 0, 0);
+            winter.BroadcastSeasons.Add(new BroadcastSeasonValue("2024-winter", "Winter 2024", 2024, "winter"));
+            var spring = CreateBrowserItem("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "Spring Show", "Series", 0, 0, 0, 0);
+            spring.BroadcastSeasons.Add(new BroadcastSeasonValue("2025-spring", "Spring 2025", 2025, "spring"));
+            store.ReplaceBrowserItems(new[] { winter, spring }, Array.Empty<(string, string?, int)>());
+
+            var page = store.QueryBrowserItems(null, 0, 80, "SortName", "Ascending", null, "all", "all", "all", "2024-winter");
+
+            Assert.Single(page.Items);
+            Assert.Equal("Winter Show", page.Items[0].Name);
+            Assert.Equal(new[] { "2024-winter" }, page.Items[0].BroadcastSeasonKeys);
+            Assert.Equal(new[] { "2025-spring", "2024-winter" }, page.BroadcastSeasons!.Select(i => i.Key));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void SeasonMetadataState_PersistsAcrossCacheClear()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            store.SaveSeasonMetadataState(new SeasonMetadataState
+            {
+                SeriesItemId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                ManagedTags = new Dictionary<string, List<string>>
+                {
+                    ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"] = new() { "Winter 2024" },
+                },
+                BroadcastSeasons = new() { new BroadcastSeasonValue("2024-winter", "Winter 2024", 2024, "winter") },
+            });
+
+            store.ClearBrowserCache();
+            var reopened = CreateStore(directory);
+            reopened.EnsureInitialized();
+            var state = reopened.GetSeasonMetadataState("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
+            Assert.NotNull(state);
+            Assert.Equal("Winter 2024", state.ManagedTags.Values.Single().Single());
+            Assert.Equal("2024-winter", state.BroadcastSeasons.Single().Key);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void SeasonMetadataState_ReopensNullCollectionsAsEmpty()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            store.SaveSeasonMetadataState(new SeasonMetadataState
+            {
+                SeriesItemId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                ManagedTags = null!,
+                CollectionMemberships = null!,
+                BroadcastSeasons = null!,
+            });
+
+            var reopened = CreateStore(directory);
+            reopened.EnsureInitialized();
+            var state = reopened.GetSeasonMetadataState("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
+            Assert.NotNull(state);
+            Assert.Empty(state.ManagedTags);
+            Assert.Empty(state.CollectionMemberships);
+            Assert.Empty(state.BroadcastSeasons);
         }
         finally
         {
@@ -223,7 +312,7 @@ public sealed class AnimeThemesDataStoreTests
             });
 
             var json = File.ReadAllText(store.DatabasePath);
-            Assert.Contains("\"SchemaVersion\":3", json, StringComparison.Ordinal);
+            Assert.Contains("\"SchemaVersion\":5", json, StringComparison.Ordinal);
             Assert.Contains("\"LogicalItemId\":\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"", json, StringComparison.Ordinal);
             Assert.Contains("\"LogicalItemId\":\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\"", json, StringComparison.Ordinal);
             Assert.Contains("\"OutputRootItemId\":\"cccccccc-cccc-cccc-cccc-cccccccccccc\"", json, StringComparison.Ordinal);

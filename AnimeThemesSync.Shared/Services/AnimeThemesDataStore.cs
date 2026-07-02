@@ -14,7 +14,7 @@ namespace AnimeThemesSync.Shared.Services;
 /// </summary>
 public sealed class AnimeThemesDataStore
 {
-    private const int CurrentSchemaVersion = 3;
+    private const int CurrentSchemaVersion = 5;
     private const int DefaultLimit = 80;
     private const int MaxLimit = 100;
     private readonly IAnimeThemesDataPathProvider _pathProvider;
@@ -130,6 +130,34 @@ public sealed class AnimeThemesDataStore
     }
 
     /// <summary>
+    /// Gets plugin-managed metadata state for a series.
+    /// </summary>
+    public SeasonMetadataState? GetSeasonMetadataState(string seriesItemId)
+    {
+        lock (_syncRoot)
+        {
+            return LoadDocument().SeasonMetadataStates
+                .FirstOrDefault(i => IsCurrentServer(i.ServerKind) && string.Equals(i.SeriesItemId, seriesItemId, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    /// <summary>
+    /// Replaces plugin-managed metadata state for a series.
+    /// </summary>
+    public void SaveSeasonMetadataState(SeasonMetadataState state)
+    {
+        lock (_syncRoot)
+        {
+            var document = LoadDocument();
+            document.SeasonMetadataStates.RemoveAll(i =>
+                IsCurrentServer(i.ServerKind) && string.Equals(i.SeriesItemId, state.SeriesItemId, StringComparison.OrdinalIgnoreCase));
+            state.ServerKind = ServerKind;
+            document.SeasonMetadataStates.Add(state);
+            SaveDocument(document);
+        }
+    }
+
+    /// <summary>
     /// Gets a page of BrowserItems.
     /// </summary>
     public ThemeBrowserItemsPage QueryBrowserItems(
@@ -141,7 +169,8 @@ public sealed class AnimeThemesDataStore
         string? searchTerm,
         string? itemType,
         string? linkFilter,
-        string? savedFilter)
+        string? savedFilter,
+        string? broadcastSeason = null)
     {
         lock (_syncRoot)
         {
@@ -150,7 +179,19 @@ public sealed class AnimeThemesDataStore
             var normalizedLimit = Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit);
             var filtered = document.BrowserItems
                 .Where(i => IsCurrentServer(i.ServerKind))
-                .Where(i => MatchesBrowserQuery(i, libraryId, searchTerm, itemType, linkFilter, savedFilter));
+                .Where(i => MatchesBrowserQuery(i, libraryId, searchTerm, itemType, linkFilter, savedFilter, broadcastSeason));
+
+            var broadcastSeasons = document.BrowserItems
+                .Where(i => IsCurrentServer(i.ServerKind))
+                .Where(i => string.IsNullOrWhiteSpace(libraryId) || string.Equals(i.LibraryId, libraryId, StringComparison.OrdinalIgnoreCase))
+                .Where(i => string.IsNullOrWhiteSpace(itemType) || string.Equals(itemType, "all", StringComparison.OrdinalIgnoreCase) || string.Equals(i.ItemType, itemType, StringComparison.OrdinalIgnoreCase))
+                .SelectMany(i => i.BroadcastSeasons ?? [])
+                .GroupBy(i => i.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(i => i.First())
+                .OrderByDescending(i => i.Year)
+                .ThenByDescending(i => GetSeasonOrder(i.Season))
+                .ThenBy(i => i.Label, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
             filtered = SortBrowserItems(filtered, sortBy, sortOrder);
             var materialized = filtered.ToList();
@@ -166,7 +207,8 @@ public sealed class AnimeThemesDataStore
                 normalizedStart,
                 normalizedLimit,
                 GetCacheVersion(document),
-                IsBrowserCacheReady(document));
+                IsBrowserCacheReady(document),
+                broadcastSeasons);
         }
     }
 
@@ -443,6 +485,14 @@ public sealed class AnimeThemesDataStore
             _cache.ThemeFiles ??= [];
             _cache.LibrarySyncState ??= [];
             _cache.ServerCacheState ??= [];
+            _cache.SeasonMetadataStates ??= [];
+            foreach (var seasonMetadataState in _cache.SeasonMetadataStates)
+            {
+                seasonMetadataState.ManagedTags ??= new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+                seasonMetadataState.CollectionMemberships ??= [];
+                seasonMetadataState.BroadcastSeasons ??= [];
+            }
+
             foreach (var themeFile in _cache.ThemeFiles)
             {
                 if (string.IsNullOrWhiteSpace(themeFile.LogicalItemId))
@@ -526,7 +576,9 @@ public sealed class AnimeThemesDataStore
             HasLocalThemes = record.HasLocalThemes,
             LatestEpisodeDateUtc = record.LatestEpisodeDateUtc.HasValue ? FormatDate(record.LatestEpisodeDateUtc.Value) : null,
             DateCreatedUtc = FormatDate(record.DateCreatedUtc),
-            LastRefreshedUtc = FormatDate(record.LastRefreshedUtc == default ? DateTimeOffset.UtcNow : record.LastRefreshedUtc)
+            LastRefreshedUtc = FormatDate(record.LastRefreshedUtc == default ? DateTimeOffset.UtcNow : record.LastRefreshedUtc),
+            BroadcastSeasons = record.BroadcastSeasons ?? [],
+            SeasonSummaries = record.SeasonSummaries ?? [],
         };
     }
 
@@ -553,10 +605,12 @@ public sealed class AnimeThemesDataStore
             ParseDate(item.LatestEpisodeDateUtc),
             item.LinkStatus ?? "Unlinked",
             !string.IsNullOrWhiteSpace(item.AnimeThemesSlug),
-            string.Equals(item.LinkStatus, "Manual", StringComparison.OrdinalIgnoreCase));
+            string.Equals(item.LinkStatus, "Manual", StringComparison.OrdinalIgnoreCase),
+            (item.BroadcastSeasons ?? []).Select(i => i.Key).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            item.SeasonSummaries ?? []);
     }
 
-    private static bool MatchesBrowserQuery(StoredBrowserItem item, string? libraryId, string? searchTerm, string? itemType, string? linkFilter, string? savedFilter)
+    private static bool MatchesBrowserQuery(StoredBrowserItem item, string? libraryId, string? searchTerm, string? itemType, string? linkFilter, string? savedFilter, string? broadcastSeason)
     {
         if (!string.IsNullOrWhiteSpace(libraryId) && !string.Equals(item.LibraryId, libraryId, StringComparison.OrdinalIgnoreCase))
         {
@@ -602,6 +656,13 @@ public sealed class AnimeThemesDataStore
             return false;
         }
 
+        if (!string.IsNullOrWhiteSpace(broadcastSeason) &&
+            !string.Equals(broadcastSeason, "all", StringComparison.OrdinalIgnoreCase) &&
+            !(item.BroadcastSeasons ?? []).Any(i => string.Equals(i.Key, broadcastSeason, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
         return (savedFilter ?? string.Empty).Trim().ToLowerInvariant() switch
         {
             "saved" => item.HasLocalThemes,
@@ -612,6 +673,15 @@ public sealed class AnimeThemesDataStore
             _ => true
         };
     }
+
+    private static int GetSeasonOrder(string season) => season.ToLowerInvariant() switch
+    {
+        "winter" => 0,
+        "spring" => 1,
+        "summer" => 2,
+        "fall" => 3,
+        _ => -1,
+    };
 
     private static IEnumerable<StoredBrowserItem> SortBrowserItems(IEnumerable<StoredBrowserItem> items, string? sortBy, string? sortOrder)
     {
@@ -742,6 +812,8 @@ public sealed class AnimeThemesDataStore
         public List<StoredLibrarySyncState> LibrarySyncState { get; set; } = [];
 
         public List<StoredServerCacheState> ServerCacheState { get; set; } = [];
+
+        public List<SeasonMetadataState> SeasonMetadataStates { get; set; } = [];
     }
 
     private sealed class StoredExtraFile
@@ -830,6 +902,10 @@ public sealed class AnimeThemesDataStore
         public string? DateCreatedUtc { get; set; }
 
         public string? LastRefreshedUtc { get; set; }
+
+        public List<BroadcastSeasonValue> BroadcastSeasons { get; set; } = [];
+
+        public List<SeasonSummary> SeasonSummaries { get; set; } = [];
     }
 
     private sealed class StoredThemeFile

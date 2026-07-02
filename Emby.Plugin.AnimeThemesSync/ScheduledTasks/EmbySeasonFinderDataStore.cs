@@ -17,7 +17,7 @@ namespace Emby.Plugin.AnimeThemesSync.ScheduledTasks;
 /// </summary>
 internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
     private const int DefaultLimit = 80;
     private const int MaxLimit = 100;
     private const int SearchCacheLimit = 200;
@@ -128,6 +128,69 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
                         LastError TEXT NULL,
                         UpdatedAtUtc TEXT NOT NULL
                     );
+                    CREATE TABLE IF NOT EXISTS SeasonAutomationRules (
+                        ServerKind TEXT NOT NULL,
+                        RuleKey TEXT NOT NULL,
+                        SeriesItemId TEXT NOT NULL,
+                        SeasonItemId TEXT NOT NULL,
+                        SeasonName TEXT NOT NULL,
+                        SeasonNumber INTEGER NULL,
+                        AnimeThemesSlug TEXT NULL,
+                        AniListId INTEGER NULL,
+                        MyAnimeListId INTEGER NULL,
+                        AnimeYear INTEGER NULL,
+                        AnimeSeason TEXT NULL,
+                        BroadcastSeasonKey TEXT NULL,
+                        BroadcastSeasonLabel TEXT NULL,
+                        Source TEXT NOT NULL,
+                        ResolvedAtUtc TEXT NULL,
+                        LastError TEXT NULL,
+                        UpdatedAtUtc TEXT NOT NULL,
+                        PRIMARY KEY (ServerKind, RuleKey)
+                    );
+                    CREATE INDEX IF NOT EXISTS IX_SeasonAutomationRules_Series
+                        ON SeasonAutomationRules(ServerKind, SeriesItemId, SeasonNumber);
+                    CREATE INDEX IF NOT EXISTS IX_SeasonAutomationRules_Broadcast
+                        ON SeasonAutomationRules(ServerKind, BroadcastSeasonKey);
+                    CREATE TABLE IF NOT EXISTS SeasonAutomationTags (
+                        ServerKind TEXT NOT NULL,
+                        RuleKey TEXT NOT NULL,
+                        TargetItemId TEXT NOT NULL,
+                        TargetItemType TEXT NOT NULL,
+                        TagName TEXT NOT NULL,
+                        Source TEXT NOT NULL DEFAULT 'Manual',
+                        AddedByPlugin INTEGER NOT NULL,
+                        LastAppliedAtUtc TEXT NULL,
+                        LastError TEXT NULL,
+                        UpdatedAtUtc TEXT NOT NULL,
+                        PRIMARY KEY (ServerKind, RuleKey, TargetItemId, TagName)
+                    );
+                    CREATE INDEX IF NOT EXISTS IX_SeasonAutomationTags_Target
+                        ON SeasonAutomationTags(ServerKind, TargetItemId);
+                    CREATE TABLE IF NOT EXISTS ManagedSeasonCollections (
+                        ServerKind TEXT NOT NULL,
+                        CollectionKey TEXT NOT NULL,
+                        CollectionName TEXT NOT NULL,
+                        CollectionItemId TEXT NULL,
+                        IsPluginCreated INTEGER NOT NULL,
+                        LastError TEXT NULL,
+                        UpdatedAtUtc TEXT NOT NULL,
+                        PRIMARY KEY (ServerKind, CollectionKey)
+                    );
+                    CREATE TABLE IF NOT EXISTS ManagedSeasonCollectionMembers (
+                        ServerKind TEXT NOT NULL,
+                        CollectionKey TEXT NOT NULL,
+                        RuleKey TEXT NOT NULL,
+                        TargetItemId TEXT NOT NULL,
+                        TargetItemType TEXT NOT NULL,
+                        AddedByPlugin INTEGER NOT NULL,
+                        LastAppliedAtUtc TEXT NULL,
+                        LastError TEXT NULL,
+                        UpdatedAtUtc TEXT NOT NULL,
+                        PRIMARY KEY (ServerKind, CollectionKey, TargetItemId)
+                    );
+                    CREATE INDEX IF NOT EXISTS IX_ManagedSeasonCollectionMembers_Rule
+                        ON ManagedSeasonCollectionMembers(ServerKind, RuleKey);
                     """.Split(';', StringSplitOptions.RemoveEmptyEntries))
                 {
                     connection.Execute(schemaStatement + ";");
@@ -291,7 +354,7 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
         }
     }
 
-    public SeasonFinderItemsPage QueryRows(string? libraryId, int? startIndex, int? limit, string? searchTerm, string? status, string? sortBy, string? sortOrder)
+    public SeasonFinderItemsPage QueryRows(string? libraryId, int? startIndex, int? limit, string? searchTerm, string? status, int? seasonNumber, string? sortBy, string? sortOrder)
     {
         lock (_syncRoot)
         {
@@ -310,6 +373,12 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
             {
                 where.Add("SearchText LIKE $search ESCAPE '\\'");
                 parameters.Add(("$search", "%" + EscapeLike(searchTerm.Trim().ToLowerInvariant()) + "%"));
+            }
+
+            if (seasonNumber.HasValue)
+            {
+                where.Add("SeasonNumber = $seasonNumber");
+                parameters.Add(("$seasonNumber", seasonNumber.Value));
             }
 
             var normalizedStatus = status?.Trim().ToLowerInvariant();
@@ -353,8 +422,189 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
             }
 
             var cacheState = GetCacheState(connection);
-            return new SeasonFinderItemsPage(items, count, normalizedStart, normalizedLimit, cacheState.Version, cacheState.Ready);
+            using var seasonStatement = Prepare(connection, "SELECT DISTINCT SeasonNumber FROM SeasonFinderRows WHERE ServerKind = $serverKind AND SeasonNumber IS NOT NULL ORDER BY SeasonNumber;", ("$serverKind", ServerKind));
+            var seasonNumbers = new List<int>();
+            while (seasonStatement.MoveNext())
+            {
+                seasonNumbers.Add(seasonStatement.Current.GetInt(0));
+            }
+
+            return new SeasonFinderItemsPage(items, count, normalizedStart, normalizedLimit, cacheState.Version, cacheState.Ready, seasonNumbers);
         }
+    }
+
+    public SeasonAutomationState GetSeasonAutomationState(string seriesItemId)
+    {
+        lock (_syncRoot)
+        {
+            EnsureInitialized();
+            using var connection = OpenConnection();
+            var state = new SeasonAutomationState { SeriesItemId = seriesItemId };
+            using (var statement = Prepare(connection, """
+                SELECT RuleKey, SeriesItemId, SeasonItemId, SeasonName, SeasonNumber, AnimeThemesSlug,
+                       AniListId, MyAnimeListId, AnimeYear, AnimeSeason, BroadcastSeasonKey,
+                       BroadcastSeasonLabel, Source, ResolvedAtUtc, LastError, UpdatedAtUtc
+                FROM SeasonAutomationRules WHERE ServerKind = $serverKind AND SeriesItemId = $seriesId
+                ORDER BY SeasonNumber, SeasonName;
+                """, ("$serverKind", ServerKind), ("$seriesId", seriesItemId)))
+            {
+                while (statement.MoveNext())
+                {
+                    var row = statement.Current;
+                    state.Rules.Add(new SeasonAutomationRuleRecord
+                    {
+                        RuleKey = row.GetString(0), SeriesItemId = row.GetString(1), SeasonItemId = row.GetString(2),
+                        SeasonName = row.GetString(3), SeasonNumber = GetNullableInt32(row, 4), AnimeThemesSlug = GetNullableString(row, 5),
+                        AniListId = GetNullableInt32(row, 6), MyAnimeListId = GetNullableInt32(row, 7), AnimeYear = GetNullableInt32(row, 8),
+                        AnimeSeason = GetNullableString(row, 9), BroadcastSeasonKey = GetNullableString(row, 10),
+                        BroadcastSeasonLabel = GetNullableString(row, 11), Source = row.GetString(12),
+                        ResolvedAtUtc = GetNullableString(row, 13), LastError = GetNullableString(row, 14), UpdatedAtUtc = row.GetString(15),
+                    });
+                }
+            }
+
+            if (state.Rules.Count == 0)
+            {
+                return state;
+            }
+
+            using (var statement = Prepare(connection, """
+                SELECT t.RuleKey, t.TargetItemId, t.TargetItemType, t.TagName, t.Source,
+                       t.AddedByPlugin, t.LastAppliedAtUtc, t.LastError, t.UpdatedAtUtc
+                FROM SeasonAutomationTags t
+                INNER JOIN SeasonAutomationRules r ON r.ServerKind = t.ServerKind AND r.RuleKey = t.RuleKey
+                WHERE t.ServerKind = $serverKind AND r.SeriesItemId = $seriesId;
+                """, ("$serverKind", ServerKind), ("$seriesId", seriesItemId)))
+            {
+                while (statement.MoveNext())
+                {
+                    var row = statement.Current;
+                    state.Tags.Add(new SeasonAutomationTagRecord
+                    {
+                        RuleKey = row.GetString(0), TargetItemId = row.GetString(1), TargetItemType = row.GetString(2),
+                        TagName = row.GetString(3), Source = row.GetString(4), AddedByPlugin = row.GetInt64(5) != 0,
+                        LastAppliedAtUtc = GetNullableString(row, 6), LastError = GetNullableString(row, 7), UpdatedAtUtc = row.GetString(8),
+                    });
+                }
+            }
+
+            using (var statement = Prepare(connection, """
+                SELECT m.CollectionKey, m.RuleKey, m.TargetItemId, m.TargetItemType, m.AddedByPlugin,
+                       m.LastAppliedAtUtc, m.LastError, m.UpdatedAtUtc,
+                       c.CollectionName, c.CollectionItemId, c.IsPluginCreated, c.LastError, c.UpdatedAtUtc
+                FROM ManagedSeasonCollectionMembers m
+                INNER JOIN SeasonAutomationRules r ON r.ServerKind = m.ServerKind AND r.RuleKey = m.RuleKey
+                LEFT JOIN ManagedSeasonCollections c ON c.ServerKind = m.ServerKind AND c.CollectionKey = m.CollectionKey
+                WHERE m.ServerKind = $serverKind AND r.SeriesItemId = $seriesId;
+                """, ("$serverKind", ServerKind), ("$seriesId", seriesItemId)))
+            {
+                var collectionKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                while (statement.MoveNext())
+                {
+                    var row = statement.Current;
+                    state.CollectionMembers.Add(new ManagedSeasonCollectionMemberRecord
+                    {
+                        CollectionKey = row.GetString(0), RuleKey = row.GetString(1), TargetItemId = row.GetString(2),
+                        TargetItemType = row.GetString(3), AddedByPlugin = row.GetInt64(4) != 0,
+                        LastAppliedAtUtc = GetNullableString(row, 5), LastError = GetNullableString(row, 6), UpdatedAtUtc = row.GetString(7),
+                    });
+                    if (!row.IsDBNull(8) && collectionKeys.Add(row.GetString(0)))
+                    {
+                        state.Collections.Add(new ManagedSeasonCollectionRecord
+                        {
+                            CollectionKey = row.GetString(0), CollectionName = row.GetString(8), CollectionItemId = GetNullableString(row, 9),
+                            IsPluginCreated = row.GetInt64(10) != 0, LastError = GetNullableString(row, 11), UpdatedAtUtc = row.GetString(12),
+                        });
+                    }
+                }
+            }
+
+            return state;
+        }
+    }
+
+    public void SaveSeasonAutomationState(SeasonAutomationState state)
+    {
+        lock (_syncRoot)
+        {
+            EnsureInitialized();
+            using var connection = OpenConnection();
+            InTransaction(connection, () =>
+            {
+                Execute(connection, """
+                    DELETE FROM SeasonAutomationTags WHERE ServerKind = $serverKind AND RuleKey IN
+                        (SELECT RuleKey FROM SeasonAutomationRules WHERE ServerKind = $serverKind AND SeriesItemId = $seriesId);
+                    """, ("$serverKind", ServerKind), ("$seriesId", state.SeriesItemId));
+                Execute(connection, """
+                    DELETE FROM ManagedSeasonCollectionMembers WHERE ServerKind = $serverKind AND RuleKey IN
+                        (SELECT RuleKey FROM SeasonAutomationRules WHERE ServerKind = $serverKind AND SeriesItemId = $seriesId);
+                    """, ("$serverKind", ServerKind), ("$seriesId", state.SeriesItemId));
+                Execute(connection, "DELETE FROM SeasonAutomationRules WHERE ServerKind = $serverKind AND SeriesItemId = $seriesId;",
+                    ("$serverKind", ServerKind), ("$seriesId", state.SeriesItemId));
+
+                foreach (var rule in state.Rules)
+                {
+                    Execute(connection, """
+                        INSERT INTO SeasonAutomationRules (ServerKind, RuleKey, SeriesItemId, SeasonItemId, SeasonName,
+                            SeasonNumber, AnimeThemesSlug, AniListId, MyAnimeListId, AnimeYear, AnimeSeason,
+                            BroadcastSeasonKey, BroadcastSeasonLabel, Source, ResolvedAtUtc, LastError, UpdatedAtUtc)
+                        VALUES ($serverKind, $ruleKey, $seriesId, $seasonId, $seasonName, $seasonNumber, $slug,
+                            $aniListId, $malId, $year, $season, $broadcastKey, $broadcastLabel, $source,
+                            $resolved, $error, $updated);
+                        """, ("$serverKind", ServerKind), ("$ruleKey", rule.RuleKey), ("$seriesId", rule.SeriesItemId),
+                        ("$seasonId", rule.SeasonItemId), ("$seasonName", rule.SeasonName), ("$seasonNumber", rule.SeasonNumber),
+                        ("$slug", rule.AnimeThemesSlug), ("$aniListId", rule.AniListId), ("$malId", rule.MyAnimeListId),
+                        ("$year", rule.AnimeYear), ("$season", rule.AnimeSeason), ("$broadcastKey", rule.BroadcastSeasonKey),
+                        ("$broadcastLabel", rule.BroadcastSeasonLabel), ("$source", rule.Source), ("$resolved", rule.ResolvedAtUtc),
+                        ("$error", rule.LastError), ("$updated", rule.UpdatedAtUtc));
+                }
+
+                foreach (var tag in state.Tags)
+                {
+                    Execute(connection, """
+                        INSERT INTO SeasonAutomationTags (ServerKind, RuleKey, TargetItemId, TargetItemType, TagName,
+                            Source, AddedByPlugin, LastAppliedAtUtc, LastError, UpdatedAtUtc)
+                        VALUES ($serverKind, $ruleKey, $targetId, $targetType, $tag, $source, $added, $applied, $error, $updated);
+                        """, ("$serverKind", ServerKind), ("$ruleKey", tag.RuleKey), ("$targetId", tag.TargetItemId),
+                        ("$targetType", tag.TargetItemType), ("$tag", tag.TagName), ("$source", tag.Source),
+                        ("$added", tag.AddedByPlugin ? 1 : 0), ("$applied", tag.LastAppliedAtUtc),
+                        ("$error", tag.LastError), ("$updated", tag.UpdatedAtUtc));
+                }
+
+                foreach (var collection in state.Collections)
+                {
+                    Execute(connection, """
+                        INSERT INTO ManagedSeasonCollections (ServerKind, CollectionKey, CollectionName, CollectionItemId,
+                            IsPluginCreated, LastError, UpdatedAtUtc)
+                        VALUES ($serverKind, $key, $name, $id, $created, $error, $updated)
+                        ON CONFLICT(ServerKind, CollectionKey) DO UPDATE SET CollectionName = excluded.CollectionName,
+                            CollectionItemId = excluded.CollectionItemId, IsPluginCreated = excluded.IsPluginCreated,
+                            LastError = excluded.LastError, UpdatedAtUtc = excluded.UpdatedAtUtc;
+                        """, ("$serverKind", ServerKind), ("$key", collection.CollectionKey), ("$name", collection.CollectionName),
+                        ("$id", collection.CollectionItemId), ("$created", collection.IsPluginCreated ? 1 : 0),
+                        ("$error", collection.LastError), ("$updated", collection.UpdatedAtUtc));
+                }
+
+                foreach (var member in state.CollectionMembers)
+                {
+                    Execute(connection, """
+                        INSERT INTO ManagedSeasonCollectionMembers (ServerKind, CollectionKey, RuleKey, TargetItemId,
+                            TargetItemType, AddedByPlugin, LastAppliedAtUtc, LastError, UpdatedAtUtc)
+                        VALUES ($serverKind, $key, $ruleKey, $targetId, $targetType, $added, $applied, $error, $updated);
+                        """, ("$serverKind", ServerKind), ("$key", member.CollectionKey), ("$ruleKey", member.RuleKey),
+                        ("$targetId", member.TargetItemId), ("$targetType", member.TargetItemType),
+                        ("$added", member.AddedByPlugin ? 1 : 0), ("$applied", member.LastAppliedAtUtc),
+                        ("$error", member.LastError), ("$updated", member.UpdatedAtUtc));
+                }
+            });
+        }
+    }
+
+    public IReadOnlyList<SeasonSummary> GetSeasonSummaries(string seriesItemId)
+    {
+        return GetSeasonAutomationState(seriesItemId).Rules.Select(rule => new SeasonSummary(
+            rule.SeasonItemId, rule.SeasonNumber, rule.SeasonName, rule.BroadcastSeasonKey,
+            rule.BroadcastSeasonLabel, string.IsNullOrWhiteSpace(rule.LastError) ? "Resolved" : "Warning")).ToList();
     }
 
     public IReadOnlyList<SeasonThemeMappingRow> GetAllRows()

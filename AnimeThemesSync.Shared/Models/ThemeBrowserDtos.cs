@@ -23,7 +23,9 @@ public sealed record ThemeBrowserLibraryItem(
     DateTimeOffset? LatestEpisodeDateCreated,
     string LinkStatus,
     bool HasDirectLink,
-    bool HasManualSeasonLink);
+    bool HasManualSeasonLink,
+    IReadOnlyList<string>? BroadcastSeasonKeys = null,
+    IReadOnlyList<SeasonSummary>? SeasonSummaries = null);
 
 public sealed record ThemeBrowserItemResult(
     Guid ItemId,

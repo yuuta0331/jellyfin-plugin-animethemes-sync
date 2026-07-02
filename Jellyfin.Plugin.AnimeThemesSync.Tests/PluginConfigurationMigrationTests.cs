@@ -26,6 +26,10 @@ public sealed class PluginConfigurationMigrationTests
         Assert.Equal(ExtrasFileSuffix.Other, config.ExtrasFileSuffix);
         Assert.True(config.SegmentedDownloadEnabled);
         Assert.Equal(4, config.SegmentedDownloadSegments);
+        Assert.Equal(SeasonTagTarget.Series, config.SeasonTagTarget);
+        Assert.False(config.SeasonCollectionsEnabled);
+        Assert.False(config.SeasonOneCollectionUseSeries);
+        Assert.Equal("{Season} {Year}", config.SeasonCollectionFormat);
     }
 
     [Theory]
@@ -41,6 +45,14 @@ public sealed class PluginConfigurationMigrationTests
         };
 
         Assert.Equal(expected, config.SegmentedDownloadSegments);
+    }
+
+    [Fact]
+    public void SeasonCollectionFormat_BlankValueUsesDefault()
+    {
+        var config = new PluginConfiguration { SeasonCollectionFormat = " " };
+
+        Assert.Equal("{Season} {Year}", config.SeasonCollectionFormat);
     }
 
     [Fact]
@@ -124,7 +136,7 @@ public sealed class PluginConfigurationMigrationTests
         var changed = config.Normalize();
 
         Assert.True(changed);
-        Assert.Equal(5, config.ConfigurationVersion);
+        Assert.Equal(8, config.ConfigurationVersion);
         Assert.Equal(4, config.Series.Audio.MaxThemes);
         Assert.False(config.Series.Video.UseAsTheme);
         Assert.Equal(ExtrasFileSuffix.Other, config.ExtrasFileSuffix);
@@ -142,7 +154,7 @@ public sealed class PluginConfigurationMigrationTests
         var changed = config.Normalize();
 
         Assert.True(changed);
-        Assert.Equal(5, config.ConfigurationVersion);
+        Assert.Equal(8, config.ConfigurationVersion);
         Assert.Equal(3, config.Series.Audio.MaxThemes);
         Assert.True(config.SegmentedDownloadEnabled);
         Assert.Equal(4, config.SegmentedDownloadSegments);
@@ -163,7 +175,7 @@ public sealed class PluginConfigurationMigrationTests
         serializer.Serialize(writer, config);
         var xml = writer.ToString();
 
-        Assert.Contains("<ConfigurationVersion>5</ConfigurationVersion>", xml);
+        Assert.Contains("<ConfigurationVersion>8</ConfigurationVersion>", xml);
         Assert.Contains("<Series>", xml);
         Assert.Contains("<Movie>", xml);
         Assert.DoesNotContain("SeriesAudioMaxThemes", xml);

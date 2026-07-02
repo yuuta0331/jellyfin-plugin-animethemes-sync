@@ -1,8 +1,8 @@
-<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260702g" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260702j" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.07.02-g.</div>
+                <div class="fieldDescription">UI version: 2026.07.02-j.</div>
 
                 <div class="verticalSection ats-tabs" id="AnimeThemesBrowserTabs">
                     <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-tab active" id="AnimeThemesBrowserLibraryTab" data-ats-tab="library">
@@ -49,6 +49,12 @@
                                     <option value="all">All</option>
                                     <option value="series">Series</option>
                                     <option value="movie">Movie</option>
+                                </select>
+                            </div>
+                            <div class="selectContainer">
+                                <label class="selectLabel" for="AnimeThemesBrowserLibrarySeasonFilter">Broadcast Season</label>
+                                <select is="emby-select" id="AnimeThemesBrowserLibrarySeasonFilter" class="emby-select-withcolor emby-select">
+                                    <option value="all">All</option>
                                 </select>
                             </div>
                             <div class="selectContainer">
@@ -291,25 +297,53 @@
                             </div>
 
                             <div class="ats-finder-panel">
-                                <h3>Tags</h3>
+                                <h3>Season Tags</h3>
                                 <div class="checkboxContainer checkboxContainer-withDescription">
                                     <label class="emby-checkbox-label"><input id="AtsTagsEnabled" type="checkbox" is="emby-checkbox" /><span>Add season/year tags</span></label>
-                                    <div class="fieldDescription">Adds tags like Winter 2024 to downloaded metadata.</div>
+                                    <div class="fieldDescription">Adds each mapped broadcast season to its parent Series, its Season item, or both.</div>
                                 </div>
                                 <div id="AtsTagOptions" class="ats-conditional-options">
+                                    <div class="selectContainer">
+                                        <label class="selectLabel" for="AtsSeasonTagTarget">Season tag target</label>
+                                        <select is="emby-select" id="AtsSeasonTagTarget" class="emby-select-withcolor emby-select"><option value="0">Series (aggregate all seasons)</option><option value="1">Each Season</option><option value="2">Series and each Season</option></select>
+                                    </div>
                                     <div class="inputContainer">
                                         <label class="inputLabel inputLabelUnfocused" for="AtsTagFormat">Tag format</label>
                                         <input id="AtsTagFormat" type="text" is="emby-input" />
                                         <div class="fieldDescription">Supported placeholders: <code>{Season}</code>, <code>{Year}</code>. Default: <code>{Season} {Year}</code>.</div>
                                         <div class="ats-format-preview"><i class="md-icon ats-icon" aria-hidden="true">&#xE8F4;</i><span>Preview: </span><strong id="AtsTagFormatPreview">Winter 2024</strong></div>
                                     </div>
-                                    <div class="ats-four-column">
-                                        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonSpring">Spring</label><input id="AtsTagSeasonSpring" type="text" is="emby-input" /></div>
-                                        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonSummer">Summer</label><input id="AtsTagSeasonSummer" type="text" is="emby-input" /></div>
-                                        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonFall">Fall</label><input id="AtsTagSeasonFall" type="text" is="emby-input" /></div>
-                                        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonWinter">Winter</label><input id="AtsTagSeasonWinter" type="text" is="emby-input" /></div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel">
+                                <h3>Season Collections</h3>
+                                <div class="checkboxContainer checkboxContainer-withDescription">
+                                    <label class="emby-checkbox-label"><input id="AtsSeasonCollectionsEnabled" type="checkbox" is="emby-checkbox" /><span>Create broadcast-season collections</span></label>
+                                    <div class="fieldDescription">Creates or reuses collections such as Winter 2024 and adds each mapped Season.</div>
+                                </div>
+                                <div id="AtsCollectionOptions" class="ats-conditional-options">
+                                    <div class="checkboxContainer checkboxContainer-withDescription" id="AtsSeasonOneCollectionOption">
+                                        <label class="emby-checkbox-label"><input id="AtsSeasonOneCollectionUseSeries" type="checkbox" is="emby-checkbox" /><span>Use the parent Series instead of Season 1</span></label>
+                                        <div class="fieldDescription">Only Season 1 is replaced; Season 2 and later remain Season items.</div>
                                     </div>
-                                    <div class="fieldDescription">Customize season names used by tag formatting.</div>
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsSeasonCollectionFormat">Collection name format</label>
+                                        <input id="AtsSeasonCollectionFormat" type="text" is="emby-input" />
+                                        <div class="fieldDescription">Supported placeholders: <code>{Season}</code>, <code>{Year}</code>. Default: <code>{Season} {Year}</code>.</div>
+                                        <div class="ats-format-preview"><i class="md-icon ats-icon" aria-hidden="true">&#xE8F4;</i><span>Preview: </span><strong id="AtsSeasonCollectionFormatPreview">Winter 2024</strong></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel ats-conditional-options" id="AtsSeasonLabelOptions">
+                                <h3>Broadcast Season Labels</h3>
+                                <div class="fieldDescription">Shared by tags, collection names, and Browser broadcast-season labels.</div>
+                                <div class="ats-four-column">
+                                    <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonSpring">Spring</label><input id="AtsTagSeasonSpring" type="text" is="emby-input" /></div>
+                                    <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonSummer">Summer</label><input id="AtsTagSeasonSummer" type="text" is="emby-input" /></div>
+                                    <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonFall">Fall</label><input id="AtsTagSeasonFall" type="text" is="emby-input" /></div>
+                                    <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonWinter">Winter</label><input id="AtsTagSeasonWinter" type="text" is="emby-input" /></div>
                                 </div>
                             </div>
 
@@ -379,6 +413,12 @@
                                     <option value="manual">Manual</option>
                                     <option value="auto">Auto</option>
                                     <option value="all">All</option>
+                                </select>
+                            </div>
+                            <div class="selectContainer ats-season-filter-select">
+                                <label class="selectLabel" for="AnimeThemesSeasonNumberFilter">Season number</label>
+                                <select is="emby-select" id="AnimeThemesSeasonNumberFilter" class="emby-select-withcolor emby-select">
+                                    <option value="">All season numbers</option>
                                 </select>
                             </div>
                             <div class="inputContainer ats-clearable">
@@ -1869,7 +1909,24 @@
             }
 
             #AnimeThemesBrowserPage .ats-conditional-options {
+                max-height: 0;
+                margin-top: 0;
+                opacity: 0;
+                overflow: hidden;
+                pointer-events: none;
+                transform: translateY(-.35rem);
+                visibility: hidden;
+                transition: max-height .28s ease, margin-top .28s ease, opacity .2s ease, transform .28s ease, visibility 0s linear .28s;
+            }
+
+            #AnimeThemesBrowserPage .ats-conditional-options.is-open {
+                max-height: 80rem;
                 margin-top: .65rem;
+                opacity: 1;
+                pointer-events: auto;
+                transform: translateY(0);
+                visibility: visible;
+                transition-delay: 0s;
             }
 
             #AnimeThemesBrowserPage .ats-format-preview {

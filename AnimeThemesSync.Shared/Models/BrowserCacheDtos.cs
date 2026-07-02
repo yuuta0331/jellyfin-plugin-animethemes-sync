@@ -14,7 +14,13 @@ public sealed record ThemeBrowserItemsPage(
     int StartIndex,
     int Limit,
     string CacheVersion,
-    bool CacheReady);
+    bool CacheReady,
+    IReadOnlyList<BroadcastSeasonValue>? BroadcastSeasons = null);
+
+/// <summary>
+/// Stable broadcast-season key and its current display label.
+/// </summary>
+public sealed record BroadcastSeasonValue(string Key, string Label, int Year, string Season);
 
 /// <summary>
 /// Paged Season Finder result.
@@ -25,7 +31,8 @@ public sealed record SeasonFinderItemsPage(
     int StartIndex,
     int Limit,
     string CacheVersion,
-    bool CacheReady);
+    bool CacheReady,
+    IReadOnlyList<int>? SeasonNumbers = null);
 
 /// <summary>
 /// Persistent Season Finder display row.
@@ -101,6 +108,169 @@ public sealed record AnimeThemesMaintenanceResult(
     string Message);
 
 /// <summary>
+/// Current state of a full season metadata synchronization.
+/// </summary>
+public sealed record SeasonMetadataSyncStatus(
+    string State,
+    int Processed,
+    int Total,
+    string? StartedAtUtc,
+    string? CompletedAtUtc,
+    string? Error,
+    int Succeeded = 0,
+    int Failed = 0,
+    IReadOnlyList<SeasonMetadataSyncError>? Errors = null);
+
+/// <summary>
+/// One recoverable season metadata synchronization error.
+/// </summary>
+public sealed record SeasonMetadataSyncError(
+    string? SeriesItemId,
+    string? SeriesName,
+    string? RuleKey,
+    string Stage,
+    string Message);
+
+/// <summary>
+/// Optional cleanup choices supplied when starting season metadata synchronization.
+/// </summary>
+public sealed class SeasonMetadataSyncRequest
+{
+    public bool RemoveManagedTags { get; set; }
+
+    public bool RemoveManagedCollectionMemberships { get; set; }
+}
+
+/// <summary>
+/// Cached broadcast metadata for one media-server season.
+/// </summary>
+public sealed record SeasonSummary(
+    string SeasonItemId,
+    int? SeasonNumber,
+    string SeasonName,
+    string? BroadcastSeasonKey,
+    string? BroadcastSeasonLabel,
+    string Status);
+
+/// <summary>
+/// One resolved season automation rule stored in SQLite.
+/// </summary>
+public sealed class SeasonAutomationRuleRecord
+{
+    public string RuleKey { get; set; } = string.Empty;
+
+    public string SeriesItemId { get; set; } = string.Empty;
+
+    public string SeasonItemId { get; set; } = string.Empty;
+
+    public string SeasonName { get; set; } = string.Empty;
+
+    public int? SeasonNumber { get; set; }
+
+    public string? AnimeThemesSlug { get; set; }
+
+    public int? AniListId { get; set; }
+
+    public int? MyAnimeListId { get; set; }
+
+    public int? AnimeYear { get; set; }
+
+    public string? AnimeSeason { get; set; }
+
+    public string? BroadcastSeasonKey { get; set; }
+
+    public string? BroadcastSeasonLabel { get; set; }
+
+    public string Source { get; set; } = "Unknown";
+
+    public string? ResolvedAtUtc { get; set; }
+
+    public string? LastError { get; set; }
+
+    public string UpdatedAtUtc { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// One tag assignment owned or observed by the season automation synchronizer.
+/// </summary>
+public sealed class SeasonAutomationTagRecord
+{
+    public string RuleKey { get; set; } = string.Empty;
+
+    public string TargetItemId { get; set; } = string.Empty;
+
+    public string TargetItemType { get; set; } = string.Empty;
+
+    public string TagName { get; set; } = string.Empty;
+
+    public string Source { get; set; } = "Manual";
+
+    public bool AddedByPlugin { get; set; }
+
+    public string? LastAppliedAtUtc { get; set; }
+
+    public string? LastError { get; set; }
+
+    public string UpdatedAtUtc { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// One managed broadcast-season collection.
+/// </summary>
+public sealed class ManagedSeasonCollectionRecord
+{
+    public string CollectionKey { get; set; } = string.Empty;
+
+    public string CollectionName { get; set; } = string.Empty;
+
+    public string? CollectionItemId { get; set; }
+
+    public bool IsPluginCreated { get; set; }
+
+    public string? LastError { get; set; }
+
+    public string UpdatedAtUtc { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// One item membership in a managed broadcast-season collection.
+/// </summary>
+public sealed class ManagedSeasonCollectionMemberRecord
+{
+    public string CollectionKey { get; set; } = string.Empty;
+
+    public string RuleKey { get; set; } = string.Empty;
+
+    public string TargetItemId { get; set; } = string.Empty;
+
+    public string TargetItemType { get; set; } = string.Empty;
+
+    public bool AddedByPlugin { get; set; }
+
+    public string? LastAppliedAtUtc { get; set; }
+
+    public string? LastError { get; set; }
+
+    public string UpdatedAtUtc { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Complete normalized automation state for one series.
+/// </summary>
+public sealed class SeasonAutomationState
+{
+    public string SeriesItemId { get; set; } = string.Empty;
+
+    public List<SeasonAutomationRuleRecord> Rules { get; set; } = [];
+
+    public List<SeasonAutomationTagRecord> Tags { get; set; } = [];
+
+    public List<ManagedSeasonCollectionRecord> Collections { get; set; } = [];
+
+    public List<ManagedSeasonCollectionMemberRecord> CollectionMembers { get; set; } = [];
+}
+
+/// <summary>
 /// Result of legacy extras manifest import.
 /// </summary>
 public sealed record LegacyExtrasImportResult(
@@ -169,6 +339,42 @@ public sealed class BrowserItemRecord
     public DateTimeOffset? LatestEpisodeDateUtc { get; set; }
 
     public DateTimeOffset LastRefreshedUtc { get; set; }
+
+    public List<BroadcastSeasonValue> BroadcastSeasons { get; set; } = [];
+
+    public List<SeasonSummary> SeasonSummaries { get; set; } = [];
+}
+
+/// <summary>
+/// Metadata assignments managed by this plugin for one series.
+/// </summary>
+public sealed class SeasonMetadataState
+{
+    public string ServerKind { get; set; } = string.Empty;
+
+    public string SeriesItemId { get; set; } = string.Empty;
+
+    public Dictionary<string, List<string>> ManagedTags { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public List<SeasonCollectionMembershipState> CollectionMemberships { get; set; } = [];
+
+    public List<BroadcastSeasonValue> BroadcastSeasons { get; set; } = [];
+}
+
+/// <summary>
+/// One collection membership added or observed by the season metadata synchronizer.
+/// </summary>
+public sealed class SeasonCollectionMembershipState
+{
+    public string BroadcastSeasonKey { get; set; } = string.Empty;
+
+    public string CollectionId { get; set; } = string.Empty;
+
+    public string CollectionName { get; set; } = string.Empty;
+
+    public string ItemId { get; set; } = string.Empty;
+
+    public bool AddedByPlugin { get; set; }
 }
 
 #pragma warning restore SA1117

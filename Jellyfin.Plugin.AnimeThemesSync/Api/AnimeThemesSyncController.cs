@@ -47,9 +47,26 @@ public sealed class AnimeThemesSyncController : ControllerBase
         [FromQuery] string? searchTerm,
         [FromQuery] string? itemType,
         [FromQuery] string? linkFilter,
-        [FromQuery] string? savedFilter)
+        [FromQuery] string? savedFilter,
+        [FromQuery] string? broadcastSeason)
     {
-        return Ok(_themeDownloader.GetBrowserItems(libraryId, startIndex, limit, sortBy, sortOrder, searchTerm, itemType, linkFilter, savedFilter));
+        return Ok(_themeDownloader.GetBrowserItems(libraryId, startIndex, limit, sortBy, sortOrder, searchTerm, itemType, linkFilter, savedFilter, broadcastSeason));
+    }
+
+    [HttpPost("SeasonMetadata/Sync")]
+    [ProducesResponseType(typeof(SeasonMetadataSyncStatus), StatusCodes.Status200OK)]
+    public ActionResult<SeasonMetadataSyncStatus> StartSeasonMetadataSync([FromBody] SeasonMetadataSyncRequest? request = null)
+    {
+        return Ok(_themeDownloader.StartSeasonMetadataSync(
+            request?.RemoveManagedTags == true,
+            request?.RemoveManagedCollectionMemberships == true));
+    }
+
+    [HttpGet("SeasonMetadata/Sync")]
+    [ProducesResponseType(typeof(SeasonMetadataSyncStatus), StatusCodes.Status200OK)]
+    public ActionResult<SeasonMetadataSyncStatus> GetSeasonMetadataSync()
+    {
+        return Ok(_themeDownloader.GetSeasonMetadataSyncStatus());
     }
 
     [HttpGet("Storage")]
@@ -174,10 +191,11 @@ public sealed class AnimeThemesSyncController : ControllerBase
         [FromQuery] int? limit,
         [FromQuery] string? searchTerm,
         [FromQuery] string? status,
+        [FromQuery] int? seasonNumber,
         [FromQuery] string? sortBy,
         [FromQuery] string? sortOrder)
     {
-        return Ok(_themeDownloader.GetSeasonFinderItems(libraryId, startIndex, limit, searchTerm, status, sortBy, sortOrder));
+        return Ok(_themeDownloader.GetSeasonFinderItems(libraryId, startIndex, limit, searchTerm, status, seasonNumber, sortBy, sortOrder));
     }
 
     [HttpPost("SeasonFinder/Rebuild")]
