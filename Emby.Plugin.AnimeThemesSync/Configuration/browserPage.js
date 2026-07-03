@@ -234,6 +234,17 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             SeasonOneCollectionOption: page.querySelector('#AtsSeasonOneCollectionOption'),
             SeasonCollectionFormat: page.querySelector('#AtsSeasonCollectionFormat'),
             SeasonCollectionFormatPreview: page.querySelector('#AtsSeasonCollectionFormatPreview'),
+            SeasonCollectionLockEnabled: page.querySelector('#AtsSeasonCollectionLockEnabled'),
+            SeasonCollectionImagesEnabled: page.querySelector('#AtsSeasonCollectionImagesEnabled'),
+            SeasonCollectionBackdropOverlayEnabled: page.querySelector('#AtsSeasonCollectionBackdropOverlayEnabled'),
+            SeasonCollectionBackdropOverlayOpacity: page.querySelector('#AtsSeasonCollectionBackdropOverlayOpacity'),
+            SeasonCollectionBackdropOverlayColor: page.querySelector('#AtsSeasonCollectionBackdropOverlayColor'),
+            SeasonCollectionPosterFillMode: page.querySelector('#AtsSeasonCollectionPosterFillMode'),
+            SeasonCollectionLandscapeSourceMode: page.querySelector('#AtsSeasonCollectionLandscapeSourceMode'),
+            SeasonCollectionCanvasColor: page.querySelector('#AtsSeasonCollectionCanvasColor'),
+            SeasonCollectionCanvasOpacity: page.querySelector('#AtsSeasonCollectionCanvasOpacity'),
+            CollectionImageOptions: page.querySelector('#AtsCollectionImageOptions'),
+            BackdropOverlayOptions: page.querySelector('#AtsBackdropOverlayOptions'),
             TagOptions: page.querySelector('#AtsTagOptions'),
             CollectionOptions: page.querySelector('#AtsCollectionOptions'),
             SeasonLabelOptions: page.querySelector('#AtsSeasonLabelOptions'),
@@ -2938,8 +2949,17 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 TagsEnabled: true,
                 SeasonTagTarget: 0,
                 SeasonCollectionsEnabled: false,
-                SeasonOneCollectionUseSeries: false,
+                SeasonOneCollectionUseSeries: true,
                 SeasonCollectionFormat: '{Season} {Year}',
+                SeasonCollectionLockEnabled: true,
+                SeasonCollectionImagesEnabled: true,
+                SeasonCollectionBackdropOverlayEnabled: true,
+                SeasonCollectionBackdropOverlayOpacity: 35,
+                SeasonCollectionBackdropOverlayColor: '#000000',
+                SeasonCollectionPosterFillMode: 0,
+                SeasonCollectionLandscapeSourceMode: 0,
+                SeasonCollectionCanvasColor: '#000000',
+                SeasonCollectionCanvasOpacity: 100,
                 TagFormat: '{Season} {Year}',
                 TagSeasonSpring: 'Spring',
                 TagSeasonSummer: 'Summer',
@@ -2948,6 +2968,37 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 Series: defaultMediaConfig(),
                 Movie: defaultMediaConfig()
             });
+        }
+
+        function normalizeOverlayOpacity(value) {
+            var parsed = parseInt(value, 10);
+            if (isNaN(parsed)) return 35;
+            return Math.max(0, Math.min(90, parsed));
+        }
+
+        function normalizeCanvasOpacity(value) {
+            var parsed = parseInt(value, 10);
+            if (isNaN(parsed)) return 100;
+            return Math.max(0, Math.min(100, parsed));
+        }
+
+        function normalizePosterFillMode(value) {
+            var normalized = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+            if (normalized === '1' || normalized === 'emptyspace') return 1;
+            return 0;
+        }
+
+        function normalizeLandscapeSourceMode(value) {
+            var normalized = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+            if (normalized === '1' || normalized === 'posterfirst') return 1;
+            if (normalized === '2' || normalized === 'landscapeonly') return 2;
+            if (normalized === '3' || normalized === 'posteronly') return 3;
+            return 0;
+        }
+
+        function normalizeOverlayColor(value) {
+            var text = String(value || '').trim();
+            return /^#[0-9a-fA-F]{6}$/.test(text) || /^#[0-9a-fA-F]{3}$/.test(text) ? text : '#000000';
         }
 
         function canonicalizeSettings(config) {
@@ -2969,8 +3020,17 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 TagsEnabled: !!getConfigValue(config, 'TagsEnabled', true),
                 SeasonTagTarget: normalizeSeasonTagTarget(getConfigValue(config, 'SeasonTagTarget', 0)),
                 SeasonCollectionsEnabled: !!getConfigValue(config, 'SeasonCollectionsEnabled', false),
-                SeasonOneCollectionUseSeries: !!getConfigValue(config, 'SeasonOneCollectionUseSeries', false),
+                SeasonOneCollectionUseSeries: !!getConfigValue(config, 'SeasonOneCollectionUseSeries', true),
                 SeasonCollectionFormat: String(getConfigValue(config, 'SeasonCollectionFormat', '{Season} {Year}')),
+                SeasonCollectionLockEnabled: !!getConfigValue(config, 'SeasonCollectionLockEnabled', true),
+                SeasonCollectionImagesEnabled: !!getConfigValue(config, 'SeasonCollectionImagesEnabled', true),
+                SeasonCollectionBackdropOverlayEnabled: !!getConfigValue(config, 'SeasonCollectionBackdropOverlayEnabled', true),
+                SeasonCollectionBackdropOverlayOpacity: normalizeOverlayOpacity(getConfigValue(config, 'SeasonCollectionBackdropOverlayOpacity', 35)),
+                SeasonCollectionBackdropOverlayColor: normalizeOverlayColor(getConfigValue(config, 'SeasonCollectionBackdropOverlayColor', '#000000')),
+                SeasonCollectionPosterFillMode: normalizePosterFillMode(getConfigValue(config, 'SeasonCollectionPosterFillMode', 0)),
+                SeasonCollectionLandscapeSourceMode: normalizeLandscapeSourceMode(getConfigValue(config, 'SeasonCollectionLandscapeSourceMode', 0)),
+                SeasonCollectionCanvasColor: normalizeOverlayColor(getConfigValue(config, 'SeasonCollectionCanvasColor', '#000000')),
+                SeasonCollectionCanvasOpacity: normalizeCanvasOpacity(getConfigValue(config, 'SeasonCollectionCanvasOpacity', 100)),
                 TagFormat: String(getConfigValue(config, 'TagFormat', '{Season} {Year}')),
                 TagSeasonSpring: String(getConfigValue(config, 'TagSeasonSpring', 'Spring')),
                 TagSeasonSummer: String(getConfigValue(config, 'TagSeasonSummer', 'Summer')),
@@ -3198,6 +3258,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             setConditionalOptions(settingsFields.ExtrasOptions, settingsFields.ExtrasEnabled.checked);
             setConditionalOptions(settingsFields.TagOptions, settingsFields.TagsEnabled.checked);
             setConditionalOptions(settingsFields.CollectionOptions, settingsFields.SeasonCollectionsEnabled.checked);
+            setConditionalOptions(settingsFields.CollectionImageOptions, settingsFields.SeasonCollectionImagesEnabled.checked);
+            setConditionalOptions(settingsFields.BackdropOverlayOptions, settingsFields.SeasonCollectionBackdropOverlayEnabled.checked);
             setConditionalOptions(settingsFields.SeasonLabelOptions, settingsFields.TagsEnabled.checked || settingsFields.SeasonCollectionsEnabled.checked);
             updateFormatPreviews();
         }
@@ -3308,8 +3370,17 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             settingsFields.TagsEnabled.checked = !!getConfigValue(config, 'TagsEnabled', true);
             settingsFields.SeasonTagTarget.value = String(normalizeSeasonTagTarget(getConfigValue(config, 'SeasonTagTarget', 0)));
             settingsFields.SeasonCollectionsEnabled.checked = !!getConfigValue(config, 'SeasonCollectionsEnabled', false);
-            settingsFields.SeasonOneCollectionUseSeries.checked = !!getConfigValue(config, 'SeasonOneCollectionUseSeries', false);
+            settingsFields.SeasonOneCollectionUseSeries.checked = !!getConfigValue(config, 'SeasonOneCollectionUseSeries', true);
             settingsFields.SeasonCollectionFormat.value = getConfigValue(config, 'SeasonCollectionFormat', '{Season} {Year}');
+            settingsFields.SeasonCollectionLockEnabled.checked = !!getConfigValue(config, 'SeasonCollectionLockEnabled', true);
+            settingsFields.SeasonCollectionImagesEnabled.checked = !!getConfigValue(config, 'SeasonCollectionImagesEnabled', true);
+            settingsFields.SeasonCollectionBackdropOverlayEnabled.checked = !!getConfigValue(config, 'SeasonCollectionBackdropOverlayEnabled', true);
+            settingsFields.SeasonCollectionBackdropOverlayOpacity.value = normalizeOverlayOpacity(getConfigValue(config, 'SeasonCollectionBackdropOverlayOpacity', 35));
+            settingsFields.SeasonCollectionBackdropOverlayColor.value = normalizeOverlayColor(getConfigValue(config, 'SeasonCollectionBackdropOverlayColor', '#000000'));
+            settingsFields.SeasonCollectionPosterFillMode.value = String(normalizePosterFillMode(getConfigValue(config, 'SeasonCollectionPosterFillMode', 0)));
+            settingsFields.SeasonCollectionLandscapeSourceMode.value = String(normalizeLandscapeSourceMode(getConfigValue(config, 'SeasonCollectionLandscapeSourceMode', 0)));
+            settingsFields.SeasonCollectionCanvasColor.value = normalizeOverlayColor(getConfigValue(config, 'SeasonCollectionCanvasColor', '#000000'));
+            settingsFields.SeasonCollectionCanvasOpacity.value = normalizeCanvasOpacity(getConfigValue(config, 'SeasonCollectionCanvasOpacity', 100));
             settingsFields.TagFormat.value = getConfigValue(config, 'TagFormat', '{Season} {Year}');
             settingsFields.TagSeasonSpring.value = getConfigValue(config, 'TagSeasonSpring', 'Spring');
             settingsFields.TagSeasonSummer.value = getConfigValue(config, 'TagSeasonSummer', 'Summer');
@@ -3357,6 +3428,15 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 SeasonCollectionsEnabled: settingsFields.SeasonCollectionsEnabled.checked,
                 SeasonOneCollectionUseSeries: settingsFields.SeasonOneCollectionUseSeries.checked,
                 SeasonCollectionFormat: settingsFields.SeasonCollectionFormat.value,
+                SeasonCollectionLockEnabled: settingsFields.SeasonCollectionLockEnabled.checked,
+                SeasonCollectionImagesEnabled: settingsFields.SeasonCollectionImagesEnabled.checked,
+                SeasonCollectionBackdropOverlayEnabled: settingsFields.SeasonCollectionBackdropOverlayEnabled.checked,
+                SeasonCollectionBackdropOverlayOpacity: normalizeOverlayOpacity(settingsFields.SeasonCollectionBackdropOverlayOpacity.value),
+                SeasonCollectionBackdropOverlayColor: normalizeOverlayColor(settingsFields.SeasonCollectionBackdropOverlayColor.value),
+                SeasonCollectionPosterFillMode: normalizePosterFillMode(settingsFields.SeasonCollectionPosterFillMode.value),
+                SeasonCollectionLandscapeSourceMode: normalizeLandscapeSourceMode(settingsFields.SeasonCollectionLandscapeSourceMode.value),
+                SeasonCollectionCanvasColor: normalizeOverlayColor(settingsFields.SeasonCollectionCanvasColor.value),
+                SeasonCollectionCanvasOpacity: normalizeCanvasOpacity(settingsFields.SeasonCollectionCanvasOpacity.value),
                 TagFormat: settingsFields.TagFormat.value,
                 TagSeasonSpring: settingsFields.TagSeasonSpring.value,
                 TagSeasonSummer: settingsFields.TagSeasonSummer.value,
@@ -4625,6 +4705,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         settingsFields.ExtrasEnabled.addEventListener('change', syncConditionalSettings);
         settingsFields.TagsEnabled.addEventListener('change', syncConditionalSettings);
         settingsFields.SeasonCollectionsEnabled.addEventListener('change', syncConditionalSettings);
+        settingsFields.SeasonCollectionImagesEnabled.addEventListener('change', syncConditionalSettings);
+        settingsFields.SeasonCollectionBackdropOverlayEnabled.addEventListener('change', syncConditionalSettings);
         [settingsFields.ExtrasFileNameFormat, settingsFields.ExtrasFileSuffix, settingsFields.TagFormat, settingsFields.SeasonCollectionFormat, settingsFields.TagSeasonWinter].forEach(function (input) {
             if (input) {
                 input.addEventListener('input', updateFormatPreviews);

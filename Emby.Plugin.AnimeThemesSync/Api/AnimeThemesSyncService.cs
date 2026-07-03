@@ -11,6 +11,7 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Net;
+using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Services;
@@ -373,9 +374,10 @@ public class AnimeThemesSyncService : IService, IRequiresRequest
         IMediaEncoder mediaEncoder,
         IApplicationPaths applicationPaths,
         ICollectionManager collectionManager,
+        IProviderManager providerManager,
         IHttpResultFactory httpResultFactory)
     {
-        _themeDownloader = new ThemeDownloader(libraryManager, fileSystem, logManager, mediaEncoder, applicationPaths, collectionManager);
+        _themeDownloader = new ThemeDownloader(libraryManager, fileSystem, logManager, mediaEncoder, applicationPaths, collectionManager, providerManager);
         _httpResultFactory = httpResultFactory;
     }
 

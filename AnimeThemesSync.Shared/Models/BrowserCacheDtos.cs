@@ -255,6 +255,36 @@ public sealed class ManagedSeasonCollectionMemberRecord
 }
 
 /// <summary>
+/// Plugin-managed lock and generated-artwork state for one managed broadcast-season collection.
+/// </summary>
+public sealed class ManagedSeasonCollectionAssetState
+{
+    public string CollectionKey { get; set; } = string.Empty;
+
+    public string? CollectionItemId { get; set; }
+
+    public bool LockAppliedByPlugin { get; set; }
+
+    public string? PrimaryFingerprint { get; set; }
+
+    public string? ThumbFingerprint { get; set; }
+
+    public string? BackdropFingerprint { get; set; }
+
+    public string? PrimaryWrittenFileIdentity { get; set; }
+
+    public string? ThumbWrittenFileIdentity { get; set; }
+
+    public string? BackdropWrittenFileIdentity { get; set; }
+
+    public string? LastGeneratedAtUtc { get; set; }
+
+    public string? LastError { get; set; }
+
+    public string UpdatedAtUtc { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// Complete normalized automation state for one series.
 /// </summary>
 public sealed class SeasonAutomationState

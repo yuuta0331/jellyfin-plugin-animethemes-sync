@@ -12,6 +12,8 @@
     <PackageReference Include="MediaBrowser.Common" Version="4.8.0.80" />
     <PackageReference Include="MediaBrowser.Server.Core" Version="4.8.0.80" />
     <PackageReference Include="SQLitePCL.pretty.core" Version="1.2.2" IncludeAssets="compile" />
+    <!-- Compile-only: at runtime the Emby server's own SkiaSharp 2.88.x (system folder) is used. -->
+    <PackageReference Include="SkiaSharp" Version="2.88.7" IncludeAssets="compile" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
     <PackageReference Include="System.Text.Json" Version="8.0.5" />

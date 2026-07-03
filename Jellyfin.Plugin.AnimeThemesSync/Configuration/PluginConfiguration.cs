@@ -23,6 +23,10 @@ public class PluginConfiguration : BasePluginConfiguration
     private string _tagSeasonWinter = "Winter";
     private string _tagFormat = "{Season} {Year}";
     private string _seasonCollectionFormat = "{Season} {Year}";
+    private int _seasonCollectionBackdropOverlayOpacity = 35;
+    private string _seasonCollectionBackdropOverlayColor = "#000000";
+    private int _seasonCollectionCanvasOpacity = 100;
+    private string _seasonCollectionCanvasColor = "#000000";
     private string _extrasFileNameFormat = ThemeFilePlanner.DefaultExtrasFileNameFormat;
     private bool _legacyConfigurationLoaded;
 
@@ -59,8 +63,17 @@ public class PluginConfiguration : BasePluginConfiguration
         TagsEnabled = true;
         SeasonTagTarget = SeasonTagTarget.Series;
         SeasonCollectionsEnabled = false;
-        SeasonOneCollectionUseSeries = false;
+        SeasonOneCollectionUseSeries = true;
         SeasonCollectionFormat = "{Season} {Year}";
+        SeasonCollectionLockEnabled = true;
+        SeasonCollectionImagesEnabled = true;
+        SeasonCollectionBackdropOverlayEnabled = true;
+        SeasonCollectionBackdropOverlayOpacity = 35;
+        SeasonCollectionBackdropOverlayColor = "#000000";
+        SeasonCollectionPosterFillMode = SeasonCollectionPosterFillMode.ArtworkFill;
+        SeasonCollectionLandscapeSourceMode = SeasonCollectionLandscapeSourceMode.LandscapeFirst;
+        SeasonCollectionCanvasColor = "#000000";
+        SeasonCollectionCanvasOpacity = 100;
         SeasonThemeMappings = [];
         TagLocalization = "None";
         Series = CreateDefaultMediaTypeConfig();
@@ -127,6 +140,58 @@ public class PluginConfiguration : BasePluginConfiguration
     {
         get => _seasonCollectionFormat;
         set => _seasonCollectionFormat = string.IsNullOrWhiteSpace(value) ? "{Season} {Year}" : value;
+    }
+
+    public bool SeasonCollectionLockEnabled { get; set; }
+
+    public bool SeasonCollectionImagesEnabled { get; set; }
+
+    public bool SeasonCollectionBackdropOverlayEnabled { get; set; }
+
+    public int SeasonCollectionBackdropOverlayOpacity
+    {
+        get => _seasonCollectionBackdropOverlayOpacity;
+        set => _seasonCollectionBackdropOverlayOpacity = value < 0 ? 0 : value > 90 ? 90 : value;
+    }
+
+    public string SeasonCollectionBackdropOverlayColor
+    {
+        get => _seasonCollectionBackdropOverlayColor;
+        set => _seasonCollectionBackdropOverlayColor = IsHexColor(value) ? value : "#000000";
+    }
+
+    public SeasonCollectionPosterFillMode SeasonCollectionPosterFillMode { get; set; }
+
+    public SeasonCollectionLandscapeSourceMode SeasonCollectionLandscapeSourceMode { get; set; }
+
+    public string SeasonCollectionCanvasColor
+    {
+        get => _seasonCollectionCanvasColor;
+        set => _seasonCollectionCanvasColor = IsHexColor(value) ? value : "#000000";
+    }
+
+    public int SeasonCollectionCanvasOpacity
+    {
+        get => _seasonCollectionCanvasOpacity;
+        set => _seasonCollectionCanvasOpacity = value < 0 ? 0 : value > 100 ? 100 : value;
+    }
+
+    private static bool IsHexColor(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value[0] != '#' || (value.Length != 7 && value.Length != 4))
+        {
+            return false;
+        }
+
+        for (var i = 1; i < value.Length; i++)
+        {
+            if (!Uri.IsHexDigit(value[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public List<SeasonThemeMapping> SeasonThemeMappings { get; set; }

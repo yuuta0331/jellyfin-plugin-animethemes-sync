@@ -1,8 +1,8 @@
-<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260702j" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260703b" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.07.02-j.</div>
+                <div class="fieldDescription">UI version: 2026.07.03-b.</div>
 
                 <div class="verticalSection ats-tabs" id="AnimeThemesBrowserTabs">
                     <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-tab active" id="AnimeThemesBrowserLibraryTab" data-ats-tab="library">
@@ -332,6 +332,60 @@
                                         <input id="AtsSeasonCollectionFormat" type="text" is="emby-input" />
                                         <div class="fieldDescription">Supported placeholders: <code>{Season}</code>, <code>{Year}</code>. Default: <code>{Season} {Year}</code>.</div>
                                         <div class="ats-format-preview"><i class="md-icon ats-icon" aria-hidden="true">&#xE8F4;</i><span>Preview: </span><strong id="AtsSeasonCollectionFormatPreview">Winter 2024</strong></div>
+                                    </div>
+                                    <div class="checkboxContainer checkboxContainer-withDescription">
+                                        <label class="emby-checkbox-label"><input id="AtsSeasonCollectionLockEnabled" type="checkbox" is="emby-checkbox" /><span>Lock collection metadata</span></label>
+                                        <div class="fieldDescription">Prevents TMDB and other metadata providers from overwriting the name and images of plugin-created collections. Turn off and run Sync to unlock them again.</div>
+                                    </div>
+                                    <div class="checkboxContainer checkboxContainer-withDescription">
+                                        <label class="emby-checkbox-label"><input id="AtsSeasonCollectionImagesEnabled" type="checkbox" is="emby-checkbox" /><span>Generate collection images</span></label>
+                                        <div class="fieldDescription">Builds the poster, thumb, and backdrop from member Season/Series posters. Images you set manually are never replaced.</div>
+                                    </div>
+                                    <div id="AtsCollectionImageOptions" class="ats-conditional-options">
+                                        <div class="selectContainer">
+                                            <label class="selectLabel" for="AtsSeasonCollectionPosterFillMode">Poster leftover space</label>
+                                            <select is="emby-select" id="AtsSeasonCollectionPosterFillMode" class="emby-select-withcolor emby-select">
+                                                <option value="0">Fill with backdrop/thumb artwork</option>
+                                                <option value="1">Leave as canvas color</option>
+                                            </select>
+                                            <div class="fieldDescription">Used when the generated poster holds only 2-3 member posters.</div>
+                                        </div>
+                                        <div class="selectContainer">
+                                            <label class="selectLabel" for="AtsSeasonCollectionLandscapeSourceMode">Thumb/backdrop sources</label>
+                                            <select is="emby-select" id="AtsSeasonCollectionLandscapeSourceMode" class="emby-select-withcolor emby-select">
+                                                <option value="0">Landscape first, posters as fallback</option>
+                                                <option value="1">Posters first, landscape as fallback</option>
+                                                <option value="2">Landscape images only</option>
+                                                <option value="3">Posters only</option>
+                                            </select>
+                                            <div class="fieldDescription">Which member artwork builds the generated thumb and backdrop. Poster tiles are capped at 10.</div>
+                                        </div>
+                                        <div class="inputContainer">
+                                            <label class="inputLabel inputLabelUnfocused" for="AtsSeasonCollectionCanvasColor">Canvas color</label>
+                                            <input id="AtsSeasonCollectionCanvasColor" type="text" is="emby-input" placeholder="#000000" />
+                                            <div class="fieldDescription">Background for empty space and pillarboxes. Hex color, default <code>#000000</code>.</div>
+                                        </div>
+                                        <div class="inputContainer">
+                                            <label class="inputLabel inputLabelUnfocused" for="AtsSeasonCollectionCanvasOpacity">Canvas opacity (%)</label>
+                                            <input id="AtsSeasonCollectionCanvasOpacity" type="number" is="emby-input" min="0" max="100" step="5" />
+                                            <div class="fieldDescription">0-100. Default: 100. Below 100 the images are saved as PNG (larger files) so the background can be transparent.</div>
+                                        </div>
+                                        <div class="checkboxContainer checkboxContainer-withDescription">
+                                            <label class="emby-checkbox-label"><input id="AtsSeasonCollectionBackdropOverlayEnabled" type="checkbox" is="emby-checkbox" /><span>Darken the generated backdrop</span></label>
+                                            <div class="fieldDescription">Adds a color overlay to the backdrop grid so overlaid text stays readable.</div>
+                                        </div>
+                                        <div id="AtsBackdropOverlayOptions" class="ats-conditional-options">
+                                            <div class="inputContainer">
+                                                <label class="inputLabel inputLabelUnfocused" for="AtsSeasonCollectionBackdropOverlayOpacity">Backdrop overlay opacity (%)</label>
+                                                <input id="AtsSeasonCollectionBackdropOverlayOpacity" type="number" is="emby-input" min="0" max="90" step="5" />
+                                                <div class="fieldDescription">0-90. Default: 35.</div>
+                                            </div>
+                                            <div class="inputContainer">
+                                                <label class="inputLabel inputLabelUnfocused" for="AtsSeasonCollectionBackdropOverlayColor">Backdrop overlay color</label>
+                                                <input id="AtsSeasonCollectionBackdropOverlayColor" type="text" is="emby-input" placeholder="#000000" />
+                                                <div class="fieldDescription">Hex color such as <code>#000000</code> or <code>#FFFFFF</code>. Default: <code>#000000</code>.</div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

@@ -36,6 +36,7 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 - 未一致Seasonを検索・保存できるSeason Finder UI
 - 動画/音声のプレビュー、リトライ、シーク再生
 - Season単位の出力を有効/無効にできる設定
+- 放送シーズンコレクションのメタデータロックとポスター/サムネイル/背景画像の自動生成
 
 ## Installation
 
@@ -76,6 +77,15 @@ AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加
 - シリーズにはシリーズ直下、Seasonに別マッピングがある場合は各Seasonフォルダ直下へ作成されます
 - 設定画面の `Enable Season Theme Downloads` を無効にすると、Season単位の出力を止めてシリーズ/映画単位の出力だけにできます
 - `AnimeThemes Browser` -> `Season Finder` を開くと、未一致Seasonの確認、AnimeThemes検索、OP/EDプレビュー、Seasonマッピング保存をJSON編集なしで実行できます
+
+### Seasonコレクションのメタデータロックと画像自動生成
+
+`Create broadcast-season collections` を有効にすると、プラグインが作成したコレクション（プラグイン独自のprovider idで識別。同名のため再利用しただけのコレクションには適用されません）に対して次の2つのオプションが使えます。
+
+- `Lock collection metadata`（既定: 有効）はサーバーのアイテムロックを設定し、TMDBなどのメタデータプロバイダーによるコレクション名・画像の上書きを防ぎます。ロック中は手動のメタデータ更新もブロックされます。解除するにはオプションを無効にしてSync（Browser設定のSyncボタン）を実行してください。ユーザー自身が設定したロックをプラグインが解除することはありません。
+- `Generate collection images`（既定: 有効）はメンバーのSeason/Seriesポスターを合成して、ポスター（最大4枚合成）、16:9のサムネイル、16:9の背景グリッドを生成します。メンバーやポスターが変わると自動的に再生成されます。生成画像を手動で差し替えた場合はそれを検知し、画像が削除されるまでそのスロットには触れません。背景のオーバーレイ（不透明度・色）は設定で調整・無効化できます。
+
+どちらのオプションも、次回の定期実行または手動Syncで既存の管理コレクションへ遡って適用されます。
 
 ### Browserからのダウンロードとプレビュー
 

@@ -28,8 +28,66 @@ public sealed class PluginConfigurationMigrationTests
         Assert.Equal(4, config.SegmentedDownloadSegments);
         Assert.Equal(SeasonTagTarget.Series, config.SeasonTagTarget);
         Assert.False(config.SeasonCollectionsEnabled);
-        Assert.False(config.SeasonOneCollectionUseSeries);
+        Assert.True(config.SeasonOneCollectionUseSeries);
         Assert.Equal("{Season} {Year}", config.SeasonCollectionFormat);
+        Assert.True(config.SeasonCollectionLockEnabled);
+        Assert.True(config.SeasonCollectionImagesEnabled);
+        Assert.True(config.SeasonCollectionBackdropOverlayEnabled);
+        Assert.Equal(35, config.SeasonCollectionBackdropOverlayOpacity);
+        Assert.Equal("#000000", config.SeasonCollectionBackdropOverlayColor);
+        Assert.Equal(SeasonCollectionPosterFillMode.ArtworkFill, config.SeasonCollectionPosterFillMode);
+        Assert.Equal(SeasonCollectionLandscapeSourceMode.LandscapeFirst, config.SeasonCollectionLandscapeSourceMode);
+        Assert.Equal("#000000", config.SeasonCollectionCanvasColor);
+        Assert.Equal(100, config.SeasonCollectionCanvasOpacity);
+    }
+
+    [Theory]
+    [InlineData(-5, 0)]
+    [InlineData(0, 0)]
+    [InlineData(100, 100)]
+    [InlineData(150, 100)]
+    public void SeasonCollectionCanvasOpacity_IsClamped(int value, int expected)
+    {
+        var config = new PluginConfiguration { SeasonCollectionCanvasOpacity = value };
+
+        Assert.Equal(expected, config.SeasonCollectionCanvasOpacity);
+    }
+
+    [Theory]
+    [InlineData("#FFFFFF", "#FFFFFF")]
+    [InlineData("blue", "#000000")]
+    [InlineData("", "#000000")]
+    public void SeasonCollectionCanvasColor_FallsBackToDefaultWhenInvalid(string value, string expected)
+    {
+        var config = new PluginConfiguration { SeasonCollectionCanvasColor = value };
+
+        Assert.Equal(expected, config.SeasonCollectionCanvasColor);
+    }
+
+    [Theory]
+    [InlineData(-5, 0)]
+    [InlineData(0, 0)]
+    [InlineData(35, 35)]
+    [InlineData(90, 90)]
+    [InlineData(120, 90)]
+    public void SeasonCollectionBackdropOverlayOpacity_IsClamped(int value, int expected)
+    {
+        var config = new PluginConfiguration { SeasonCollectionBackdropOverlayOpacity = value };
+
+        Assert.Equal(expected, config.SeasonCollectionBackdropOverlayOpacity);
+    }
+
+    [Theory]
+    [InlineData("#FFFFFF", "#FFFFFF")]
+    [InlineData("#abc", "#abc")]
+    [InlineData("red", "#000000")]
+    [InlineData("", "#000000")]
+    [InlineData("#12345G", "#000000")]
+    public void SeasonCollectionBackdropOverlayColor_FallsBackToDefaultWhenInvalid(string value, string expected)
+    {
+        var config = new PluginConfiguration { SeasonCollectionBackdropOverlayColor = value };
+
+        Assert.Equal(expected, config.SeasonCollectionBackdropOverlayColor);
     }
 
     [Theory]

@@ -335,6 +335,76 @@ public sealed class SeasonFinderDataStoreTests
         }
     }
 
+    [Fact]
+    public void CollectionAssets_UpsertReadDeleteAndSurviveClearCache()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            store.UpsertCollectionAssetState(new ManagedSeasonCollectionAssetState
+            {
+                CollectionKey = "2024-winter",
+                CollectionItemId = "collection-1",
+                LockAppliedByPlugin = true,
+                PrimaryFingerprint = "fp-primary",
+                PrimaryWrittenFileIdentity = "100:200",
+                UpdatedAtUtc = "2026-07-03T00:00:00.0000000+00:00",
+            });
+            store.UpsertCollectionAssetState(new ManagedSeasonCollectionAssetState
+            {
+                CollectionKey = "2024-winter",
+                CollectionItemId = "collection-1",
+                LockAppliedByPlugin = true,
+                PrimaryFingerprint = "fp-primary-2",
+                PrimaryWrittenFileIdentity = "101:201",
+                ThumbFingerprint = "fp-thumb",
+                UpdatedAtUtc = "2026-07-03T01:00:00.0000000+00:00",
+            });
+
+            store.ClearCache();
+
+            var reopened = CreateStore(directory);
+            var state = Assert.Single(reopened.GetCollectionAssetStates());
+            Assert.Equal("2024-winter", state.CollectionKey);
+            Assert.True(state.LockAppliedByPlugin);
+            Assert.Equal("fp-primary-2", state.PrimaryFingerprint);
+            Assert.Equal("101:201", state.PrimaryWrittenFileIdentity);
+            Assert.Equal("fp-thumb", state.ThumbFingerprint);
+            Assert.Null(state.BackdropFingerprint);
+
+            reopened.DeleteCollectionAssetState("2024-winter");
+            Assert.Empty(reopened.GetCollectionAssetStates());
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void CollectionAssets_AreScopedByServerKind()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var jellyfinStore = CreateStore(directory, "Jellyfin");
+            var embyStore = CreateStore(directory, "Emby");
+            jellyfinStore.UpsertCollectionAssetState(new ManagedSeasonCollectionAssetState
+            {
+                CollectionKey = "2024-winter",
+                UpdatedAtUtc = "2026-07-03T00:00:00.0000000+00:00",
+            });
+
+            Assert.Single(jellyfinStore.GetCollectionAssetStates());
+            Assert.Empty(embyStore.GetCollectionAssetStates());
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
     private static SeasonFinderDataStore CreateStore(string directory, string serverKind = "Test")
     {
         return new SeasonFinderDataStore(new TestPathProvider(directory), new TestIdentityProvider(serverKind));

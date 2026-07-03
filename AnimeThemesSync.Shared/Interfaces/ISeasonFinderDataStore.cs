@@ -31,6 +31,12 @@ public interface ISeasonFinderDataStore
 
     void SaveSeasonAutomationState(SeasonAutomationState state);
 
+    IReadOnlyList<ManagedSeasonCollectionAssetState> GetCollectionAssetStates();
+
+    void UpsertCollectionAssetState(ManagedSeasonCollectionAssetState state);
+
+    void DeleteCollectionAssetState(string collectionKey);
+
     IReadOnlyList<SeasonSummary> GetSeasonSummaries(string seriesItemId);
 
     IReadOnlyList<SeasonThemeMappingRow> GetAllRows();

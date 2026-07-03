@@ -36,6 +36,7 @@ AnimeThemes Sync adds AnimeThemes.moe integration to your media server:
 - Season Finder UI for unmatched season mappings
 - Video/audio previews, retry, and seekable local playback
 - Optional season-level downloads, so you can keep output at the series level when preferred
+- Broadcast-season collections with metadata lock and auto-generated poster/thumb/backdrop artwork
 
 ## Installation
 
@@ -76,6 +77,15 @@ AnimeThemes Sync adds AnimeThemes.moe integration to your media server:
 - Series output remains under the series folder; season-specific mappings write to each season folder.
 - Disable `Enable Season Theme Downloads` in the plugin configuration to keep scheduled and on-demand output at the series/movie level.
 - Open `AnimeThemes Browser` -> `Season Finder` to review unmatched seasons, search AnimeThemes, preview OP/ED entries, and save season mappings without editing JSON.
+
+### Season collections: metadata lock and generated artwork
+
+When `Create broadcast-season collections` is enabled, two related options apply to plugin-created collections (identified by the plugin's own provider id; collections that were merely reused by name are never touched):
+
+- `Lock collection metadata` (default: on) sets the server's item lock so TMDB and other metadata providers cannot overwrite the collection name or images. The lock also blocks manual metadata refresh for those collections; turn the option off and run Sync (in the Browser settings) to unlock them again. Locks that you set yourself are never removed by the plugin.
+- `Generate collection images` (default: on) composites member Season/Series posters into a Primary poster (up to 4 posters), a 16:9 thumb, and a 16:9 backdrop grid. Images are regenerated automatically when members or their posters change. If you replace a generated image manually, the plugin detects that and stops touching that slot until the image is deleted. The backdrop overlay (opacity and color) can be tuned or disabled in the settings.
+
+Both options are applied retroactively to previously created collections on the next scheduled run or manual sync.
 
 ### Browser downloads and previews
 

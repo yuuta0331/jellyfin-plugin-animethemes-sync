@@ -696,7 +696,7 @@ public class ThemeFilePlannerTests
             Assert.Contains("aria-label=\"Include theme video\" />\n                                <span>Include</span>", normalized, StringComparison.Ordinal);
             Assert.Contains("--jf-palette-background-paper", content, StringComparison.Ordinal);
             Assert.Contains("--background-hue", content, StringComparison.Ordinal);
-            Assert.DoesNotContain("Canvas", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("<canvas", content, StringComparison.OrdinalIgnoreCase);
         }
 
         Assert.Contains("material-icons ats-download-option-icon", jellyfinHtml, StringComparison.Ordinal);

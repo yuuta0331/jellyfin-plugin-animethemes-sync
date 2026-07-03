@@ -25,6 +25,17 @@ public sealed class SeasonFeatureParityTests
                      "AtsCollectionOptions",
                      "AtsSeasonLabelOptions",
                      "AnimeThemesSeasonNumberFilter",
+                     "AtsSeasonCollectionLockEnabled",
+                     "AtsSeasonCollectionImagesEnabled",
+                     "AtsSeasonCollectionBackdropOverlayEnabled",
+                     "AtsSeasonCollectionBackdropOverlayOpacity",
+                     "AtsSeasonCollectionBackdropOverlayColor",
+                     "AtsCollectionImageOptions",
+                     "AtsBackdropOverlayOptions",
+                     "AtsSeasonCollectionPosterFillMode",
+                     "AtsSeasonCollectionLandscapeSourceMode",
+                     "AtsSeasonCollectionCanvasColor",
+                     "AtsSeasonCollectionCanvasOpacity",
                  })
         {
             Assert.Contains(marker, jellyfin, StringComparison.Ordinal);
@@ -41,6 +52,50 @@ public sealed class SeasonFeatureParityTests
         Assert.Contains("CompletedWithErrors", embyScript, StringComparison.Ordinal);
         Assert.Contains("config.SeasonCollectionFormat", jellyfinDownloader, StringComparison.Ordinal);
         Assert.Contains("config.SeasonCollectionFormat", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("normalizeOverlayOpacity", jellyfin, StringComparison.Ordinal);
+        Assert.Contains("normalizeOverlayOpacity", embyScript, StringComparison.Ordinal);
+        Assert.Contains("normalizeOverlayColor", jellyfin, StringComparison.Ordinal);
+        Assert.Contains("normalizeOverlayColor", embyScript, StringComparison.Ordinal);
+        Assert.Contains("normalizePosterFillMode", jellyfin, StringComparison.Ordinal);
+        Assert.Contains("normalizePosterFillMode", embyScript, StringComparison.Ordinal);
+        Assert.Contains("normalizeLandscapeSourceMode", jellyfin, StringComparison.Ordinal);
+        Assert.Contains("normalizeLandscapeSourceMode", embyScript, StringComparison.Ordinal);
+        Assert.Contains("normalizeCanvasOpacity", jellyfin, StringComparison.Ordinal);
+        Assert.Contains("normalizeCanvasOpacity", embyScript, StringComparison.Ordinal);
+
+        foreach (var downloaderMarker in new[]
+                 {
+                     "FinalizeSeasonCollectionsAsync",
+                     "GenerateSeasonCollectionImagesAsync",
+                     "IsLocked = ",
+                     "SeasonCollectionLockEnabled",
+                     "SeasonCollectionImagesEnabled",
+                     "UserOwnedImageFingerprint",
+                     "ManagedSeasonCollectionAssetState",
+                     "SeasonCollectionFinalizeGate",
+                     "FinalizeSeasonCollectionsSafelyAsync",
+                     "GetCollectionMemberArt",
+                     "ComputeLandscapeCanvasLayout",
+                     "SelectLandscapeCanvasSources",
+                 })
+        {
+            Assert.Contains(downloaderMarker, jellyfinDownloader, StringComparison.Ordinal);
+            Assert.Contains(downloaderMarker, embyDownloader, StringComparison.Ordinal);
+        }
+
+        var jellyfinStore = File.ReadAllText(Path.Combine(root, "AnimeThemesSync.Shared", "Services", "SeasonFinderDataStore.cs"));
+        var embyStore = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "ScheduledTasks", "EmbySeasonFinderDataStore.cs"));
+        foreach (var storeMarker in new[]
+                 {
+                     "ManagedSeasonCollectionAssets",
+                     "GetCollectionAssetStates",
+                     "UpsertCollectionAssetState",
+                     "DeleteCollectionAssetState",
+                 })
+        {
+            Assert.Contains(storeMarker, jellyfinStore, StringComparison.Ordinal);
+            Assert.Contains(storeMarker, embyStore, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

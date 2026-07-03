@@ -17,7 +17,7 @@ namespace AnimeThemesSync.Shared.Services;
 /// </summary>
 public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
 {
-    private const int CurrentSchemaVersion = 2;
+    private const int CurrentSchemaVersion = 3;
     private const int DefaultLimit = 80;
     private const int MaxLimit = 100;
     private const int SearchCacheLimit = 200;
@@ -198,6 +198,22 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
                 );
                 CREATE INDEX IF NOT EXISTS IX_ManagedSeasonCollectionMembers_Rule
                     ON ManagedSeasonCollectionMembers(ServerKind, RuleKey);
+                CREATE TABLE IF NOT EXISTS ManagedSeasonCollectionAssets (
+                    ServerKind TEXT NOT NULL,
+                    CollectionKey TEXT NOT NULL,
+                    CollectionItemId TEXT NULL,
+                    LockAppliedByPlugin INTEGER NOT NULL DEFAULT 0,
+                    PrimaryFingerprint TEXT NULL,
+                    ThumbFingerprint TEXT NULL,
+                    BackdropFingerprint TEXT NULL,
+                    PrimaryWrittenFileIdentity TEXT NULL,
+                    ThumbWrittenFileIdentity TEXT NULL,
+                    BackdropWrittenFileIdentity TEXT NULL,
+                    LastGeneratedAtUtc TEXT NULL,
+                    LastError TEXT NULL,
+                    UpdatedAtUtc TEXT NOT NULL,
+                    PRIMARY KEY (ServerKind, CollectionKey)
+                );
                 """);
             UpsertMetadata(connection, transaction, "SchemaVersion", CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture));
             transaction.Commit();
@@ -653,6 +669,93 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
             }
 
             transaction.Commit();
+        }
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<ManagedSeasonCollectionAssetState> GetCollectionAssetStates()
+    {
+        lock (_syncRoot)
+        {
+            EnsureInitialized();
+            using var connection = OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT CollectionKey, CollectionItemId, LockAppliedByPlugin, PrimaryFingerprint, ThumbFingerprint,
+                       BackdropFingerprint, PrimaryWrittenFileIdentity, ThumbWrittenFileIdentity,
+                       BackdropWrittenFileIdentity, LastGeneratedAtUtc, LastError, UpdatedAtUtc
+                FROM ManagedSeasonCollectionAssets WHERE ServerKind = $serverKind;
+                """;
+            command.Parameters.AddWithValue("$serverKind", ServerKind);
+            using var reader = command.ExecuteReader();
+            var states = new List<ManagedSeasonCollectionAssetState>();
+            while (reader.Read())
+            {
+                states.Add(new ManagedSeasonCollectionAssetState
+                {
+                    CollectionKey = reader.GetString(0),
+                    CollectionItemId = GetNullableString(reader, 1),
+                    LockAppliedByPlugin = reader.GetInt32(2) != 0,
+                    PrimaryFingerprint = GetNullableString(reader, 3),
+                    ThumbFingerprint = GetNullableString(reader, 4),
+                    BackdropFingerprint = GetNullableString(reader, 5),
+                    PrimaryWrittenFileIdentity = GetNullableString(reader, 6),
+                    ThumbWrittenFileIdentity = GetNullableString(reader, 7),
+                    BackdropWrittenFileIdentity = GetNullableString(reader, 8),
+                    LastGeneratedAtUtc = GetNullableString(reader, 9),
+                    LastError = GetNullableString(reader, 10),
+                    UpdatedAtUtc = reader.GetString(11),
+                });
+            }
+
+            return states;
+        }
+    }
+
+    /// <inheritdoc />
+    public void UpsertCollectionAssetState(ManagedSeasonCollectionAssetState state)
+    {
+        lock (_syncRoot)
+        {
+            EnsureInitialized();
+            using var connection = OpenConnection();
+            Execute(connection, null, """
+                INSERT INTO ManagedSeasonCollectionAssets (ServerKind, CollectionKey, CollectionItemId,
+                    LockAppliedByPlugin, PrimaryFingerprint, ThumbFingerprint, BackdropFingerprint,
+                    PrimaryWrittenFileIdentity, ThumbWrittenFileIdentity, BackdropWrittenFileIdentity,
+                    LastGeneratedAtUtc, LastError, UpdatedAtUtc)
+                VALUES ($serverKind, $key, $itemId, $lock, $primaryFp, $thumbFp, $backdropFp,
+                    $primaryId, $thumbId, $backdropId, $generated, $error, $updated)
+                ON CONFLICT(ServerKind, CollectionKey) DO UPDATE SET
+                    CollectionItemId = excluded.CollectionItemId,
+                    LockAppliedByPlugin = excluded.LockAppliedByPlugin,
+                    PrimaryFingerprint = excluded.PrimaryFingerprint,
+                    ThumbFingerprint = excluded.ThumbFingerprint,
+                    BackdropFingerprint = excluded.BackdropFingerprint,
+                    PrimaryWrittenFileIdentity = excluded.PrimaryWrittenFileIdentity,
+                    ThumbWrittenFileIdentity = excluded.ThumbWrittenFileIdentity,
+                    BackdropWrittenFileIdentity = excluded.BackdropWrittenFileIdentity,
+                    LastGeneratedAtUtc = excluded.LastGeneratedAtUtc,
+                    LastError = excluded.LastError,
+                    UpdatedAtUtc = excluded.UpdatedAtUtc;
+                """, ("$serverKind", ServerKind), ("$key", state.CollectionKey), ("$itemId", state.CollectionItemId),
+                ("$lock", state.LockAppliedByPlugin ? 1 : 0), ("$primaryFp", state.PrimaryFingerprint),
+                ("$thumbFp", state.ThumbFingerprint), ("$backdropFp", state.BackdropFingerprint),
+                ("$primaryId", state.PrimaryWrittenFileIdentity), ("$thumbId", state.ThumbWrittenFileIdentity),
+                ("$backdropId", state.BackdropWrittenFileIdentity), ("$generated", state.LastGeneratedAtUtc),
+                ("$error", state.LastError), ("$updated", state.UpdatedAtUtc));
+        }
+    }
+
+    /// <inheritdoc />
+    public void DeleteCollectionAssetState(string collectionKey)
+    {
+        lock (_syncRoot)
+        {
+            EnsureInitialized();
+            using var connection = OpenConnection();
+            Execute(connection, null, "DELETE FROM ManagedSeasonCollectionAssets WHERE ServerKind = $serverKind AND CollectionKey = $key;",
+                ("$serverKind", ServerKind), ("$key", collectionKey));
         }
     }
 
