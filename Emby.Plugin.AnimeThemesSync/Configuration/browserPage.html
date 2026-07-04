@@ -1,8 +1,8 @@
-<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260703b" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260704c" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.07.03-b.</div>
+                <div class="fieldDescription">UI version: 2026.07.04-c.</div>
 
                 <div class="verticalSection ats-tabs" id="AnimeThemesBrowserTabs">
                     <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-tab active" id="AnimeThemesBrowserLibraryTab" data-ats-tab="library">
@@ -350,6 +350,16 @@
                                             </select>
                                             <div class="fieldDescription">Used when the generated poster holds only 2-3 member posters.</div>
                                         </div>
+                                        <div id="AtsPosterFillLandscapeTypeOptions" class="ats-conditional-options">
+                                            <div class="selectContainer">
+                                                <label class="selectLabel" for="AtsSeasonCollectionPosterFillLandscapeType">Poster fill image type</label>
+                                                <select is="emby-select" id="AtsSeasonCollectionPosterFillLandscapeType" class="emby-select-withcolor emby-select">
+                                                    <option value="0">Thumbnail (fallback backdrop)</option>
+                                                    <option value="1">Backdrop (fallback thumbnail)</option>
+                                                </select>
+                                                <div class="fieldDescription">Which landscape image fills the poster's leftover strip.</div>
+                                            </div>
+                                        </div>
                                         <div class="selectContainer">
                                             <label class="selectLabel" for="AtsSeasonCollectionLandscapeSourceMode">Thumb/backdrop sources</label>
                                             <select is="emby-select" id="AtsSeasonCollectionLandscapeSourceMode" class="emby-select-withcolor emby-select">
@@ -359,6 +369,16 @@
                                                 <option value="3">Posters only</option>
                                             </select>
                                             <div class="fieldDescription">Which member artwork builds the generated thumb and backdrop. Poster tiles are capped at 10.</div>
+                                        </div>
+                                        <div id="AtsCanvasLandscapeTypeOptions" class="ats-conditional-options">
+                                            <div class="selectContainer">
+                                                <label class="selectLabel" for="AtsSeasonCollectionCanvasLandscapeType">Thumb/backdrop image type</label>
+                                                <select is="emby-select" id="AtsSeasonCollectionCanvasLandscapeType" class="emby-select-withcolor emby-select">
+                                                    <option value="0">Thumbnail (fallback backdrop)</option>
+                                                    <option value="1">Backdrop (fallback thumbnail)</option>
+                                                </select>
+                                                <div class="fieldDescription">Which landscape image builds the generated thumb and backdrop.</div>
+                                            </div>
                                         </div>
                                         <div class="inputContainer">
                                             <label class="inputLabel inputLabelUnfocused" for="AtsSeasonCollectionCanvasColor">Canvas color</label>
@@ -733,6 +753,35 @@
                 <div class="ats-download-actions">
                     <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AnimeThemesDeleteDialogCancel"><span>Cancel</span></button>
                     <button is="emby-button" type="button" class="raised emby-button ats-button-danger ats-icon-button-text" id="AnimeThemesDeleteDialogConfirm"><i class="md-icon ats-icon" aria-hidden="true">&#xE872;</i><span>Delete selected</span></button>
+                </div>
+            </div>
+        </div>
+
+        <div id="AnimeThemesCollectionDisableDialog" class="ats-player ats-download-dialog" aria-hidden="true">
+            <div class="ats-player-panel ats-download-panel" role="dialog" aria-modal="true" aria-labelledby="AnimeThemesCollectionDisableDialogTitle" aria-describedby="AnimeThemesCollectionDisableDialogDescription">
+                <div class="ats-player-header ats-download-header">
+                    <div class="ats-download-heading">
+                        <i class="md-icon ats-download-heading-icon" aria-hidden="true">&#xE431;</i>
+                        <div><h3 id="AnimeThemesCollectionDisableDialogTitle">Season Collections turned off</h3></div>
+                    </div>
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-download-close" id="AnimeThemesCollectionDisableDialogClose" aria-label="Cancel saving settings">
+                        <i class="md-icon ats-icon" aria-hidden="true">&#xE5CD;</i>
+                    </button>
+                </div>
+                <div class="ats-download-content">
+                    <p id="AnimeThemesCollectionDisableDialogDescription" class="ats-download-description">Choose what happens to collection memberships previously managed by AnimeThemes Sync.</p>
+                    <div class="ats-collection-choice-summary">
+                        <strong>Keep existing collections</strong>
+                        <span>Stops future synchronization but leaves existing collections and memberships unchanged.</span>
+                    </div>
+                    <div class="ats-collection-choice-summary ats-collection-choice-remove">
+                        <strong>Remove managed collections</strong>
+                        <span>Removes only memberships added by this plugin. Empty plugin-created collections are deleted; collections containing your own members are kept.</span>
+                    </div>
+                </div>
+                <div class="ats-download-actions ats-collection-choice-actions">
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AnimeThemesCollectionDisableDialogKeep"><span>Keep existing collections</span></button>
+                    <button is="emby-button" type="button" class="raised emby-button ats-button-danger ats-icon-button-text" id="AnimeThemesCollectionDisableDialogRemove"><i class="md-icon ats-icon" aria-hidden="true">&#xE872;</i><span>Remove managed collections</span></button>
                 </div>
             </div>
         </div>
@@ -2302,6 +2351,33 @@
             #AnimeThemesBrowserPage .ats-download-options {
                 display: grid;
                 gap: .65rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-collection-choice-summary {
+                display: grid;
+                gap: .3rem;
+                padding: .9rem;
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius);
+                background: var(--ats-surface);
+                line-height: 1.4;
+            }
+
+            #AnimeThemesBrowserPage .ats-collection-choice-summary span {
+                opacity: .8;
+            }
+
+            #AnimeThemesBrowserPage .ats-collection-choice-remove {
+                border-color: var(--ats-danger-border);
+                background: var(--ats-danger-surface);
+            }
+
+            #AnimeThemesBrowserPage .ats-collection-choice-actions {
+                flex-wrap: wrap;
+            }
+
+            #AnimeThemesBrowserPage .ats-collection-choice-actions .emby-button {
+                white-space: normal;
             }
 
             #AnimeThemesBrowserPage .ats-download-option {

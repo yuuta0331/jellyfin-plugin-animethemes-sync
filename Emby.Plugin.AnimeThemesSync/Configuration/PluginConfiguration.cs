@@ -67,11 +67,13 @@ public class PluginConfiguration : BasePluginConfiguration
         SeasonCollectionFormat = "{Season} {Year}";
         SeasonCollectionLockEnabled = true;
         SeasonCollectionImagesEnabled = true;
-        SeasonCollectionBackdropOverlayEnabled = true;
+        SeasonCollectionBackdropOverlayEnabled = false;
         SeasonCollectionBackdropOverlayOpacity = 35;
         SeasonCollectionBackdropOverlayColor = "#000000";
         SeasonCollectionPosterFillMode = SeasonCollectionPosterFillMode.ArtworkFill;
-        SeasonCollectionLandscapeSourceMode = SeasonCollectionLandscapeSourceMode.LandscapeFirst;
+        SeasonCollectionLandscapeSourceMode = SeasonCollectionLandscapeSourceMode.LandscapeOnly;
+        SeasonCollectionPosterFillLandscapeType = SeasonCollectionLandscapeArtType.Thumb;
+        SeasonCollectionCanvasLandscapeType = SeasonCollectionLandscapeArtType.Thumb;
         SeasonCollectionCanvasColor = "#000000";
         SeasonCollectionCanvasOpacity = 100;
         SeasonThemeMappings = [];
@@ -163,6 +165,10 @@ public class PluginConfiguration : BasePluginConfiguration
     public SeasonCollectionPosterFillMode SeasonCollectionPosterFillMode { get; set; }
 
     public SeasonCollectionLandscapeSourceMode SeasonCollectionLandscapeSourceMode { get; set; }
+
+    public SeasonCollectionLandscapeArtType SeasonCollectionPosterFillLandscapeType { get; set; }
+
+    public SeasonCollectionLandscapeArtType SeasonCollectionCanvasLandscapeType { get; set; }
 
     public string SeasonCollectionCanvasColor
     {

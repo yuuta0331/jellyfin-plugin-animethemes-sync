@@ -2350,6 +2350,7 @@ public sealed class ThemeDownloader : IScheduledTask
         }
 
         var states = assetStates.ToDictionary(i => i.CollectionKey, StringComparer.OrdinalIgnoreCase);
+        var liveCollectionKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var collection in managed)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -2358,6 +2359,7 @@ public sealed class ThemeDownloader : IScheduledTask
                 continue;
             }
 
+            liveCollectionKeys.Add(collectionKey);
             states.TryGetValue(collectionKey, out var state);
             state ??= new ManagedSeasonCollectionAssetState { CollectionKey = collectionKey };
             state.CollectionItemId = collection.Id.ToString("D");
@@ -2391,6 +2393,15 @@ public sealed class ThemeDownloader : IScheduledTask
                     await _libraryManager.UpdateItemAsync(collection, parent, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                 }
 
+                if (removeManagedCollectionMemberships && collection.GetLinkedChildren().Count == 0)
+                {
+                    _libraryManager.DeleteItem(collection, new DeleteOptions { DeleteFileLocation = true });
+                    _seasonFinderStore.DeleteCollectionAssetState(collectionKey);
+                    liveCollectionKeys.Remove(collectionKey);
+                    _logger.LogInformation("Deleted empty plugin-created season collection {CollectionName}.", collection.Name);
+                    continue;
+                }
+
                 await GenerateSeasonCollectionImagesAsync(collection, config, state, cancellationToken).ConfigureAwait(false);
                 state.LastError = null;
             }
@@ -2402,6 +2413,14 @@ public sealed class ThemeDownloader : IScheduledTask
 
             state.UpdatedAtUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
             _seasonFinderStore.UpsertCollectionAssetState(state);
+        }
+
+        if (removeManagedCollectionMemberships)
+        {
+            foreach (var staleState in assetStates.Where(i => !liveCollectionKeys.Contains(i.CollectionKey)))
+            {
+                _seasonFinderStore.DeleteCollectionAssetState(staleState.CollectionKey);
+            }
         }
     }
 
@@ -2417,9 +2436,7 @@ public sealed class ThemeDownloader : IScheduledTask
         }
 
         var memberArt = GetCollectionMemberArt(collection);
-        var posters = memberArt.Where(i => i.Poster != null).Select(i => i.Poster!.Value).ToList();
-        var landscapes = memberArt.Where(i => i.Landscape != null).Select(i => i.Landscape!.Value).ToList();
-        if (posters.Count == 0 && landscapes.Count == 0)
+        if (memberArt.Count == 0)
         {
             _logger.LogDebug("No usable member artwork for collection {CollectionName}; skipping image generation.", collection.Name);
             return;
@@ -2430,25 +2447,27 @@ public sealed class ThemeDownloader : IScheduledTask
             : "off";
         var backdropOpacity = config.SeasonCollectionBackdropOverlayEnabled ? config.SeasonCollectionBackdropOverlayOpacity : 0;
         var canvasSettings = FormattableString.Invariant(
-            $"{(int)config.SeasonCollectionPosterFillMode}:{(int)config.SeasonCollectionLandscapeSourceMode}:{config.SeasonCollectionCanvasColor}:{config.SeasonCollectionCanvasOpacity}");
+            $"{(int)config.SeasonCollectionPosterFillMode}:{(int)config.SeasonCollectionLandscapeSourceMode}:{config.SeasonCollectionCanvasColor}:{config.SeasonCollectionCanvasOpacity}:{(int)config.SeasonCollectionPosterFillLandscapeType}:{(int)config.SeasonCollectionCanvasLandscapeType}");
         var fillMode = config.SeasonCollectionPosterFillMode;
 
-        var primarySources = posters.Take(CollectionImageLayoutEngine.PosterMaxImages).ToList();
-        if (fillMode == SeasonCollectionPosterFillMode.ArtworkFill && primarySources.Count is 2 or 3 && landscapes.Count > 0)
-        {
-            primarySources.Add(landscapes[0]);
-        }
+        var primarySources = CollectionImageLayoutEngine.SelectPosterCanvasSources(
+            memberArt,
+            fillMode,
+            config.SeasonCollectionPosterFillLandscapeType);
 
         var landscapeCanvasSources = CollectionImageLayoutEngine.SelectLandscapeCanvasSources(
-            memberArt.Select(i => (i.Poster, i.Landscape)).ToList(),
-            config.SeasonCollectionLandscapeSourceMode);
-        var landscapeCanvasKind = landscapeCanvasSources.Count > 0 ? landscapeCanvasSources[0].Kind : CollectionImageSourceKind.Landscape;
-        var thumbCap = landscapeCanvasKind == CollectionImageSourceKind.Poster
+            memberArt,
+            config.SeasonCollectionLandscapeSourceMode,
+            config.SeasonCollectionCanvasLandscapeType);
+        var preferredCanvasKind = landscapeCanvasSources.Count > 0 ? landscapeCanvasSources[0].Kind : CollectionImageSourceKind.Landscape;
+        var thumbCap = preferredCanvasKind == CollectionImageSourceKind.Poster
             ? CollectionImageLayoutEngine.PosterTilesMaxOnLandscapeCanvas
             : CollectionImageLayoutEngine.ThumbMaxImages;
-        var backdropCap = landscapeCanvasKind == CollectionImageSourceKind.Poster
+        var backdropCap = preferredCanvasKind == CollectionImageSourceKind.Poster
             ? CollectionImageLayoutEngine.PosterTilesMaxOnLandscapeCanvas
             : CollectionImageLayoutEngine.BackdropMaxImages;
+        var thumbSources = landscapeCanvasSources.Take(thumbCap).ToList();
+        var backdropSources = landscapeCanvasSources.Take(backdropCap).ToList();
 
         var changed = false;
         if (primarySources.Count > 0)
@@ -2460,11 +2479,11 @@ public sealed class ThemeDownloader : IScheduledTask
                 1000,
                 1500,
                 primarySources,
-                kinds => CollectionImageLayoutEngine.ComputePosterCanvasLayout(
+                sources => CollectionImageLayoutEngine.ComputePosterCanvasLayout(
                     1000,
                     1500,
-                    kinds.Count(k => k == CollectionImageSourceKind.Poster),
-                    kinds.Contains(CollectionImageSourceKind.Landscape),
+                    sources.Count(source => source.Kind == CollectionImageSourceKind.Poster),
+                    sources.Any(source => source.Kind == CollectionImageSourceKind.Landscape),
                     fillMode),
                 "none",
                 null,
@@ -2482,8 +2501,8 @@ public sealed class ThemeDownloader : IScheduledTask
                 ImageType.Thumb,
                 1280,
                 720,
-                landscapeCanvasSources.Take(thumbCap).ToList(),
-                kinds => CollectionImageLayoutEngine.ComputeLandscapeCanvasLayout(1280, 720, kinds.Count, landscapeCanvasKind),
+                thumbSources,
+                sources => CollectionImageLayoutEngine.ComputeLandscapeCanvasLayout(1280, 720, sources),
                 "none",
                 null,
                 0,
@@ -2496,8 +2515,8 @@ public sealed class ThemeDownloader : IScheduledTask
                 ImageType.Backdrop,
                 1920,
                 1080,
-                landscapeCanvasSources.Take(backdropCap).ToList(),
-                kinds => CollectionImageLayoutEngine.ComputeLandscapeCanvasLayout(1920, 1080, kinds.Count, landscapeCanvasKind),
+                backdropSources,
+                sources => CollectionImageLayoutEngine.ComputeLandscapeCanvasLayout(1920, 1080, sources),
                 backdropOverlay,
                 config.SeasonCollectionBackdropOverlayColor,
                 backdropOpacity,
@@ -2519,7 +2538,7 @@ public sealed class ThemeDownloader : IScheduledTask
         int width,
         int height,
         List<CollectionImageSource> sources,
-        Func<IReadOnlyList<CollectionImageSourceKind>, CollectionImageLayoutResult> layoutForSources,
+        Func<IReadOnlyList<CollectionImageLayoutSource>, CollectionImageLayoutResult> layoutForSources,
         string overlaySettings,
         string? overlayColor,
         int overlayOpacityPercent,
@@ -2529,34 +2548,22 @@ public sealed class ThemeDownloader : IScheduledTask
     {
         var (storedFingerprint, storedIdentity) = GetImageSlotState(state, imageType);
         var fingerprint = CollectionImageFingerprint.Compute(imageType.ToString(), width, height, overlaySettings, canvasSettings, sources);
-        var existing = collection.GetImageInfo(imageType, 0);
-        if (existing != null)
+        var slotImages = GetCollectionImageSlotEntries(collection, imageType);
+        if (string.Equals(storedFingerprint, UserOwnedImageFingerprint, StringComparison.Ordinal))
         {
-            if (string.Equals(storedFingerprint, UserOwnedImageFingerprint, StringComparison.Ordinal))
-            {
-                return false;
-            }
+            return false;
+        }
 
-            var currentIdentity = GetImageFileIdentity(existing.Path);
-            var identityMismatch = storedIdentity != null && !string.Equals(currentIdentity, storedIdentity, StringComparison.Ordinal);
-            if (string.Equals(fingerprint, storedFingerprint, StringComparison.Ordinal))
-            {
-                if (identityMismatch)
-                {
-                    // Sources and settings are unchanged, so the file change came from the server
-                    // (re-encode/cache touch); adopt the new identity instead of orphaning the slot.
-                    SetImageSlotState(state, imageType, storedFingerprint, currentIdentity);
-                    return true;
-                }
+        var trackedImage = FindTrackedCollectionImage(slotImages, storedIdentity);
+        if (string.Equals(fingerprint, storedFingerprint, StringComparison.Ordinal) && trackedImage != null)
+        {
+            return false;
+        }
 
-                return false;
-            }
-
-            if (identityMismatch)
-            {
-                SetImageSlotState(state, imageType, UserOwnedImageFingerprint, null);
-                return true;
-            }
+        if (slotImages.Count > 0 && (storedIdentity == null || trackedImage == null))
+        {
+            SetImageSlotState(state, imageType, UserOwnedImageFingerprint, null);
+            return true;
         }
 
         CollectionImageRenderResult? rendered;
@@ -2583,6 +2590,35 @@ public sealed class ThemeDownloader : IScheduledTask
             return false;
         }
 
+        slotImages = GetCollectionImageSlotEntries(collection, imageType);
+        trackedImage = FindTrackedCollectionImage(slotImages, storedIdentity);
+        if (storedIdentity != null && trackedImage == null && slotImages.Count > 0)
+        {
+            SetImageSlotState(state, imageType, UserOwnedImageFingerprint, null);
+            return true;
+        }
+
+        if (storedIdentity == null && slotImages.Count > 0)
+        {
+            SetImageSlotState(state, imageType, UserOwnedImageFingerprint, null);
+            return true;
+        }
+
+        if (trackedImage != null)
+        {
+            try
+            {
+                await collection.DeleteImageAsync(imageType, trackedImage.Index).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Deleting the previous generated {ImageType} image failed for collection {CollectionName}; the replacement was not saved.", imageType, collection.Name);
+                return false;
+            }
+        }
+
+        var imagesBeforeSave = GetCollectionImageSlotEntries(collection, imageType);
+
         using (var stream = new MemoryStream(rendered.Value.Data))
         {
             await _providerManager.SaveImage(collection, stream, rendered.Value.MimeType, imageType, null, cancellationToken).ConfigureAwait(false);
@@ -2592,10 +2628,43 @@ public sealed class ThemeDownloader : IScheduledTask
             ?? await _collectionManager.GetCollectionsFolder(true).ConfigureAwait(false)
             ?? _libraryManager.RootFolder;
         await _libraryManager.UpdateItemAsync(collection, parent, ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
-        SetImageSlotState(state, imageType, fingerprint, GetImageFileIdentity(collection.GetImageInfo(imageType, 0)?.Path));
+        var writtenImage = FindWrittenCollectionImage(imagesBeforeSave, GetCollectionImageSlotEntries(collection, imageType));
+        if (writtenImage?.Identity == null)
+        {
+            SetImageSlotState(state, imageType, UserOwnedImageFingerprint, null);
+            _logger.LogWarning("Generated the {ImageType} image for collection {CollectionName}, but its written file could not be identified; the slot will no longer be replaced automatically.", imageType, collection.Name);
+            return true;
+        }
+
+        SetImageSlotState(state, imageType, fingerprint, writtenImage.Identity);
         _logger.LogInformation("Generated the {ImageType} image for collection {CollectionName} from {SourceCount} member images.", imageType, collection.Name, sources.Count);
         return true;
     }
+
+    private static List<CollectionImageSlotEntry> GetCollectionImageSlotEntries(BaseItem collection, ImageType imageType)
+    {
+        return collection.GetImages(imageType)
+            .Select((image, index) => new CollectionImageSlotEntry(index, image.Path, GetImageFileIdentity(image.Path)))
+            .ToList();
+    }
+
+    private static CollectionImageSlotEntry? FindTrackedCollectionImage(IReadOnlyList<CollectionImageSlotEntry> images, string? storedIdentity)
+    {
+        return storedIdentity == null
+            ? null
+            : images.FirstOrDefault(image => string.Equals(image.Identity, storedIdentity, StringComparison.Ordinal));
+    }
+
+    private static CollectionImageSlotEntry? FindWrittenCollectionImage(
+        IReadOnlyList<CollectionImageSlotEntry> before,
+        IReadOnlyList<CollectionImageSlotEntry> after)
+    {
+        return after.FirstOrDefault(image => !before.Any(previous =>
+            string.Equals(previous.Path, image.Path, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(previous.Identity, image.Identity, StringComparison.Ordinal)));
+    }
+
+    private sealed record CollectionImageSlotEntry(int Index, string? Path, string? Identity);
 
     private static (string? Fingerprint, string? WrittenFileIdentity) GetImageSlotState(ManagedSeasonCollectionAssetState state, ImageType imageType)
     {
@@ -2646,14 +2715,7 @@ public sealed class ThemeDownloader : IScheduledTask
         }
     }
 
-    private sealed class CollectionMemberArt
-    {
-        public CollectionImageSource? Poster { get; set; }
-
-        public CollectionImageSource? Landscape { get; set; }
-    }
-
-    private List<CollectionMemberArt> GetCollectionMemberArt(BoxSet collection)
+    private List<CollectionMemberArtwork> GetCollectionMemberArt(BoxSet collection)
     {
         var members = collection.GetLinkedChildren()
             .Where(i => i != null)
@@ -2661,13 +2723,15 @@ public sealed class ThemeDownloader : IScheduledTask
             .ThenBy(i => i.SortName, StringComparer.Ordinal)
             .ThenBy(i => i.Id)
             .ToList();
-        var art = new List<CollectionMemberArt>();
+        var art = new List<CollectionMemberArtwork>();
         var seenPosters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var seenLandscapes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenThumbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenBackdrops = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var member in members)
         {
             var posterInfo = member.GetImageInfo(ImageType.Primary, 0);
-            var landscapeInfo = member.GetImageInfo(ImageType.Backdrop, 0) ?? member.GetImageInfo(ImageType.Thumb, 0);
+            var thumbInfo = member.GetImageInfo(ImageType.Thumb, 0);
+            var backdropInfo = member.GetImageInfo(ImageType.Backdrop, 0);
             if (member is Season season && season.Series != null)
             {
                 if (posterInfo == null || !posterInfo.IsLocalFile)
@@ -2675,18 +2739,22 @@ public sealed class ThemeDownloader : IScheduledTask
                     posterInfo = season.Series.GetImageInfo(ImageType.Primary, 0);
                 }
 
-                if (landscapeInfo == null || !landscapeInfo.IsLocalFile)
+                if (thumbInfo == null || !thumbInfo.IsLocalFile)
                 {
-                    landscapeInfo = season.Series.GetImageInfo(ImageType.Backdrop, 0) ?? season.Series.GetImageInfo(ImageType.Thumb, 0);
+                    thumbInfo = season.Series.GetImageInfo(ImageType.Thumb, 0);
+                }
+
+                if (backdropInfo == null || !backdropInfo.IsLocalFile)
+                {
+                    backdropInfo = season.Series.GetImageInfo(ImageType.Backdrop, 0);
                 }
             }
 
-            var entry = new CollectionMemberArt
-            {
-                Poster = BuildImageSource(posterInfo, CollectionImageSourceKind.Poster, seenPosters),
-                Landscape = BuildImageSource(landscapeInfo, CollectionImageSourceKind.Landscape, seenLandscapes),
-            };
-            if (entry.Poster != null || entry.Landscape != null)
+            var entry = new CollectionMemberArtwork(
+                BuildImageSource(posterInfo, CollectionImageSourceKind.Poster, seenPosters),
+                BuildImageSource(thumbInfo, CollectionImageSourceKind.Landscape, seenThumbs),
+                BuildImageSource(backdropInfo, CollectionImageSourceKind.Landscape, seenBackdrops));
+            if (entry.Poster != null || entry.Thumb != null || entry.Backdrop != null)
             {
                 art.Add(entry);
             }

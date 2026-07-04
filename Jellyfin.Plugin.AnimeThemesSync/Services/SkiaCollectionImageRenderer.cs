@@ -18,7 +18,7 @@ public sealed class SkiaCollectionImageRenderer : ICollectionImageRenderer
         IReadOnlyList<CollectionImageRenderSource> sources,
         int canvasWidth,
         int canvasHeight,
-        Func<IReadOnlyList<CollectionImageSourceKind>, CollectionImageLayoutResult> layoutForSources,
+        Func<IReadOnlyList<CollectionImageLayoutSource>, CollectionImageLayoutResult> layoutForSources,
         string? overlayColor,
         int overlayOpacityPercent,
         string canvasColor,
@@ -30,7 +30,7 @@ public sealed class SkiaCollectionImageRenderer : ICollectionImageRenderer
         }
 
         var bitmaps = new List<SKBitmap>();
-        var kinds = new List<CollectionImageSourceKind>();
+        var layoutSources = new List<CollectionImageLayoutSource>();
         try
         {
             foreach (var source in sources)
@@ -39,7 +39,7 @@ public sealed class SkiaCollectionImageRenderer : ICollectionImageRenderer
                 if (bitmap != null)
                 {
                     bitmaps.Add(bitmap);
-                    kinds.Add(source.Kind);
+                    layoutSources.Add(new CollectionImageLayoutSource(source.Kind, bitmap.Width, bitmap.Height));
                 }
             }
 
@@ -48,7 +48,7 @@ public sealed class SkiaCollectionImageRenderer : ICollectionImageRenderer
                 return null;
             }
 
-            var layout = layoutForSources(kinds);
+            var layout = layoutForSources(layoutSources);
             if (layout.Cells.Count == 0)
             {
                 return null;

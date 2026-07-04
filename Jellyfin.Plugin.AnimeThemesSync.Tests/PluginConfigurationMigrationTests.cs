@@ -32,11 +32,13 @@ public sealed class PluginConfigurationMigrationTests
         Assert.Equal("{Season} {Year}", config.SeasonCollectionFormat);
         Assert.True(config.SeasonCollectionLockEnabled);
         Assert.True(config.SeasonCollectionImagesEnabled);
-        Assert.True(config.SeasonCollectionBackdropOverlayEnabled);
+        Assert.False(config.SeasonCollectionBackdropOverlayEnabled);
         Assert.Equal(35, config.SeasonCollectionBackdropOverlayOpacity);
         Assert.Equal("#000000", config.SeasonCollectionBackdropOverlayColor);
         Assert.Equal(SeasonCollectionPosterFillMode.ArtworkFill, config.SeasonCollectionPosterFillMode);
-        Assert.Equal(SeasonCollectionLandscapeSourceMode.LandscapeFirst, config.SeasonCollectionLandscapeSourceMode);
+        Assert.Equal(SeasonCollectionLandscapeSourceMode.LandscapeOnly, config.SeasonCollectionLandscapeSourceMode);
+        Assert.Equal(SeasonCollectionLandscapeArtType.Thumb, config.SeasonCollectionPosterFillLandscapeType);
+        Assert.Equal(SeasonCollectionLandscapeArtType.Thumb, config.SeasonCollectionCanvasLandscapeType);
         Assert.Equal("#000000", config.SeasonCollectionCanvasColor);
         Assert.Equal(100, config.SeasonCollectionCanvasOpacity);
     }

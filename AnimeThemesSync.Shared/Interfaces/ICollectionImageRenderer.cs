@@ -23,8 +23,8 @@ public interface ICollectionImageRenderer
 {
     /// <summary>
     /// Composites the source images into one encoded image. Undecodable sources are dropped and the
-    /// layout is recomputed via <paramref name="layoutForSources"/>, which receives the kinds of the
-    /// surviving sources in their original order; returned cells index into that surviving list.
+    /// layout is recomputed via <paramref name="layoutForSources"/>, which receives the kinds and decoded
+    /// dimensions of the surviving sources in their original order; returned cells index into that list.
     /// The canvas is cleared with <paramref name="canvasColor"/> at <paramref name="canvasOpacityPercent"/>;
     /// an opacity below 100 produces a PNG (alpha), otherwise a JPEG. Returns null when nothing could be rendered.
     /// </summary>
@@ -32,7 +32,7 @@ public interface ICollectionImageRenderer
         IReadOnlyList<CollectionImageRenderSource> sources,
         int canvasWidth,
         int canvasHeight,
-        Func<IReadOnlyList<CollectionImageSourceKind>, CollectionImageLayoutResult> layoutForSources,
+        Func<IReadOnlyList<CollectionImageLayoutSource>, CollectionImageLayoutResult> layoutForSources,
         string? overlayColor,
         int overlayOpacityPercent,
         string canvasColor,

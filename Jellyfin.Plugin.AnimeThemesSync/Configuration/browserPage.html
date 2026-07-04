@@ -12,7 +12,7 @@
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.07.03-b.</div>
+                <div class="fieldDescription">UI version: 2026.07.04-c.</div>
 
                 <div class="verticalSection ats-tabs" id="AnimeThemesBrowserTabs">
                     <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-tab active" id="AnimeThemesBrowserLibraryTab" data-ats-tab="library">
@@ -369,6 +369,16 @@
                                             </select>
                                             <div class="fieldDescription">Used when the generated poster holds only 2-3 member posters.</div>
                                         </div>
+                                        <div id="AtsPosterFillLandscapeTypeOptions" class="ats-conditional-options">
+                                            <div class="selectContainer">
+                                                <label class="selectLabel" for="AtsSeasonCollectionPosterFillLandscapeType">Poster fill image type</label>
+                                                <select is="emby-select" id="AtsSeasonCollectionPosterFillLandscapeType" class="emby-select-withcolor emby-select">
+                                                    <option value="0">Thumbnail (fallback backdrop)</option>
+                                                    <option value="1">Backdrop (fallback thumbnail)</option>
+                                                </select>
+                                                <div class="fieldDescription">Which landscape image fills the poster's leftover strip.</div>
+                                            </div>
+                                        </div>
                                         <div class="selectContainer">
                                             <label class="selectLabel" for="AtsSeasonCollectionLandscapeSourceMode">Thumb/backdrop sources</label>
                                             <select is="emby-select" id="AtsSeasonCollectionLandscapeSourceMode" class="emby-select-withcolor emby-select">
@@ -378,6 +388,16 @@
                                                 <option value="3">Posters only</option>
                                             </select>
                                             <div class="fieldDescription">Which member artwork builds the generated thumb and backdrop. Poster tiles are capped at 10.</div>
+                                        </div>
+                                        <div id="AtsCanvasLandscapeTypeOptions" class="ats-conditional-options">
+                                            <div class="selectContainer">
+                                                <label class="selectLabel" for="AtsSeasonCollectionCanvasLandscapeType">Thumb/backdrop image type</label>
+                                                <select is="emby-select" id="AtsSeasonCollectionCanvasLandscapeType" class="emby-select-withcolor emby-select">
+                                                    <option value="0">Thumbnail (fallback backdrop)</option>
+                                                    <option value="1">Backdrop (fallback thumbnail)</option>
+                                                </select>
+                                                <div class="fieldDescription">Which landscape image builds the generated thumb and backdrop.</div>
+                                            </div>
                                         </div>
                                         <div class="inputContainer">
                                             <label class="inputLabel inputLabelUnfocused" for="AtsSeasonCollectionCanvasColor">Canvas color</label>
@@ -751,6 +771,35 @@
                 <div class="ats-download-actions">
                     <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AnimeThemesDeleteDialogCancel"><span>Cancel</span></button>
                     <button is="emby-button" type="button" class="raised emby-button ats-button-danger ats-icon-button-text" id="AnimeThemesDeleteDialogConfirm"><span class="material-icons ats-icon" aria-hidden="true">delete</span><span>Delete selected</span></button>
+                </div>
+            </div>
+        </div>
+
+        <div id="AnimeThemesCollectionDisableDialog" class="ats-player ats-download-dialog" aria-hidden="true">
+            <div class="ats-player-panel ats-download-panel" role="dialog" aria-modal="true" aria-labelledby="AnimeThemesCollectionDisableDialogTitle" aria-describedby="AnimeThemesCollectionDisableDialogDescription">
+                <div class="ats-player-header ats-download-header">
+                    <div class="ats-download-heading">
+                        <span class="material-icons ats-download-heading-icon" aria-hidden="true">collections_bookmark</span>
+                        <div><h3 id="AnimeThemesCollectionDisableDialogTitle">Season Collections turned off</h3></div>
+                    </div>
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-download-close" id="AnimeThemesCollectionDisableDialogClose" aria-label="Cancel saving settings">
+                        <span class="material-icons ats-icon" aria-hidden="true">close</span>
+                    </button>
+                </div>
+                <div class="ats-download-content">
+                    <p id="AnimeThemesCollectionDisableDialogDescription" class="ats-download-description">Choose what happens to collection memberships previously managed by AnimeThemes Sync.</p>
+                    <div class="ats-collection-choice-summary">
+                        <strong>Keep existing collections</strong>
+                        <span>Stops future synchronization but leaves existing collections and memberships unchanged.</span>
+                    </div>
+                    <div class="ats-collection-choice-summary ats-collection-choice-remove">
+                        <strong>Remove managed collections</strong>
+                        <span>Removes only memberships added by this plugin. Empty plugin-created collections are deleted; collections containing your own members are kept.</span>
+                    </div>
+                </div>
+                <div class="ats-download-actions ats-collection-choice-actions">
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AnimeThemesCollectionDisableDialogKeep"><span>Keep existing collections</span></button>
+                    <button is="emby-button" type="button" class="raised emby-button ats-button-danger ats-icon-button-text" id="AnimeThemesCollectionDisableDialogRemove"><span class="material-icons ats-icon" aria-hidden="true">delete_sweep</span><span>Remove managed collections</span></button>
                 </div>
             </div>
         </div>
@@ -2338,6 +2387,33 @@
                 gap: .65rem;
             }
 
+            #AnimeThemesBrowserPage .ats-collection-choice-summary {
+                display: grid;
+                gap: .3rem;
+                padding: .9rem;
+                border: 1px solid var(--ats-border);
+                border-radius: var(--ats-radius);
+                background: var(--ats-surface);
+                line-height: 1.4;
+            }
+
+            #AnimeThemesBrowserPage .ats-collection-choice-summary span {
+                opacity: .8;
+            }
+
+            #AnimeThemesBrowserPage .ats-collection-choice-remove {
+                border-color: var(--ats-danger-border);
+                background: var(--ats-danger-surface);
+            }
+
+            #AnimeThemesBrowserPage .ats-collection-choice-actions {
+                flex-wrap: wrap;
+            }
+
+            #AnimeThemesBrowserPage .ats-collection-choice-actions .emby-button {
+                white-space: normal;
+            }
+
             #AnimeThemesBrowserPage .ats-download-option {
                 display: grid;
                 grid-template-columns: 2.4rem minmax(0, 1fr) auto;
@@ -3334,6 +3410,10 @@
                 var deleteIncludeExtras = page.querySelector('#AtsDeleteIncludeExtras');
                 var deleteDialogConfirm = page.querySelector('#AnimeThemesDeleteDialogConfirm');
 
+                var collectionDisableDialog = page.querySelector('#AnimeThemesCollectionDisableDialog');
+                var collectionDisableKeep = page.querySelector('#AnimeThemesCollectionDisableDialogKeep');
+                var collectionDisableRemove = page.querySelector('#AnimeThemesCollectionDisableDialogRemove');
+
                 var downloadManager = page.querySelector('#AnimeThemesDownloadManager');
                 var dmBadge = page.querySelector('#AnimeThemesDmBadge');
                 var dmToggle = page.querySelector('#AnimeThemesDmToggle');
@@ -3433,9 +3513,13 @@
                     SeasonCollectionBackdropOverlayColor: page.querySelector('#AtsSeasonCollectionBackdropOverlayColor'),
                     SeasonCollectionPosterFillMode: page.querySelector('#AtsSeasonCollectionPosterFillMode'),
                     SeasonCollectionLandscapeSourceMode: page.querySelector('#AtsSeasonCollectionLandscapeSourceMode'),
+                    SeasonCollectionPosterFillLandscapeType: page.querySelector('#AtsSeasonCollectionPosterFillLandscapeType'),
+                    SeasonCollectionCanvasLandscapeType: page.querySelector('#AtsSeasonCollectionCanvasLandscapeType'),
                     SeasonCollectionCanvasColor: page.querySelector('#AtsSeasonCollectionCanvasColor'),
                     SeasonCollectionCanvasOpacity: page.querySelector('#AtsSeasonCollectionCanvasOpacity'),
                     CollectionImageOptions: page.querySelector('#AtsCollectionImageOptions'),
+                    PosterFillLandscapeTypeOptions: page.querySelector('#AtsPosterFillLandscapeTypeOptions'),
+                    CanvasLandscapeTypeOptions: page.querySelector('#AtsCanvasLandscapeTypeOptions'),
                     BackdropOverlayOptions: page.querySelector('#AtsBackdropOverlayOptions'),
                     TagOptions: page.querySelector('#AtsTagOptions'),
                     CollectionOptions: page.querySelector('#AtsCollectionOptions'),
@@ -6135,11 +6219,13 @@
                         SeasonCollectionFormat: '{Season} {Year}',
                         SeasonCollectionLockEnabled: true,
                         SeasonCollectionImagesEnabled: true,
-                        SeasonCollectionBackdropOverlayEnabled: true,
+                        SeasonCollectionBackdropOverlayEnabled: false,
                         SeasonCollectionBackdropOverlayOpacity: 35,
                         SeasonCollectionBackdropOverlayColor: '#000000',
                         SeasonCollectionPosterFillMode: 0,
-                        SeasonCollectionLandscapeSourceMode: 0,
+                        SeasonCollectionLandscapeSourceMode: 2,
+                        SeasonCollectionPosterFillLandscapeType: 0,
+                        SeasonCollectionCanvasLandscapeType: 0,
                         SeasonCollectionCanvasColor: '#000000',
                         SeasonCollectionCanvasOpacity: 100,
                         TagFormat: '{Season} {Year}',
@@ -6178,6 +6264,12 @@
                     return 0;
                 }
 
+                function normalizeLandscapeArtType(value) {
+                    var normalized = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+                    if (normalized === '1' || normalized === 'backdrop') return 1;
+                    return 0;
+                }
+
                 function normalizeOverlayColor(value) {
                     var text = String(value || '').trim();
                     return /^#[0-9a-fA-F]{6}$/.test(text) || /^#[0-9a-fA-F]{3}$/.test(text) ? text : '#000000';
@@ -6206,11 +6298,13 @@
                         SeasonCollectionFormat: String(getConfigValue(config, 'SeasonCollectionFormat', '{Season} {Year}')),
                         SeasonCollectionLockEnabled: !!getConfigValue(config, 'SeasonCollectionLockEnabled', true),
                         SeasonCollectionImagesEnabled: !!getConfigValue(config, 'SeasonCollectionImagesEnabled', true),
-                        SeasonCollectionBackdropOverlayEnabled: !!getConfigValue(config, 'SeasonCollectionBackdropOverlayEnabled', true),
+                        SeasonCollectionBackdropOverlayEnabled: !!getConfigValue(config, 'SeasonCollectionBackdropOverlayEnabled', false),
                         SeasonCollectionBackdropOverlayOpacity: normalizeOverlayOpacity(getConfigValue(config, 'SeasonCollectionBackdropOverlayOpacity', 35)),
                         SeasonCollectionBackdropOverlayColor: normalizeOverlayColor(getConfigValue(config, 'SeasonCollectionBackdropOverlayColor', '#000000')),
                         SeasonCollectionPosterFillMode: normalizePosterFillMode(getConfigValue(config, 'SeasonCollectionPosterFillMode', 0)),
-                        SeasonCollectionLandscapeSourceMode: normalizeLandscapeSourceMode(getConfigValue(config, 'SeasonCollectionLandscapeSourceMode', 0)),
+                        SeasonCollectionLandscapeSourceMode: normalizeLandscapeSourceMode(getConfigValue(config, 'SeasonCollectionLandscapeSourceMode', 2)),
+                        SeasonCollectionPosterFillLandscapeType: normalizeLandscapeArtType(getConfigValue(config, 'SeasonCollectionPosterFillLandscapeType', 0)),
+                        SeasonCollectionCanvasLandscapeType: normalizeLandscapeArtType(getConfigValue(config, 'SeasonCollectionCanvasLandscapeType', 0)),
                         SeasonCollectionCanvasColor: normalizeOverlayColor(getConfigValue(config, 'SeasonCollectionCanvasColor', '#000000')),
                         SeasonCollectionCanvasOpacity: normalizeCanvasOpacity(getConfigValue(config, 'SeasonCollectionCanvasOpacity', 100)),
                         TagFormat: String(getConfigValue(config, 'TagFormat', '{Season} {Year}')),
@@ -6441,6 +6535,8 @@
                     setConditionalOptions(settingsFields.TagOptions, settingsFields.TagsEnabled.checked);
                     setConditionalOptions(settingsFields.CollectionOptions, settingsFields.SeasonCollectionsEnabled.checked);
                     setConditionalOptions(settingsFields.CollectionImageOptions, settingsFields.SeasonCollectionImagesEnabled.checked);
+                    setConditionalOptions(settingsFields.PosterFillLandscapeTypeOptions, settingsFields.SeasonCollectionPosterFillMode.value === '0');
+                    setConditionalOptions(settingsFields.CanvasLandscapeTypeOptions, settingsFields.SeasonCollectionLandscapeSourceMode.value !== '3');
                     setConditionalOptions(settingsFields.BackdropOverlayOptions, settingsFields.SeasonCollectionBackdropOverlayEnabled.checked);
                     setConditionalOptions(settingsFields.SeasonLabelOptions, settingsFields.TagsEnabled.checked || settingsFields.SeasonCollectionsEnabled.checked);
                     updateFormatPreviews();
@@ -6556,11 +6652,13 @@
                     settingsFields.SeasonCollectionFormat.value = getConfigValue(config, 'SeasonCollectionFormat', '{Season} {Year}');
                     settingsFields.SeasonCollectionLockEnabled.checked = !!getConfigValue(config, 'SeasonCollectionLockEnabled', true);
                     settingsFields.SeasonCollectionImagesEnabled.checked = !!getConfigValue(config, 'SeasonCollectionImagesEnabled', true);
-                    settingsFields.SeasonCollectionBackdropOverlayEnabled.checked = !!getConfigValue(config, 'SeasonCollectionBackdropOverlayEnabled', true);
+                    settingsFields.SeasonCollectionBackdropOverlayEnabled.checked = !!getConfigValue(config, 'SeasonCollectionBackdropOverlayEnabled', false);
                     settingsFields.SeasonCollectionBackdropOverlayOpacity.value = normalizeOverlayOpacity(getConfigValue(config, 'SeasonCollectionBackdropOverlayOpacity', 35));
                     settingsFields.SeasonCollectionBackdropOverlayColor.value = normalizeOverlayColor(getConfigValue(config, 'SeasonCollectionBackdropOverlayColor', '#000000'));
                     settingsFields.SeasonCollectionPosterFillMode.value = String(normalizePosterFillMode(getConfigValue(config, 'SeasonCollectionPosterFillMode', 0)));
-                    settingsFields.SeasonCollectionLandscapeSourceMode.value = String(normalizeLandscapeSourceMode(getConfigValue(config, 'SeasonCollectionLandscapeSourceMode', 0)));
+                    settingsFields.SeasonCollectionLandscapeSourceMode.value = String(normalizeLandscapeSourceMode(getConfigValue(config, 'SeasonCollectionLandscapeSourceMode', 2)));
+                    settingsFields.SeasonCollectionPosterFillLandscapeType.value = String(normalizeLandscapeArtType(getConfigValue(config, 'SeasonCollectionPosterFillLandscapeType', 0)));
+                    settingsFields.SeasonCollectionCanvasLandscapeType.value = String(normalizeLandscapeArtType(getConfigValue(config, 'SeasonCollectionCanvasLandscapeType', 0)));
                     settingsFields.SeasonCollectionCanvasColor.value = normalizeOverlayColor(getConfigValue(config, 'SeasonCollectionCanvasColor', '#000000'));
                     settingsFields.SeasonCollectionCanvasOpacity.value = normalizeCanvasOpacity(getConfigValue(config, 'SeasonCollectionCanvasOpacity', 100));
                     settingsFields.TagFormat.value = getConfigValue(config, 'TagFormat', '{Season} {Year}');
@@ -6617,6 +6715,8 @@
                         SeasonCollectionBackdropOverlayColor: normalizeOverlayColor(settingsFields.SeasonCollectionBackdropOverlayColor.value),
                         SeasonCollectionPosterFillMode: normalizePosterFillMode(settingsFields.SeasonCollectionPosterFillMode.value),
                         SeasonCollectionLandscapeSourceMode: normalizeLandscapeSourceMode(settingsFields.SeasonCollectionLandscapeSourceMode.value),
+                        SeasonCollectionPosterFillLandscapeType: normalizeLandscapeArtType(settingsFields.SeasonCollectionPosterFillLandscapeType.value),
+                        SeasonCollectionCanvasLandscapeType: normalizeLandscapeArtType(settingsFields.SeasonCollectionCanvasLandscapeType.value),
                         SeasonCollectionCanvasColor: normalizeOverlayColor(settingsFields.SeasonCollectionCanvasColor.value),
                         SeasonCollectionCanvasOpacity: normalizeCanvasOpacity(settingsFields.SeasonCollectionCanvasOpacity.value),
                         TagFormat: settingsFields.TagFormat.value,
@@ -6669,28 +6769,82 @@
                         var tagsWereEnabled = !!getConfigValue(config, 'TagsEnabled', true);
                         var collectionsWereEnabled = !!getConfigValue(config, 'SeasonCollectionsEnabled', false);
                         config = collectSettingsFromForm(config || {});
-                        var cleanup = {
-                            RemoveManagedTags: tagsWereEnabled && !config.TagsEnabled && window.confirm('Season Tags were turned off. Remove only the tags previously managed by this plugin?\n\nOK: remove managed tags\nCancel: keep existing tags'),
-                            RemoveManagedCollectionMemberships: collectionsWereEnabled && !config.SeasonCollectionsEnabled && window.confirm('Season Collections were turned off. Remove only collection memberships previously managed by this plugin?\n\nOK: remove managed memberships\nCancel: keep existing memberships')
-                        };
-                        return ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function (result) {
-                            state.settingsLoaded = true;
-                            captureSettingsSnapshot();
-                            setSettingsState('Settings saved.');
-                            if (showResult) {
-                                Dashboard.processPluginConfigurationUpdateResult(result);
-                            }
-                            return apiPostJson('AnimeThemesSync/SeasonMetadata/Sync', cleanup).then(function () {
-                                setSettingsState('Settings saved. Season metadata sync started.');
-                                pollSeasonMetadataSync();
-                                return result;
+                        var collectionChoice = collectionsWereEnabled && !config.SeasonCollectionsEnabled
+                            ? requestCollectionDisableChoice()
+                            : Promise.resolve(false);
+                        return collectionChoice.then(function (removeManagedCollections) {
+                            var cleanup = {
+                                RemoveManagedTags: tagsWereEnabled && !config.TagsEnabled && window.confirm('Season Tags were turned off. Remove only the tags previously managed by this plugin?\n\nOK: remove managed tags\nCancel: keep existing tags'),
+                                RemoveManagedCollectionMemberships: removeManagedCollections
+                            };
+                            return ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function (result) {
+                                state.settingsLoaded = true;
+                                captureSettingsSnapshot();
+                                setSettingsState('Settings saved.');
+                                if (showResult) {
+                                    Dashboard.processPluginConfigurationUpdateResult(result);
+                                }
+                                return apiPostJson('AnimeThemesSync/SeasonMetadata/Sync', cleanup).then(function () {
+                                    setSettingsState('Settings saved. Season metadata sync started.');
+                                    pollSeasonMetadataSync();
+                                    return result;
+                                });
                             });
                         });
                     }).catch(function (err) {
+                        if (err && err.atsCollectionDialogCancelled) {
+                            setSettingsState('Settings were not saved.');
+                            syncSettingsDirty();
+                            throw err;
+                        }
                         setSettingsState('Failed to save settings.');
                         Dashboard.alert({ title: 'Settings Error', message: getErrorMessage(err) });
                         throw err;
                     });
+                }
+
+                function requestCollectionDisableChoice() {
+                    return new Promise(function (resolve, reject) {
+                        state.collectionDialogLastFocus = document.activeElement;
+                        state.pendingCollectionDisableChoice = { resolve: resolve, reject: reject };
+                        collectionDisableDialog.classList.add('open');
+                        collectionDisableDialog.setAttribute('aria-hidden', 'false');
+                        collectionDisableKeep.focus();
+                    });
+                }
+
+                function closeCollectionDisableDialog(removeManagedCollections, cancelled) {
+                    var pending = state.pendingCollectionDisableChoice;
+                    state.pendingCollectionDisableChoice = null;
+                    if (collectionDisableDialog.contains(document.activeElement)) {
+                        document.activeElement.blur();
+                    }
+                    collectionDisableDialog.classList.remove('open');
+                    collectionDisableDialog.setAttribute('aria-hidden', 'true');
+                    if (state.collectionDialogLastFocus && typeof state.collectionDialogLastFocus.focus === 'function') {
+                        state.collectionDialogLastFocus.focus();
+                    }
+                    state.collectionDialogLastFocus = null;
+                    if (!pending) return;
+                    if (cancelled) {
+                        var error = new Error('Collection cleanup choice was cancelled.');
+                        error.atsCollectionDialogCancelled = true;
+                        pending.reject(error);
+                    } else {
+                        pending.resolve(!!removeManagedCollections);
+                    }
+                }
+
+                function trapCollectionDisableDialogFocus(event) {
+                    if (event.key !== 'Tab' || !collectionDisableDialog.classList.contains('open')) return false;
+                    var focusable = [page.querySelector('#AnimeThemesCollectionDisableDialogClose'), collectionDisableKeep, collectionDisableRemove];
+                    var currentIndex = focusable.indexOf(document.activeElement);
+                    var nextIndex = event.shiftKey
+                        ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
+                        : (currentIndex < 0 || currentIndex === focusable.length - 1 ? 0 : currentIndex + 1);
+                    event.preventDefault();
+                    focusable[nextIndex].focus();
+                    return true;
                 }
 
                 function pollSeasonMetadataSync() {
@@ -6729,6 +6883,9 @@
                         setSettingsState('Scheduled task started.');
                         Dashboard.alert('Task started.');
                     }).catch(function (err) {
+                        if (err && err.atsCollectionDialogCancelled) {
+                            return;
+                        }
                         setSettingsState('Failed to start task.');
                         Dashboard.alert({ title: 'Task Error', message: getErrorMessage(err) });
                     });
@@ -7887,6 +8044,8 @@
                 settingsFields.SeasonCollectionsEnabled.addEventListener('change', syncConditionalSettings);
                 settingsFields.SeasonCollectionImagesEnabled.addEventListener('change', syncConditionalSettings);
                 settingsFields.SeasonCollectionBackdropOverlayEnabled.addEventListener('change', syncConditionalSettings);
+                settingsFields.SeasonCollectionPosterFillMode.addEventListener('change', syncConditionalSettings);
+                settingsFields.SeasonCollectionLandscapeSourceMode.addEventListener('change', syncConditionalSettings);
                 [settingsFields.ExtrasFileNameFormat, settingsFields.ExtrasFileSuffix, settingsFields.TagFormat, settingsFields.SeasonCollectionFormat, settingsFields.TagSeasonWinter].forEach(function (input) {
                     if (input) {
                         input.addEventListener('input', updateFormatPreviews);
@@ -7894,7 +8053,7 @@
                 });
                 syncConditionalSettings();
                 page.querySelector('#AtsSettingsSave').addEventListener('click', function () {
-                    saveSettings(true);
+                    saveSettings(true).catch(function () { });
                 });
                 if (settingsFields.ResetDefaultsButton) {
                     settingsFields.ResetDefaultsButton.addEventListener('click', resetSettingsDefaults);
@@ -7969,8 +8128,26 @@
                     }
                 });
 
+                page.querySelector('#AnimeThemesCollectionDisableDialogClose').addEventListener('click', function () {
+                    closeCollectionDisableDialog(false, true);
+                });
+                collectionDisableKeep.addEventListener('click', function () {
+                    closeCollectionDisableDialog(false, false);
+                });
+                collectionDisableRemove.addEventListener('click', function () {
+                    closeCollectionDisableDialog(true, false);
+                });
+                collectionDisableDialog.addEventListener('click', function (event) {
+                    if (event.target === collectionDisableDialog) closeCollectionDisableDialog(false, true);
+                });
+
                 page.addEventListener('keydown', function (event) {
+                    if (trapCollectionDisableDialogFocus(event)) return;
                     if (event.key === 'Escape') {
+                        if (collectionDisableDialog.classList.contains('open')) {
+                            closeCollectionDisableDialog(false, true);
+                            return;
+                        }
                         if (downloadDialog.classList.contains('open')) closeDownloadDialog();
                         if (deleteDialog.classList.contains('open')) closeDeleteDialog();
                     }
