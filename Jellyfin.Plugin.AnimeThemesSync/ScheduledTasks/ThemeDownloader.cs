@@ -1134,7 +1134,7 @@ public sealed class ThemeDownloader : IScheduledTask
             .GroupBy(a => !string.IsNullOrWhiteSpace(a.Slug) ? a.Slug! : a.Id.ToString(CultureInfo.InvariantCulture), StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .Take(15)
-            .Select(a => ToThemeFinderSearchResult(a, ScoreSearchCandidate(a, query, year), GetAnimePrimaryImageUrl(a), query))
+            .Select(a => AnimeMatchHelper.ToThemeFinderSearchResult(a, AnimeMatchHelper.ScoreSearchCandidate(a, query, year), AnimeMatchHelper.GetAnimePrimaryImageUrl(a), query))
             .ToList();
         return results;
     }
@@ -1828,7 +1828,7 @@ public sealed class ThemeDownloader : IScheduledTask
         }
 
         var resolution = await ResolveBrowserAnimeForItemAsync(item, cancellationToken).ConfigureAwait(false);
-        var animeThemesUrl = BuildAnimeThemesUrl(resolution.Anime);
+        var animeThemesUrl = AnimeMatchHelper.BuildAnimeThemesUrl(resolution.Anime);
         var rows = BuildBrowserRowsForResolution(item, resolution, config);
         var groups = item is Series series
             ? await BuildBrowserThemeGroupsAsync(series, resolution.Anime, rows, config, cancellationToken).ConfigureAwait(false)
@@ -1939,7 +1939,7 @@ public sealed class ThemeDownloader : IScheduledTask
             resolution.SameAsSeries,
             resolution.Anime?.Name,
             resolution.Anime?.Slug,
-            BuildAnimeThemesUrl(resolution.Anime),
+            AnimeMatchHelper.BuildAnimeThemesUrl(resolution.Anime),
             BuildImageUrl(item, ImageType.Primary, "Primary"),
             BuildImageUrl(item, ImageType.Backdrop, "Backdrop/0"),
             BuildImageUrl(item, ImageType.Thumb, "Thumb"),
@@ -2016,7 +2016,7 @@ public sealed class ThemeDownloader : IScheduledTask
         }
 
         var sameAsSeries = state.SameAsSeries ||
-            (seriesAnime != null && anime != null && IsSameAnime(seriesAnime, anime));
+            (seriesAnime != null && anime != null && AnimeMatchHelper.IsSameAnime(seriesAnime, anime));
         if (anime == null && state.Status == "Series")
         {
             anime = seriesAnime;
@@ -2024,13 +2024,6 @@ public sealed class ThemeDownloader : IScheduledTask
         }
 
         return new BrowserAnimeResolution(anime, state.Status, state.Source, sameAsSeries);
-    }
-
-    private static string? BuildAnimeThemesUrl(AnimeThemesAnime? anime)
-    {
-        return !string.IsNullOrWhiteSpace(anime?.Slug)
-            ? Constants.AnimeThemesWebUrl + "/anime/" + anime.Slug
-            : null;
     }
 
     private async Task<ThemeDownloadExecutionResult> ProcessItems(
@@ -3049,7 +3042,7 @@ public sealed class ThemeDownloader : IScheduledTask
                     break;
                 }
 
-                var resolvedIds = ExtractAnimeExternalIds(resolution.Anime);
+                var resolvedIds = AnimeMatchHelper.ExtractAnimeExternalIds(resolution.Anime);
                 rows.Add(new SeasonMetadataRow
                 {
                     SeasonItemId = season.Id.ToString("D"),
@@ -4085,7 +4078,7 @@ public sealed class ThemeDownloader : IScheduledTask
 
         if (automaticAnime != null)
         {
-            var automaticIds = ExtractAnimeExternalIds(automaticAnime);
+            var automaticIds = AnimeMatchHelper.ExtractAnimeExternalIds(automaticAnime);
             return new SeasonThemeMatchState(
                 "Auto",
                 "AniListRelations",
@@ -4138,7 +4131,7 @@ public sealed class ThemeDownloader : IScheduledTask
         foreach (var candidate in related.Where(IsSeriesFormatCandidate))
         {
             var anime = await ResolveAnimeByExternalIds(candidate.AniListId, candidate.MyAnimeListId, cancellationToken).ConfigureAwait(false);
-            if (anime?.AnimeThemes == null || resolved.Any(r => IsSameAnime(r.Anime, anime)))
+            if (anime?.AnimeThemes == null || resolved.Any(r => AnimeMatchHelper.IsSameAnime(r.Anime, anime)))
             {
                 continue;
             }
@@ -4146,7 +4139,7 @@ public sealed class ThemeDownloader : IScheduledTask
             resolved.Add((candidate, anime));
         }
 
-        var rootIndex = resolved.FindIndex(r => r.Related.AniListId == seriesAniListId || IsSameAnime(r.Anime, seriesAnime));
+        var rootIndex = resolved.FindIndex(r => r.Related.AniListId == seriesAniListId || AnimeMatchHelper.IsSameAnime(r.Anime, seriesAnime));
         if (rootIndex < 0)
         {
             return map;
@@ -4191,7 +4184,7 @@ public sealed class ThemeDownloader : IScheduledTask
             return;
         }
 
-        var ids = ExtractAnimeExternalIds(anime);
+        var ids = AnimeMatchHelper.ExtractAnimeExternalIds(anime);
         var animeThemesSlug = !string.IsNullOrWhiteSpace(anime.Slug) ? anime.Slug.Trim() : existing?.AnimeThemesSlug;
         var aniListId = ids.AniListId ?? existing?.AniListId;
         var myAnimeListId = ids.MyAnimeListId ?? existing?.MyAnimeListId;
@@ -4225,145 +4218,6 @@ public sealed class ThemeDownloader : IScheduledTask
         _seasonFinderStore.ApplySeasonThemeMappingChanges(
             [new SeasonThemeMappingChange(BuildSeasonThemeMappingTarget(series, season), mapping, "Auto")]);
         _seasonFinderStore.UpsertRow(BuildSeasonFinderRecord(series, season, ResolveLibraryId(series)));
-    }
-
-    private static string? GetAnimePrimaryImageUrl(AnimeThemesAnime? anime)
-    {
-        var images = anime?.Images;
-        if (images == null || images.Count == 0)
-        {
-            return null;
-        }
-
-        return images.FirstOrDefault(i => string.Equals(i.Facet, "Small Cover", StringComparison.OrdinalIgnoreCase))?.Link
-            ?? images.FirstOrDefault(i => string.Equals(i.Facet, "Large Cover", StringComparison.OrdinalIgnoreCase))?.Link
-            ?? images.FirstOrDefault(i => !string.IsNullOrWhiteSpace(i.Link))?.Link;
-    }
-
-    private static ThemeFinderSearchResult ToThemeFinderSearchResult(AnimeThemesAnime anime, int score, string? imageUrl, string query)
-    {
-        var ids = ExtractAnimeExternalIds(anime);
-        var match = FindMatchedTitle(anime, query);
-        return new ThemeFinderSearchResult(
-            anime.Id,
-            anime.Name ?? anime.Slug ?? "AnimeThemes",
-            anime.Slug,
-            anime.Year,
-            anime.Season,
-            ids.AniListId,
-            ids.MyAnimeListId,
-            !string.IsNullOrWhiteSpace(anime.Slug) ? Constants.AnimeThemesWebUrl + "/anime/" + anime.Slug : null,
-            score,
-            imageUrl,
-            anime.MediaFormat,
-            match.Title,
-            match.Type);
-    }
-
-    private static int ScoreSearchCandidate(AnimeThemesAnime anime, string query, int? year)
-    {
-        var normalizedQuery = NormalizeSearchText(query);
-        var normalizedSlug = NormalizeSearchText(anime.Slug);
-        var normalizedNames = GetAnimeTitleCandidates(anime)
-            .Select(NormalizeSearchText)
-            .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-        var score = 0;
-        if (normalizedNames.Any(name => name == normalizedQuery))
-        {
-            score += 100;
-        }
-        else if (normalizedNames.Any(name =>
-            name.Contains(normalizedQuery, StringComparison.Ordinal) ||
-            normalizedQuery.Contains(name, StringComparison.Ordinal)))
-        {
-            score += 70;
-        }
-        else if (!string.IsNullOrWhiteSpace(normalizedSlug) && normalizedSlug.Contains(normalizedQuery, StringComparison.Ordinal))
-        {
-            score += 55;
-        }
-
-        if (year.HasValue && anime.Year.HasValue)
-        {
-            var delta = Math.Abs(anime.Year.Value - year.Value);
-            score += delta == 0 ? 30 : delta == 1 ? 15 : 0;
-        }
-
-        return score;
-    }
-
-    private static IEnumerable<string?> GetAnimeTitleCandidates(AnimeThemesAnime anime)
-    {
-        yield return anime.Name;
-
-        foreach (var synonym in anime.Synonyms ?? [])
-        {
-            yield return synonym.Text;
-        }
-    }
-
-    private static (string? Title, string? Type) FindMatchedTitle(AnimeThemesAnime anime, string query)
-    {
-        var normalizedQuery = NormalizeSearchText(query);
-        if (string.IsNullOrWhiteSpace(normalizedQuery))
-        {
-            return (null, null);
-        }
-
-        foreach (var synonym in anime.Synonyms ?? [])
-        {
-            var normalizedTitle = NormalizeSearchText(synonym.Text);
-            if (string.IsNullOrWhiteSpace(normalizedTitle))
-            {
-                continue;
-            }
-
-            if (normalizedTitle == normalizedQuery ||
-                normalizedTitle.Contains(normalizedQuery, StringComparison.Ordinal) ||
-                normalizedQuery.Contains(normalizedTitle, StringComparison.Ordinal))
-            {
-                return (synonym.Text, synonym.Type);
-            }
-        }
-
-        return (null, null);
-    }
-
-    private static string NormalizeSearchText(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return string.Empty;
-        }
-
-        var chars = value.Trim().ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : ' ').ToArray();
-        return string.Join(" ", new string(chars).Split(' ', StringSplitOptions.RemoveEmptyEntries));
-    }
-
-    private static (int? AniListId, int? MyAnimeListId) ExtractAnimeExternalIds(AnimeThemesAnime? anime)
-    {
-        int? aniListId = null;
-        int? myAnimeListId = null;
-        foreach (var resource in anime?.Resources ?? [])
-        {
-            if (resource.ExternalId == null || string.IsNullOrWhiteSpace(resource.Site))
-            {
-                continue;
-            }
-
-            if (string.Equals(resource.Site, Constants.AniListSiteKey, StringComparison.OrdinalIgnoreCase))
-            {
-                aniListId = resource.ExternalId;
-            }
-            else if (string.Equals(resource.Site, Constants.MyAnimeListSiteKey, StringComparison.OrdinalIgnoreCase))
-            {
-                myAnimeListId = resource.ExternalId;
-            }
-        }
-
-        return (aniListId, myAnimeListId);
     }
 
     private static (int? AniListId, int? MyAnimeListId) ExtractItemProviderIds(BaseItem item)
@@ -4698,18 +4552,6 @@ public sealed class ThemeDownloader : IScheduledTask
             .ToList();
     }
 
-    private static bool IsSameAnime(AnimeThemesAnime left, AnimeThemesAnime right)
-    {
-        if (left.Id > 0 && right.Id > 0)
-        {
-            return left.Id == right.Id;
-        }
-
-        return !string.IsNullOrWhiteSpace(left.Slug) &&
-               !string.IsNullOrWhiteSpace(right.Slug) &&
-               string.Equals(left.Slug, right.Slug, StringComparison.OrdinalIgnoreCase);
-    }
-
     private List<ThemeBrowserThemeRow> BuildBrowserRows(
         BaseItem item,
         AnimeThemesAnime anime,
@@ -4806,21 +4648,6 @@ public sealed class ThemeDownloader : IScheduledTask
             extraPlan != null && _fileSystem.FileExists(extraPlan.TargetPath),
             extraPlan != null && _fileSystem.FileExists(extraPlan.TargetPath),
             animeThemesUrl);
-    }
-
-    private static int GetThemeTypeOrder(ScoredCandidate candidate)
-    {
-        if (string.Equals(candidate.Theme.Type, "OP", StringComparison.OrdinalIgnoreCase))
-        {
-            return 0;
-        }
-
-        if (string.Equals(candidate.Theme.Type, "ED", StringComparison.OrdinalIgnoreCase))
-        {
-            return 1;
-        }
-
-        return 2;
     }
 
     /// <summary>
