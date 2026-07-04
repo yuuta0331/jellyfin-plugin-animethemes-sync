@@ -87,10 +87,17 @@ public class StartAnimeThemesSeasonMetadataSync : IReturn<SeasonMetadataSyncStat
     public bool RemoveManagedTags { get; set; }
 
     public bool RemoveManagedCollectionMemberships { get; set; }
+
+    public bool ForceRefresh { get; set; }
 }
 
 [Route("/AnimeThemesSync/SeasonMetadata/Sync", "GET", Summary = "Gets season metadata synchronization status.")]
 public class GetAnimeThemesSeasonMetadataSync : IReturn<SeasonMetadataSyncStatus>
+{
+}
+
+[Route("/AnimeThemesSync/SeasonMetadata/Cancel", "POST", Summary = "Cancels season metadata synchronization.")]
+public class CancelAnimeThemesSeasonMetadataSync : IReturn<SeasonMetadataSyncStatus>
 {
 }
 
@@ -106,6 +113,11 @@ public class RebuildAnimeThemesBrowserCache : IReturn<AnimeThemesMaintenanceResu
 
 [Route("/AnimeThemesSync/BrowserCache/Clear", "POST", Summary = "Clears the Browser cache.")]
 public class ClearAnimeThemesBrowserCache : IReturn<AnimeThemesMaintenanceResult>
+{
+}
+
+[Route("/AnimeThemesSync/ProviderCache/Clear", "POST", Summary = "Clears persistent provider response caches.")]
+public class ClearAnimeThemesProviderCache : IReturn<AnimeThemesMaintenanceResult>
 {
 }
 
@@ -407,12 +419,18 @@ public class AnimeThemesSyncService : IService, IRequiresRequest
     {
         return _themeDownloader.StartSeasonMetadataSync(
             request.RemoveManagedTags,
-            request.RemoveManagedCollectionMemberships);
+            request.RemoveManagedCollectionMemberships,
+            request.ForceRefresh);
     }
 
     public object Get(GetAnimeThemesSeasonMetadataSync request)
     {
         return _themeDownloader.GetSeasonMetadataSyncStatus();
+    }
+
+    public object Post(CancelAnimeThemesSeasonMetadataSync request)
+    {
+        return _themeDownloader.CancelSeasonMetadataSync();
     }
 
     public object Get(GetAnimeThemesStorage request)
@@ -428,6 +446,11 @@ public class AnimeThemesSyncService : IService, IRequiresRequest
     public object Post(ClearAnimeThemesBrowserCache request)
     {
         return _themeDownloader.ClearBrowserCache();
+    }
+
+    public object Post(ClearAnimeThemesProviderCache request)
+    {
+        return _themeDownloader.ClearProviderCache();
     }
 
     public object Post(ImportAnimeThemesLegacyExtrasManifests request)

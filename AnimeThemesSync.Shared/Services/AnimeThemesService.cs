@@ -21,16 +21,17 @@ public sealed class AnimeThemesService
 {
     private const int SearchCacheLimit = 100;
     private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
-    private static readonly ConcurrentDictionary<string, AnimeThemesAnime> _animeCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, AnimeCacheEntry> _animeCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly object _searchCacheLock = new();
     private static readonly Dictionary<string, SearchCacheEntry> _searchCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly TimeSpan SearchCacheTtl = TimeSpan.FromMinutes(10);
-    private static readonly TimeSpan ApiFetchCacheTtl = TimeSpan.FromDays(30);
     private const int MaxRateLimitRetries = 2;
+    private const int StaleRetentionDays = 180;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AnimeThemesService> _logger;
     private readonly RateLimiter _rateLimiter;
     private readonly ISeasonFinderDataStore? _persistentCache;
+    private readonly Func<int>? _providerCacheTtlDays;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AnimeThemesService"/> class.
@@ -39,16 +40,19 @@ public sealed class AnimeThemesService
     /// <param name="logger">The logger.</param>
     /// <param name="rateLimiter">The rate limiter.</param>
     /// <param name="persistentCache">The optional persistent search and provider response cache.</param>
+    /// <param name="providerCacheTtlDays">Optional live provider cache TTL accessor.</param>
     public AnimeThemesService(
         IHttpClientFactory httpClientFactory,
         ILogger<AnimeThemesService> logger,
         RateLimiter rateLimiter,
-        ISeasonFinderDataStore? persistentCache = null)
+        ISeasonFinderDataStore? persistentCache = null,
+        Func<int>? providerCacheTtlDays = null)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _rateLimiter = rateLimiter;
         _persistentCache = persistentCache;
+        _providerCacheTtlDays = providerCacheTtlDays;
     }
 
     /// <summary>
@@ -61,7 +65,7 @@ public sealed class AnimeThemesService
     public async Task<AnimeThemesAnime?> GetAnimeByExternalId(string site, int externalId, CancellationToken cancellationToken)
     {
         var cacheKey = $"resource:{site}:{externalId}";
-        if (_animeCache.TryGetValue(cacheKey, out var cached))
+        if (TryGetCachedAnime(cacheKey, out var cached))
         {
             return cached;
         }
@@ -70,7 +74,6 @@ public sealed class AnimeThemesService
         var persisted = GetPersistedAnime(cacheKey, requireFresh: true);
         if (persisted != null)
         {
-            CacheAnime(cacheKey, persisted);
             return persisted;
         }
 
@@ -84,7 +87,6 @@ public sealed class AnimeThemesService
             if (stale != null)
             {
                 _logger.LogWarning("Using stale AnimeThemes cache for {Site}:{Id} after provider lookup failed.", site, externalId);
-                CacheAnime(cacheKey, stale);
                 return stale;
             }
 
@@ -108,7 +110,6 @@ public sealed class AnimeThemesService
         else if (stale != null)
         {
             _logger.LogWarning("Using stale AnimeThemes cache for {Site}:{Id} after anime lookup failed.", site, externalId);
-            CacheAnime(cacheKey, stale);
             return stale;
         }
 
@@ -124,7 +125,7 @@ public sealed class AnimeThemesService
     public async Task<AnimeThemesAnime?> GetAnimeBySlug(string slug, CancellationToken cancellationToken)
     {
         var cacheKey = $"slug:{slug.Trim()}";
-        if (_animeCache.TryGetValue(cacheKey, out var cached))
+        if (TryGetCachedAnime(cacheKey, out var cached))
         {
             return cached;
         }
@@ -133,7 +134,6 @@ public sealed class AnimeThemesService
         var persisted = GetPersistedAnime(cacheKey, requireFresh: true);
         if (persisted != null)
         {
-            CacheAnime(cacheKey, persisted);
             return persisted;
         }
 
@@ -148,7 +148,6 @@ public sealed class AnimeThemesService
         else if (stale != null)
         {
             _logger.LogWarning("Using stale AnimeThemes cache for slug {Slug} after provider lookup failed.", slug);
-            CacheAnime(cacheKey, stale);
             return stale;
         }
 
@@ -179,7 +178,7 @@ public sealed class AnimeThemesService
             return cached;
         }
 
-        if (_persistentCache?.TryGetSearch(query, year, out var cachedJson) == true)
+        if (_persistentCache?.TryGetSearch(query, year, out var cachedJson, GetProviderCacheTtlDays()) == true)
         {
             var persisted = JsonSerializer.Deserialize<List<AnimeThemesAnime>>(cachedJson, _jsonOptions);
             if (persisted != null)
@@ -205,7 +204,7 @@ public sealed class AnimeThemesService
         var response = await SendRequestAsync<AnimeThemesAnimeIndexResponse>(url, cancellationToken).ConfigureAwait(false);
         var results = (IReadOnlyList<AnimeThemesAnime>)(response?.Anime ?? []);
         SetCachedSearch(cacheKey, results);
-        _persistentCache?.SetSearch(query, year, JsonSerializer.Serialize(results, _jsonOptions));
+        _persistentCache?.SetSearch(query, year, JsonSerializer.Serialize(results, _jsonOptions), GetProviderCacheTtlDays());
         return results;
     }
 
@@ -218,6 +217,15 @@ public sealed class AnimeThemesService
         {
             _searchCache.Clear();
         }
+    }
+
+    /// <summary>
+    /// Clears all in-memory AnimeThemes response caches.
+    /// </summary>
+    public void ClearProviderCache()
+    {
+        _animeCache.Clear();
+        ClearSearchCache();
     }
 
     private static string BuildSearchCacheKey(string query, int? year)
@@ -386,11 +394,17 @@ public sealed class AnimeThemesService
     {
         var entry = _persistentCache?.GetApiFetchCache("animethemes:" + cacheKey.ToLowerInvariant());
         if (entry == null ||
-            (requireFresh && (!DateTimeOffset.TryParse(
-                entry.ExpiresAtUtc,
+            !DateTimeOffset.TryParse(
+                entry.CreatedAtUtc,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal,
-                out var expires) || expires <= DateTimeOffset.UtcNow)))
+                out var created))
+        {
+            return null;
+        }
+
+        var ageLimitDays = GetProviderCacheTtlDays() + (requireFresh ? 0 : StaleRetentionDays);
+        if (created.AddDays(ageLimitDays) <= DateTimeOffset.UtcNow)
         {
             return null;
         }
@@ -414,24 +428,46 @@ public sealed class AnimeThemesService
         }
 
         var now = DateTimeOffset.UtcNow;
-        _persistentCache.UpsertApiFetchCache(new ApiFetchCacheEntry
+        var ttlDays = GetProviderCacheTtlDays();
+        _persistentCache.UpsertApiFetchCache(
+            new ApiFetchCacheEntry
+            {
+                CacheKey = "animethemes:" + cacheKey.ToLowerInvariant(),
+                Provider = "AnimeThemes",
+                PayloadJson = JsonSerializer.Serialize(anime, _jsonOptions),
+                CreatedAtUtc = now.ToString("O", CultureInfo.InvariantCulture),
+                ExpiresAtUtc = now.AddDays(ttlDays).ToString("O", CultureInfo.InvariantCulture),
+            },
+            ttlDays);
+    }
+
+    private bool TryGetCachedAnime(string cacheKey, out AnimeThemesAnime? anime)
+    {
+        if (_animeCache.TryGetValue(cacheKey, out var cached) &&
+            cached.CreatedAtUtc.AddDays(GetProviderCacheTtlDays()) > DateTimeOffset.UtcNow)
         {
-            CacheKey = "animethemes:" + cacheKey.ToLowerInvariant(),
-            Provider = "AnimeThemes",
-            PayloadJson = JsonSerializer.Serialize(anime, _jsonOptions),
-            CreatedAtUtc = now.ToString("O", CultureInfo.InvariantCulture),
-            ExpiresAtUtc = now.Add(ApiFetchCacheTtl).ToString("O", CultureInfo.InvariantCulture),
-        });
+            anime = cached.Anime;
+            return true;
+        }
+
+        _animeCache.TryRemove(cacheKey, out _);
+        anime = null;
+        return false;
     }
 
     private static void CacheAnime(string cacheKey, AnimeThemesAnime anime)
     {
-        _animeCache[cacheKey] = anime;
+        var entry = new AnimeCacheEntry(DateTimeOffset.UtcNow, anime);
+        _animeCache[cacheKey] = entry;
         if (!string.IsNullOrWhiteSpace(anime.Slug))
         {
-            _animeCache[$"slug:{anime.Slug}"] = anime;
+            _animeCache[$"slug:{anime.Slug}"] = entry;
         }
     }
+
+    private int GetProviderCacheTtlDays() => Math.Clamp(_providerCacheTtlDays?.Invoke() ?? 30, 1, 365);
+
+    private sealed record AnimeCacheEntry(DateTimeOffset CreatedAtUtc, AnimeThemesAnime Anime);
 
     private sealed record SearchCacheEntry(DateTimeOffset CreatedAt, IReadOnlyList<AnimeThemesAnime> Results);
 }

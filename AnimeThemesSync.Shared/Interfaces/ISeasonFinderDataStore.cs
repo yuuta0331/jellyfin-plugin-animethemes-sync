@@ -37,7 +37,7 @@ public interface ISeasonFinderDataStore
 
     ApiFetchCacheEntry? GetApiFetchCache(string cacheKey);
 
-    void UpsertApiFetchCache(ApiFetchCacheEntry entry);
+    void UpsertApiFetchCache(ApiFetchCacheEntry entry, int ttlDays = 30);
 
     IReadOnlyList<ManagedSeasonCollectionAssetState> GetCollectionAssetStates();
 
@@ -53,11 +53,15 @@ public interface ISeasonFinderDataStore
 
     SeasonFinderStorageStatus GetStorageStatus();
 
+    CacheMaintenanceStatus GetCacheMaintenanceStatus(int seasonMetadataTtlDays, int providerResponseTtlDays);
+
     void SetRebuildError(string? error);
 
     void ClearCache();
 
-    bool TryGetSearch(string query, int? year, out string json);
+    void ClearProviderCache();
 
-    void SetSearch(string query, int? year, string json);
+    bool TryGetSearch(string query, int? year, out string json, int ttlDays = 30);
+
+    void SetSearch(string query, int? year, string json, int ttlDays = 30);
 }

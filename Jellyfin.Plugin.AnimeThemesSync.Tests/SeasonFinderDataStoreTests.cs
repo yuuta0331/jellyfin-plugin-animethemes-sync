@@ -74,7 +74,7 @@ public sealed class SeasonFinderDataStoreTests
     }
 
     [Fact]
-    public void SearchCache_PersistsExpiresAndClearsWithoutDeletingMappings()
+    public void SearchCache_PersistsAndOnlyProviderClearRemovesIt()
     {
         var directory = CreateTempDirectory();
         try
@@ -91,14 +91,21 @@ public sealed class SeasonFinderDataStoreTests
             {
                 connection.Open();
                 using var command = connection.CreateCommand();
-                command.CommandText = "UPDATE AnimeSearchCache SET ExpiresAtUtc = '2000-01-01T00:00:00Z';";
+                command.CommandText = "UPDATE AnimeSearchCache SET CreatedAtUtc = '2000-01-01T00:00:00Z';";
                 command.ExecuteNonQuery();
             }
 
             Assert.False(reopened.TryGetSearch("example", 2024, out _));
+            reopened.SetSearch("example", 2024, "[2]");
             reopened.ClearCache();
             Assert.Single(reopened.GetSeasonThemeMappings());
             Assert.False(reopened.IsCacheReady());
+            Assert.True(reopened.TryGetSearch("example", 2024, out var preservedJson));
+            Assert.Equal("[2]", preservedJson);
+
+            reopened.ClearProviderCache();
+            Assert.False(reopened.TryGetSearch("example", 2024, out _));
+            Assert.Single(reopened.GetSeasonThemeMappings());
         }
         finally
         {
@@ -459,6 +466,85 @@ public sealed class SeasonFinderDataStoreTests
     }
 
     [Fact]
+    public void CacheMaintenanceStatus_AppliesCurrentTtlToExistingRows()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var created = DateTimeOffset.UtcNow.AddDays(-10);
+            store.SaveSeasonMetadataSnapshot(new SeasonMetadataSnapshot
+            {
+                SeriesItemId = "series-1",
+                InputFingerprint = "fingerprint-1",
+                ResolvedAtUtc = created.ToString("O"),
+                ExpiresAtUtc = created.AddDays(30).ToString("O"),
+                LastError = "Most recent resolver error",
+                Seasons = [new SeasonMetadataRow { SeasonItemId = "season-1", SeasonNumber = 1 }],
+            });
+            store.UpsertApiFetchCache(new ApiFetchCacheEntry
+            {
+                CacheKey = "animethemes:slug:example",
+                Provider = "AnimeThemes",
+                PayloadJson = "{}",
+                CreatedAtUtc = created.ToString("O"),
+                ExpiresAtUtc = created.AddDays(30).ToString("O"),
+            });
+
+            var extended = store.GetCacheMaintenanceStatus(30, 30);
+            Assert.Equal(1, extended.FreshSeasonSeriesCount);
+            Assert.Equal(1, extended.FreshProviderEntryCount);
+            Assert.Equal("Most recent resolver error", extended.LastSeasonError);
+
+            var shortened = store.GetCacheMaintenanceStatus(5, 5);
+            Assert.Equal(1, shortened.ExpiredSeasonSeriesCount);
+            Assert.Equal(1, shortened.StaleProviderEntryCount);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void ClearProviderCache_PreservesSeasonMetadataAndBrowserProjection()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            store.ReplaceRows([CreateRow("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "Example", 1, "Direct", "example")]);
+            store.SaveSeasonMetadataSnapshot(new SeasonMetadataSnapshot
+            {
+                SeriesItemId = "series-1",
+                InputFingerprint = "fingerprint-1",
+                ResolvedAtUtc = DateTimeOffset.UtcNow.ToString("O"),
+                ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(30).ToString("O"),
+            });
+            store.SetSearch("example", 2024, "[]");
+            store.UpsertApiFetchCache(new ApiFetchCacheEntry
+            {
+                CacheKey = "anilist:relations:1",
+                Provider = "AniList",
+                PayloadJson = "{}",
+                CreatedAtUtc = DateTimeOffset.UtcNow.ToString("O"),
+                ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(30).ToString("O"),
+            });
+
+            store.ClearProviderCache();
+
+            Assert.NotNull(store.GetSeasonMetadataSnapshot("series-1"));
+            Assert.Single(store.GetAllRows());
+            Assert.False(store.TryGetSearch("example", 2024, out _));
+            Assert.Null(store.GetApiFetchCache("anilist:relations:1"));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
     public void SeasonMetadataAndApiFetchCache_AreScopedByServerKind()
     {
         var directory = CreateTempDirectory();
@@ -531,6 +617,67 @@ public sealed class SeasonFinderDataStoreTests
             using var count = verify.CreateCommand();
             count.CommandText = "SELECT COUNT(*) FROM ApiFetchCache WHERE ServerKind = 'Test';";
             Assert.Equal(2000L, Convert.ToInt64(count.ExecuteScalar()));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void ProviderCaches_RetainEntriesUntilCurrentTtlExpiryPlus180Days()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            store.EnsureInitialized();
+            var now = DateTimeOffset.UtcNow;
+            using (var connection = new SqliteConnection("Data Source=" + store.DatabasePath + ";Pooling=False"))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = """
+                    INSERT INTO ApiFetchCache (ServerKind, CacheKey, Provider, PayloadJson, CreatedAtUtc, ExpiresAtUtc)
+                    VALUES ('Test', $apiKey, 'AnimeThemes', '{}', $apiCreated, '2000-01-01T00:00:00Z');
+                    INSERT INTO AnimeSearchCache (ServerKind, QueryKey, Query, Year, ResultJson, CreatedAtUtc, ExpiresAtUtc)
+                    VALUES ('Test', $searchKey, $searchKey, NULL, '[]', $searchCreated, '2000-01-01T00:00:00Z');
+                    """;
+                var apiKey = command.Parameters.Add("$apiKey", Microsoft.Data.Sqlite.SqliteType.Text);
+                var apiCreated = command.Parameters.Add("$apiCreated", Microsoft.Data.Sqlite.SqliteType.Text);
+                var searchKey = command.Parameters.Add("$searchKey", Microsoft.Data.Sqlite.SqliteType.Text);
+                var searchCreated = command.Parameters.Add("$searchCreated", Microsoft.Data.Sqlite.SqliteType.Text);
+                foreach (var age in new[] { 200, 220 })
+                {
+                    apiKey.Value = "api-age-" + age;
+                    apiCreated.Value = now.AddDays(-age).ToString("O");
+                    searchKey.Value = "search-age-" + age;
+                    searchCreated.Value = now.AddDays(-age).ToString("O");
+                    command.ExecuteNonQuery();
+                }
+            }
+
+            store.UpsertApiFetchCache(new ApiFetchCacheEntry
+            {
+                CacheKey = "trigger",
+                Provider = "AnimeThemes",
+                PayloadJson = "{}",
+                CreatedAtUtc = now.ToString("O"),
+                ExpiresAtUtc = now.AddDays(30).ToString("O"),
+            }, 30);
+            store.SetSearch("trigger", null, "[]", 30);
+
+            using var verify = new SqliteConnection("Data Source=" + store.DatabasePath + ";Pooling=False");
+            verify.Open();
+            using var count = verify.CreateCommand();
+            count.CommandText = "SELECT COUNT(*) FROM ApiFetchCache WHERE ServerKind = 'Test' AND CacheKey = 'api-age-200';";
+            Assert.Equal(1L, Convert.ToInt64(count.ExecuteScalar()));
+            count.CommandText = "SELECT COUNT(*) FROM ApiFetchCache WHERE ServerKind = 'Test' AND CacheKey = 'api-age-220';";
+            Assert.Equal(0L, Convert.ToInt64(count.ExecuteScalar()));
+            count.CommandText = "SELECT COUNT(*) FROM AnimeSearchCache WHERE ServerKind = 'Test' AND QueryKey = 'search-age-200';";
+            Assert.Equal(1L, Convert.ToInt64(count.ExecuteScalar()));
+            count.CommandText = "SELECT COUNT(*) FROM AnimeSearchCache WHERE ServerKind = 'Test' AND QueryKey = 'search-age-220';";
+            Assert.Equal(0L, Convert.ToInt64(count.ExecuteScalar()));
         }
         finally
         {

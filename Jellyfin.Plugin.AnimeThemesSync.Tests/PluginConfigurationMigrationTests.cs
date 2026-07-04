@@ -41,6 +41,26 @@ public sealed class PluginConfigurationMigrationTests
         Assert.Equal(SeasonCollectionLandscapeArtType.Thumb, config.SeasonCollectionCanvasLandscapeType);
         Assert.Equal("#000000", config.SeasonCollectionCanvasColor);
         Assert.Equal(100, config.SeasonCollectionCanvasOpacity);
+        Assert.Equal(30, config.SeasonMetadataCacheTtlDays);
+        Assert.Equal(30, config.ProviderResponseCacheTtlDays);
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(1, 1)]
+    [InlineData(30, 30)]
+    [InlineData(365, 365)]
+    [InlineData(366, 365)]
+    public void CacheTtlDays_AreClamped(int value, int expected)
+    {
+        var config = new PluginConfiguration
+        {
+            SeasonMetadataCacheTtlDays = value,
+            ProviderResponseCacheTtlDays = value,
+        };
+
+        Assert.Equal(expected, config.SeasonMetadataCacheTtlDays);
+        Assert.Equal(expected, config.ProviderResponseCacheTtlDays);
     }
 
     [Theory]
@@ -196,7 +216,7 @@ public sealed class PluginConfigurationMigrationTests
         var changed = config.Normalize();
 
         Assert.True(changed);
-        Assert.Equal(8, config.ConfigurationVersion);
+        Assert.Equal(9, config.ConfigurationVersion);
         Assert.Equal(4, config.Series.Audio.MaxThemes);
         Assert.False(config.Series.Video.UseAsTheme);
         Assert.Equal(ExtrasFileSuffix.Other, config.ExtrasFileSuffix);
@@ -214,10 +234,24 @@ public sealed class PluginConfigurationMigrationTests
         var changed = config.Normalize();
 
         Assert.True(changed);
-        Assert.Equal(8, config.ConfigurationVersion);
+        Assert.Equal(9, config.ConfigurationVersion);
         Assert.Equal(3, config.Series.Audio.MaxThemes);
         Assert.True(config.SegmentedDownloadEnabled);
         Assert.Equal(4, config.SegmentedDownloadSegments);
+    }
+
+    [Fact]
+    public void Normalize_V8Config_UpgradesWithCachePolicyDefaults()
+    {
+        var config = new PluginConfiguration
+        {
+            ConfigurationVersion = 8,
+        };
+
+        Assert.True(config.Normalize());
+        Assert.Equal(9, config.ConfigurationVersion);
+        Assert.Equal(30, config.SeasonMetadataCacheTtlDays);
+        Assert.Equal(30, config.ProviderResponseCacheTtlDays);
     }
 
     [Fact]
@@ -235,7 +269,7 @@ public sealed class PluginConfigurationMigrationTests
         serializer.Serialize(writer, config);
         var xml = writer.ToString();
 
-        Assert.Contains("<ConfigurationVersion>8</ConfigurationVersion>", xml);
+        Assert.Contains("<ConfigurationVersion>9</ConfigurationVersion>", xml);
         Assert.Contains("<Series>", xml);
         Assert.Contains("<Movie>", xml);
         Assert.DoesNotContain("SeriesAudioMaxThemes", xml);

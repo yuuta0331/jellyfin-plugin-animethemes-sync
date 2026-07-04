@@ -152,12 +152,12 @@
                     <article class="ats-overview-section"><h3 class="ats-heading-with-icon"><span class="material-icons ats-icon" aria-hidden="true">video_library</span><span>Library</span></h3><strong class="ats-overview-primary" id="AnimeThemesSummaryItems">0</strong><span class="fieldDescription">items</span><div class="ats-summary-grid"><div><strong id="AnimeThemesSummarySeriesItems">0</strong><span>Series</span></div><div><strong id="AnimeThemesSummaryMovieItems">0</strong><span>Movies</span></div><div><strong id="AnimeThemesSummarySeasonItems">0</strong><span>Seasons</span></div></div></article>
                     <article class="ats-overview-section"><h3 class="ats-heading-with-icon"><span class="material-icons ats-icon" aria-hidden="true">folder</span><span>Local Media</span></h3><strong class="ats-overview-primary" id="AnimeThemesSummarySavedItems">0</strong><span class="fieldDescription">items with saved media</span><div class="ats-summary-grid"><div><strong id="AnimeThemesSummaryVideos">0</strong><span>Videos</span></div><div><strong id="AnimeThemesSummarySongs">0</strong><span>Songs</span></div><div><strong id="AnimeThemesSummaryExtras">0</strong><span>Extras</span></div><div><strong id="AnimeThemesSummaryBytes">0 B</strong><span>Total size</span></div></div></article>
                     <article class="ats-overview-section"><h3 class="ats-heading-with-icon"><span class="material-icons ats-icon" aria-hidden="true">link</span><span>Matching</span></h3><strong class="ats-overview-primary" id="AnimeThemesSummaryMatchRate">0%</strong><span class="fieldDescription">resolved seasons</span><div class="ats-summary-grid"><div><strong id="AnimeThemesSummaryManualSeasonMappings">0</strong><span>Manual</span></div><div><strong id="AnimeThemesSummaryAutoSeasonMappings">0</strong><span>Auto</span></div><div><strong id="AnimeThemesSummaryDirectSeasonMappings">0</strong><span>Direct</span></div><div><strong id="AnimeThemesSummarySeriesSharedSeasons">0</strong><span>Series shared</span></div><div><strong id="AnimeThemesSummaryUnmatchedSeasons">0</strong><span>Unmatched</span></div></div></article>
-                    <article class="ats-overview-section"><h3 class="ats-heading-with-icon"><span class="material-icons ats-icon" aria-hidden="true">storage</span><span>System</span></h3><strong class="ats-overview-primary" id="AnimeThemesCacheState">Starting</strong><span class="fieldDescription">cache status</span><div class="ats-summary-grid"><div><strong id="AnimeThemesCacheBytes">0 B</strong><span>Cache size</span></div><div><strong id="AnimeThemesCacheItems">0</strong><span>Cache items</span></div><div><strong id="AnimeThemesCacheLastScan">-</strong><span>Last refresh</span></div></div><div id="AnimeThemesCachePath" class="fieldDescription"></div></article>
+                    <article class="ats-overview-section"><h3 class="ats-heading-with-icon"><span class="material-icons ats-icon" aria-hidden="true">storage</span><span>System</span></h3><strong class="ats-overview-primary" id="AnimeThemesCacheState">Starting</strong><span class="fieldDescription">cache status</span><div class="ats-summary-grid"><div><strong id="AnimeThemesCacheBytes">0 B</strong><span>Cache size</span></div><div><strong id="AnimeThemesCacheItems">0</strong><span>Display rows</span></div><div><strong id="AnimeThemesCacheLastScan">-</strong><span>Last refresh</span></div></div><div class="ats-summary-grid"><div><strong id="AtsSeasonCacheFresh">0</strong><span>Season fresh</span></div><div><strong id="AtsSeasonCacheExpired">0</strong><span>Season expired</span></div><div><strong id="AtsSeasonCacheErrors">0</strong><span>Season errors</span></div><div><strong id="AtsProviderCacheFresh">0</strong><span>Provider fresh</span></div><div><strong id="AtsProviderCacheStale">0</strong><span>Provider stale</span></div></div><div id="AtsCachePolicySummary" class="fieldDescription"></div><div id="AtsCacheExpirySummary" class="fieldDescription"></div><div id="AnimeThemesCachePath" class="fieldDescription"></div></article>
                 </div></section>
                 <section class="ats-manager-section" id="AtsManagerTasks"><div class="ats-panel-head"><div><h2 class="sectionTitle">Tasks</h2><div class="fieldDescription">Run synchronization, review local media, or refresh plugin data.</div></div></div><div class="ats-task-grid">
                     <article class="ats-task-card ats-task-card-primary"><div><h3 class="ats-heading-with-icon"><span class="material-icons ats-icon" aria-hidden="true">manage_search</span><span>Review and clean local media</span></h3><div class="fieldDescription">Find files that no longer match the saved download settings. The scan only builds a review list; you choose what to delete.</div></div><div class="ats-actions"><button is="emby-button" type="button" class="raised emby-button ats-action-button ats-icon-button-text" id="AtsCleanupScan"><span class="material-icons ats-icon" aria-hidden="true">search</span><span>Scan local media</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsCleanupCancel" hidden><span class="material-icons ats-icon" aria-hidden="true">close</span><span>Cancel</span></button></div></article>
                     <article class="ats-task-card"><div><h3 class="ats-heading-with-icon"><span class="material-icons ats-icon" aria-hidden="true">sync</span><span>Synchronization</span></h3><div class="fieldDescription">Run the scheduled downloader now. Unsaved Settings changes are saved first.</div></div><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsRunTask"><span class="material-icons ats-icon" aria-hidden="true">play_arrow</span><span>Run synchronization</span></button></article>
-                    <article class="ats-task-card"><div><h3 class="ats-heading-with-icon"><span class="material-icons ats-icon" aria-hidden="true">storage</span><span>Cache maintenance</span></h3><div class="fieldDescription">Rebuild display data or import legacy extras manifests.</div></div><div class="ats-actions"><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesBrowserRebuildCache"><span class="material-icons ats-icon" aria-hidden="true">sync</span><span>Rebuild cache</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesBrowserClearCache"><span class="material-icons ats-icon" aria-hidden="true">delete</span><span>Clear cache</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesImportLegacyManifests"><span class="material-icons ats-icon" aria-hidden="true">drive_folder_upload</span><span>Import legacy</span></button></div></article>
+                    <article class="ats-task-card"><div><h3 class="ats-heading-with-icon"><span class="material-icons ats-icon" aria-hidden="true">storage</span><span>Cache maintenance</span></h3><div class="fieldDescription">Refresh season automation independently from theme downloads. Display and provider caches are managed separately.</div></div><div class="ats-actions"><button is="emby-button" type="button" class="raised emby-button ats-action-button ats-icon-button-text" id="AtsSeasonCacheRefresh"><span class="material-icons ats-icon" aria-hidden="true">refresh</span><span>Refresh stale/missing</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsSeasonCacheRebuild"><span class="material-icons ats-icon" aria-hidden="true">published_with_changes</span><span>Rebuild all season metadata</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsProviderCacheClear"><span class="material-icons ats-icon" aria-hidden="true">cloud_off</span><span>Clear provider cache</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesBrowserRebuildCache"><span class="material-icons ats-icon" aria-hidden="true">sync</span><span>Rebuild display cache</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesBrowserClearCache"><span class="material-icons ats-icon" aria-hidden="true">delete</span><span>Clear display cache</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesImportLegacyManifests"><span class="material-icons ats-icon" aria-hidden="true">drive_folder_upload</span><span>Import legacy</span></button></div></article>
                 </div><div id="AtsCleanupWorkspace" class="ats-cleanup-workspace" hidden><div class="ats-cleanup-status"><div><strong id="AtsCleanupState">Start a scan to review local files.</strong><div id="AtsCleanupSummary" class="fieldDescription"></div></div><div class="ats-progress-track"><div class="ats-progress-bar" id="AtsCleanupProgress"></div></div></div><div class="ats-cleanup-filters"><div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsCleanupSearch">Search</label><input id="AtsCleanupSearch" type="text" is="emby-input" autocomplete="off" /></div><div class="selectContainer"><label class="selectLabel" for="AtsCleanupStatus">Recommendation</label><select is="emby-select" id="AtsCleanupStatus"><option value="Undesired" selected>Suggested for removal</option><option value="Desired">Matches current settings</option><option value="Unknown">Could not evaluate</option><option value="">All recommendations</option></select></div><div class="selectContainer"><label class="selectLabel" for="AtsCleanupSource">Added by</label><select is="emby-select" id="AtsCleanupSource"><option value="default" selected>Hide Browser downloads</option><option value="">All sources</option><option value="Untracked">Outside this plugin</option><option value="Scheduled">Scheduled synchronization</option><option value="BrowserManual">Browser download</option><option value="TrackedUnknown">Earlier plugin version</option></select></div><div class="selectContainer"><label class="selectLabel" for="AtsCleanupKind">Media type</label><select is="emby-select" id="AtsCleanupKind"><option value="">All</option><option value="Audio">Audio</option><option value="Video">Video</option><option value="Extra">Extra</option></select></div></div><div class="ats-cleanup-selection"><div class="ats-actions"><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsCleanupSelectVisible"><span class="material-icons ats-icon" aria-hidden="true">select_all</span><span>Select visible</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsCleanupClearSelection"><span class="material-icons ats-icon" aria-hidden="true">clear_all</span><span>Clear selection</span></button></div><div><strong id="AtsCleanupSelected">No files selected</strong><button is="emby-button" type="button" class="raised emby-button ats-danger-button ats-icon-button-text" id="AtsCleanupDelete" disabled><span class="material-icons ats-icon" aria-hidden="true">delete</span><span>Delete selected</span></button></div></div><div id="AtsCleanupResults" class="ats-cleanup-results" aria-live="polite"></div><div class="ats-cleanup-pager"><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsCleanupPrev"><span class="material-icons ats-icon" aria-hidden="true">navigate_before</span><span>Previous</span></button><span id="AtsCleanupPage">0 files</span><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsCleanupNext"><span>Next</span><span class="material-icons ats-icon" aria-hidden="true">navigate_next</span></button></div></div></section>
                 <details class="ats-manager-section ats-danger-zone"><summary><span class="material-icons ats-icon" aria-hidden="true">warning</span><span>Danger zone</span><span class="material-icons ats-icon ats-disclosure-icon" aria-hidden="true">expand_more</span></summary><div class="fieldDescription">Bulk deletion bypasses the review list. Use it only when you intentionally want to remove an entire media type.</div><div class="ats-actions"><button is="emby-button" type="button" class="emby-button ats-danger-button ats-icon-button-text" data-delete-scope="audio"><span class="material-icons ats-icon" aria-hidden="true">music_off</span><span>Delete all songs</span></button><button is="emby-button" type="button" class="emby-button ats-danger-button ats-icon-button-text" data-delete-scope="video"><span class="material-icons ats-icon" aria-hidden="true">video_file</span><span>Delete all videos and extras</span></button><button is="emby-button" type="button" class="emby-button ats-danger-button ats-icon-button-text" data-delete-scope="all"><span class="material-icons ats-icon" aria-hidden="true">delete</span><span>Delete all theme media</span></button></div></details>
                 <h2 class="sectionTitle ats-manager-group-title">Data transfer</h2>
@@ -255,6 +255,19 @@
                                         <label class="inputLabel inputLabelUnfocused" for="AtsDownloadTimeoutSeconds">Timeout seconds</label>
                                         <input id="AtsDownloadTimeoutSeconds" type="number" is="emby-input" min="1" />
                                         <div class="fieldDescription">Increase this if large video downloads time out. Default: 600.</div>
+                                    </div>
+                                </div>
+                                <h3 class="ats-settings-subtitle">Cache policy</h3>
+                                <div class="ats-two-column">
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsSeasonMetadataCacheTtlDays">Season metadata TTL (days)</label>
+                                        <input id="AtsSeasonMetadataCacheTtlDays" type="number" is="emby-input" min="1" max="365" />
+                                        <div class="fieldDescription">How long resolved year and broadcast-season information stays fresh. Default: 30.</div>
+                                    </div>
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsProviderResponseCacheTtlDays">Provider response TTL (days)</label>
+                                        <input id="AtsProviderResponseCacheTtlDays" type="number" is="emby-input" min="1" max="365" />
+                                        <div class="fieldDescription">Applies to AnimeThemes search, slug/external ID, and AniList relation responses. Default: 30.</div>
                                     </div>
                                 </div>
                                 <div class="checkboxContainer checkboxContainer-withDescription">
@@ -3565,6 +3578,14 @@
                 var cacheState = page.querySelector('#AnimeThemesCacheState');
                 var cachePath = page.querySelector('#AnimeThemesCachePath');
                 var cacheLastScan = page.querySelector('#AnimeThemesCacheLastScan');
+                var seasonCacheFresh = page.querySelector('#AtsSeasonCacheFresh');
+                var seasonCacheExpired = page.querySelector('#AtsSeasonCacheExpired');
+                var seasonCacheErrors = page.querySelector('#AtsSeasonCacheErrors');
+                var providerCacheFresh = page.querySelector('#AtsProviderCacheFresh');
+                var providerCacheStale = page.querySelector('#AtsProviderCacheStale');
+                var cachePolicySummary = page.querySelector('#AtsCachePolicySummary');
+                var cacheExpirySummary = page.querySelector('#AtsCacheExpirySummary');
+                var seasonCacheCancelButton = page.querySelector('#AtsSeasonCacheCancel');
                 var summaryMatchRate = page.querySelector('#AnimeThemesSummaryMatchRate');
                 var cleanupWorkspace = page.querySelector('#AtsCleanupWorkspace');
                 var cleanupState = page.querySelector('#AtsCleanupState');
@@ -3615,6 +3636,8 @@
                     ThemeDownloadingEnabled: page.querySelector('#AtsThemeDownloadingEnabled'),
                     MaxConcurrentDownloads: page.querySelector('#AtsMaxConcurrentDownloads'),
                     DownloadTimeoutSeconds: page.querySelector('#AtsDownloadTimeoutSeconds'),
+                    SeasonMetadataCacheTtlDays: page.querySelector('#AtsSeasonMetadataCacheTtlDays'),
+                    ProviderResponseCacheTtlDays: page.querySelector('#AtsProviderResponseCacheTtlDays'),
                     SegmentedDownloadEnabled: page.querySelector('#AtsSegmentedDownloadEnabled'),
                     SegmentedDownloadSegments: page.querySelector('#AtsSegmentedDownloadSegments'),
                     SegmentedDownloadOptions: page.querySelector('#AtsSegmentedDownloadOptions'),
@@ -4649,6 +4672,18 @@
                     });
                 }
 
+                function startSeasonCacheMaintenance(forceRefresh) {
+                    if (forceRefresh && !window.confirm('Rebuild season metadata for every enabled Series? Existing provider responses will still be reused. Clear the provider cache first only when a complete provider refresh is intended.')) return;
+                    Dashboard.showLoadingMsg();
+                    apiPostJson('AnimeThemesSync/SeasonMetadata/Sync', { ForceRefresh: !!forceRefresh }).then(function () {
+                        Dashboard.hideLoadingMsg();
+                        pollSeasonMetadataSync();
+                    }).catch(function (err) {
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert({ title: 'Season Metadata', message: getErrorMessage(err) });
+                    });
+                }
+
                 function scheduleBrowserRefresh() {
                     if (state.browserRefreshTimer) {
                         clearTimeout(state.browserRefreshTimer);
@@ -5195,13 +5230,21 @@
                     var ready = !!value(storage, 'CacheReady', 'cacheReady');
                     var rebuilding = !!value(storage, 'RebuildRunning', 'rebuildRunning');
                     var finderStorage = value(storage, 'SeasonFinder', 'seasonFinder');
-                    if (cacheBytes) cacheBytes.textContent = formatBytes(value(storage, 'DatabaseBytes', 'databaseBytes'));
+                    var maintenance = value(storage, 'CacheMaintenance', 'cacheMaintenance') || {};
+                    if (cacheBytes) cacheBytes.textContent = formatBytes((Number(value(storage, 'DatabaseBytes', 'databaseBytes')) || 0) + (Number(value(finderStorage, 'DatabaseBytes', 'databaseBytes')) || 0));
                     if (cacheItems) cacheItems.textContent = text(value(storage, 'BrowserItemCount', 'browserItemCount')) + ' browser / ' + text(value(finderStorage, 'ItemCount', 'itemCount')) + ' seasons';
                     if (cacheState) cacheState.textContent = rebuilding ? 'Updating' : (ready ? 'Ready' : 'Starting');
                     if (cacheLastScan) cacheLastScan.textContent = text(value(storage, 'LastFullScanUtc', 'lastFullScanUtc'));
+                    if (seasonCacheFresh) seasonCacheFresh.textContent = text(value(maintenance, 'FreshSeasonSeriesCount', 'freshSeasonSeriesCount'));
+                    if (seasonCacheExpired) seasonCacheExpired.textContent = text(value(maintenance, 'ExpiredSeasonSeriesCount', 'expiredSeasonSeriesCount'));
+                    if (seasonCacheErrors) seasonCacheErrors.textContent = text(value(maintenance, 'ErrorSeasonSeriesCount', 'errorSeasonSeriesCount'));
+                    if (providerCacheFresh) providerCacheFresh.textContent = text(value(maintenance, 'FreshProviderEntryCount', 'freshProviderEntryCount'));
+                    if (providerCacheStale) providerCacheStale.textContent = text(value(maintenance, 'StaleProviderEntryCount', 'staleProviderEntryCount'));
+                    if (cachePolicySummary) cachePolicySummary.textContent = 'Season ' + text(value(maintenance, 'SeasonSeriesCount', 'seasonSeriesCount')) + ' series / ' + text(value(maintenance, 'SeasonRowCount', 'seasonRowCount')) + ' rows · Provider ' + text(value(maintenance, 'ProviderEntryCount', 'providerEntryCount')) + ' entries (' + text(value(maintenance, 'AnimeThemesEntryCount', 'animeThemesEntryCount')) + ' AnimeThemes / ' + text(value(maintenance, 'AniListEntryCount', 'aniListEntryCount')) + ' AniList / ' + text(value(maintenance, 'SearchEntryCount', 'searchEntryCount')) + ' search) · TTL ' + text(value(maintenance, 'SeasonMetadataTtlDays', 'seasonMetadataTtlDays')) + '/' + text(value(maintenance, 'ProviderResponseTtlDays', 'providerResponseTtlDays')) + ' days';
+                    if (cacheExpirySummary) cacheExpirySummary.textContent = 'Last season resolve: ' + text(value(maintenance, 'LastSeasonResolvedAtUtc', 'lastSeasonResolvedAtUtc')) + ' · Next season expiry: ' + text(value(maintenance, 'NextSeasonExpiryUtc', 'nextSeasonExpiryUtc')) + ' · Next provider expiry: ' + text(value(maintenance, 'NextProviderExpiryUtc', 'nextProviderExpiryUtc'));
                     if (cachePath) {
                         var path = value(storage, 'DatabasePath', 'databasePath');
-                        var lastError = value(storage, 'LastError', 'lastError');
+                        var lastError = value(maintenance, 'LastSeasonError', 'lastSeasonError') || value(storage, 'LastError', 'lastError');
                         var finderPath = value(finderStorage, 'DatabasePath', 'databasePath');
                         cachePath.textContent = lastError ? ('Last error: ' + lastError) : 'Browser and Season Finder data are available.';
                         cachePath.title = [path, finderPath].filter(Boolean).join(' | ');
@@ -6288,7 +6331,7 @@
 
                 function ensureSettingsConfig(config) {
                     config = config || {};
-                    config.ConfigurationVersion = 8;
+                    config.ConfigurationVersion = 9;
                     config.Series = ensureMediaConfig(getConfigValue(config, 'Series', null));
                     config.Movie = ensureMediaConfig(getConfigValue(config, 'Movie', null));
                     if (!Array.isArray(getConfigValue(config, 'SeasonThemeMappings', []))) {
@@ -6327,10 +6370,12 @@
 
                 function defaultSettingsConfig(existingConfig) {
                     return ensureSettingsConfig({
-                        ConfigurationVersion: 8,
+                        ConfigurationVersion: 9,
                         ThemeDownloadingEnabled: true,
                         MaxConcurrentDownloads: 1,
                         DownloadTimeoutSeconds: 600,
+                        SeasonMetadataCacheTtlDays: 30,
+                        ProviderResponseCacheTtlDays: 30,
                         SegmentedDownloadEnabled: true,
                         SegmentedDownloadSegments: 4,
                         AllowAdd: true,
@@ -6406,10 +6451,12 @@
                 function canonicalizeSettings(config) {
                     config = ensureSettingsConfig(cloneSettings(config || {}));
                     return {
-                        ConfigurationVersion: 8,
+                        ConfigurationVersion: 9,
                         ThemeDownloadingEnabled: !!getConfigValue(config, 'ThemeDownloadingEnabled', true),
                         MaxConcurrentDownloads: Math.max(1, parseInt(getConfigValue(config, 'MaxConcurrentDownloads', 1), 10) || 1),
                         DownloadTimeoutSeconds: Math.max(1, parseInt(getConfigValue(config, 'DownloadTimeoutSeconds', 600), 10) || 600),
+                        SeasonMetadataCacheTtlDays: Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'SeasonMetadataCacheTtlDays', 30), 10) || 30)),
+                        ProviderResponseCacheTtlDays: Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'ProviderResponseCacheTtlDays', 30), 10) || 30)),
                         SegmentedDownloadEnabled: !!getConfigValue(config, 'SegmentedDownloadEnabled', true),
                         SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 4), 10) || 4)),
                         AllowAdd: !!getConfigValue(config, 'AllowAdd', true),
@@ -6764,6 +6811,8 @@
                     settingsFields.ThemeDownloadingEnabled.checked = !!getConfigValue(config, 'ThemeDownloadingEnabled', true);
                     settingsFields.MaxConcurrentDownloads.value = getConfigValue(config, 'MaxConcurrentDownloads', 1);
                     settingsFields.DownloadTimeoutSeconds.value = getConfigValue(config, 'DownloadTimeoutSeconds', 600);
+                    settingsFields.SeasonMetadataCacheTtlDays.value = Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'SeasonMetadataCacheTtlDays', 30), 10) || 30));
+                    settingsFields.ProviderResponseCacheTtlDays.value = Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'ProviderResponseCacheTtlDays', 30), 10) || 30));
                     settingsFields.SegmentedDownloadEnabled.checked = !!getConfigValue(config, 'SegmentedDownloadEnabled', true);
                     settingsFields.SegmentedDownloadSegments.value = Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 4), 10) || 4));
                     settingsFields.AllowAdd.checked = !!getConfigValue(config, 'AllowAdd', true);
@@ -6818,10 +6867,12 @@
 
                 function readSettingsForm() {
                     return {
-                        ConfigurationVersion: 8,
+                        ConfigurationVersion: 9,
                         ThemeDownloadingEnabled: settingsFields.ThemeDownloadingEnabled.checked,
                         MaxConcurrentDownloads: parseInt(settingsFields.MaxConcurrentDownloads.value, 10) || 1,
                         DownloadTimeoutSeconds: parseInt(settingsFields.DownloadTimeoutSeconds.value, 10) || 600,
+                        SeasonMetadataCacheTtlDays: Math.max(1, Math.min(365, parseInt(settingsFields.SeasonMetadataCacheTtlDays.value, 10) || 30)),
+                        ProviderResponseCacheTtlDays: Math.max(1, Math.min(365, parseInt(settingsFields.ProviderResponseCacheTtlDays.value, 10) || 30)),
                         SegmentedDownloadEnabled: settingsFields.SegmentedDownloadEnabled.checked,
                         SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(settingsFields.SegmentedDownloadSegments.value, 10) || 4)),
                         AllowAdd: settingsFields.AllowAdd.checked,
@@ -7059,20 +7110,30 @@
                         var syncState = String(value(status, 'State', 'state') || 'Idle');
                         var processed = Number(value(status, 'Processed', 'processed') || 0);
                         var total = Number(value(status, 'Total', 'total') || 0);
-                        if (syncState === 'Running') {
-                            setSettingsState('Settings saved. Synchronizing season metadata ' + processed + '/' + total + '...');
+                        var succeeded = Number(value(status, 'Succeeded', 'succeeded') || 0);
+                        var failed = Number(value(status, 'Failed', 'failed') || 0);
+                        if (syncState === 'Running' || syncState === 'Cancelling') {
+                            if (seasonCacheCancelButton) seasonCacheCancelButton.hidden = false;
+                            setSettingsState((syncState === 'Cancelling' ? 'Cancelling season metadata sync ' : 'Synchronizing season metadata ') + processed + '/' + total + ' · ' + succeeded + ' succeeded / ' + failed + ' failed...');
                             window.setTimeout(pollSeasonMetadataSync, 1000);
+                        } else if (syncState === 'Cancelled') {
+                            if (seasonCacheCancelButton) seasonCacheCancelButton.hidden = true;
+                            setSettingsState('Season metadata synchronization cancelled.');
+                            loadItems(false, { silent: true, preserveCount: true });
                         } else if (syncState === 'Failed') {
+                            if (seasonCacheCancelButton) seasonCacheCancelButton.hidden = true;
                             setSettingsState('Season metadata sync failed: ' + (value(status, 'Error', 'error') || 'Unknown error'));
                         } else if (syncState === 'CompletedWithErrors') {
-                            setSettingsState('Season metadata synchronized with warnings: ' + (value(status, 'Error', 'error') || 'See the server log for details.'));
+                            if (seasonCacheCancelButton) seasonCacheCancelButton.hidden = true;
+                            setSettingsState('Season metadata synchronized with warnings: ' + succeeded + ' succeeded / ' + failed + ' failed. ' + (value(status, 'Error', 'error') || 'See the server log for details.'));
                             loadItems(false, { silent: true, preserveCount: true });
                         } else if (syncState === 'Completed') {
-                            setSettingsState('Settings saved. Season metadata synchronized.');
+                            if (seasonCacheCancelButton) seasonCacheCancelButton.hidden = true;
+                            setSettingsState('Season metadata synchronized: ' + succeeded + ' succeeded / ' + failed + ' failed.');
                             loadItems(false, { silent: true, preserveCount: true });
                         }
                     }).catch(function () {
-                        setSettingsState('Settings saved. Season metadata sync status unavailable.');
+                        setSettingsState('Season metadata sync status unavailable.');
                     });
                 }
 
@@ -8210,6 +8271,25 @@
                 page.querySelector('#AtsCleanupPrev').addEventListener('click', function () { state.cleanupStartIndex = Math.max(0, state.cleanupStartIndex - state.cleanupPageSize); loadCleanupFiles(); });
                 page.querySelector('#AtsCleanupNext').addEventListener('click', function () { state.cleanupStartIndex += state.cleanupPageSize; loadCleanupFiles(); });
                 var rebuildButton = page.querySelector('#AnimeThemesBrowserRebuildCache');
+                var seasonCacheRefreshButton = page.querySelector('#AtsSeasonCacheRefresh');
+                var seasonCacheRebuildButton = page.querySelector('#AtsSeasonCacheRebuild');
+                var providerCacheClearButton = page.querySelector('#AtsProviderCacheClear');
+                if (!seasonCacheCancelButton && seasonCacheRefreshButton) {
+                    seasonCacheCancelButton = document.createElement('button');
+                    seasonCacheCancelButton.id = 'AtsSeasonCacheCancel';
+                    seasonCacheCancelButton.type = 'button';
+                    seasonCacheCancelButton.className = 'emby-button ats-button-secondary ats-icon-button-text';
+                    seasonCacheCancelButton.textContent = 'Cancel season refresh';
+                    seasonCacheCancelButton.hidden = true;
+                    seasonCacheRefreshButton.parentNode.insertBefore(seasonCacheCancelButton, seasonCacheRefreshButton.nextSibling);
+                }
+                if (seasonCacheCancelButton) seasonCacheCancelButton.addEventListener('click', function () { apiPost('AnimeThemesSync/SeasonMetadata/Cancel'); });
+                if (seasonCacheRefreshButton) seasonCacheRefreshButton.addEventListener('click', function () { startSeasonCacheMaintenance(false); });
+                if (seasonCacheRebuildButton) seasonCacheRebuildButton.addEventListener('click', function () { startSeasonCacheMaintenance(true); });
+                if (providerCacheClearButton) providerCacheClearButton.addEventListener('click', function () {
+                    if (!window.confirm('Clear AnimeThemes search/identity responses and AniList relations? Season metadata and display data will be preserved, and no provider request starts automatically.')) return;
+                    postMaintenance('AnimeThemesSync/ProviderCache/Clear', 'Provider Cache');
+                });
                 if (rebuildButton) {
                     rebuildButton.addEventListener('click', function () {
                         postMaintenance('AnimeThemesSync/BrowserCache/Rebuild', 'Browser Cache');

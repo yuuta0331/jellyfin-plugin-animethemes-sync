@@ -38,7 +38,7 @@ public sealed class ThemeDownloader : IScheduledTask
     private const string BroadcastSeasonProviderKey = "AnimeThemesBroadcastSeason";
     private const string UserOwnedImageFingerprint = "user-owned";
     private static readonly SemaphoreSlim SeasonMetadataSyncGate = new(1, 1);
-    private static readonly TimeSpan SeasonMetadataCacheTtl = TimeSpan.FromDays(30);
+    private static readonly SemaphoreSlim SeasonMetadataOperationGate = new(1, 1);
     private static readonly SemaphoreSlim SeasonCollectionFinalizeGate = new(1, 1);
     private readonly ILibraryManager _libraryManager;
     private readonly IFileSystem _fileSystem;
@@ -54,6 +54,7 @@ public sealed class ThemeDownloader : IScheduledTask
     private readonly Services.SkiaCollectionImageRenderer _collectionImageRenderer = new();
     private int _browserCacheRebuildRunning;
     private int _seasonMetadataSyncRunning;
+    private static CancellationTokenSource? _seasonMetadataSyncCancellation;
     private SeasonMetadataSyncStatus _seasonMetadataSyncStatus = new("Idle", 0, 0, null, null, null);
     private readonly Dictionary<string, string> _seasonMetadataRuleErrors = new(StringComparer.OrdinalIgnoreCase);
     private readonly AdjustableConcurrencyLimiter _downloadLimiter = new();
@@ -130,8 +131,7 @@ public sealed class ThemeDownloader : IScheduledTask
         var result = config.ThemeDownloadingEnabled
             ? await ProcessItems(items, config, config.ForceRedownload, progress, cancellationToken).ConfigureAwait(false)
             : new ThemeDownloadExecutionResult(0, 0, 0, 0, 0, 0);
-        await SynchronizeSeasonMetadataAsync(items.OfType<Series>().ToList(), cancellationToken).ConfigureAwait(false);
-        await RebuildBrowserCacheAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteSeasonMetadataMaintenanceAsync(progress, cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Anime Themes Download Task Completed. Downloaded {Count} files.", result.DownloadsCompleted);
     }
 
@@ -262,7 +262,10 @@ public sealed class ThemeDownloader : IScheduledTask
 
     public SeasonMetadataSyncStatus GetSeasonMetadataSyncStatus() => _seasonMetadataSyncStatus;
 
-    public SeasonMetadataSyncStatus StartSeasonMetadataSync(bool removeManagedTags = false, bool removeManagedCollectionMemberships = false)
+    public SeasonMetadataSyncStatus StartSeasonMetadataSync(
+        bool removeManagedTags = false,
+        bool removeManagedCollectionMemberships = false,
+        bool forceRefresh = false)
     {
         if (Interlocked.CompareExchange(ref _seasonMetadataSyncRunning, 1, 0) != 0)
         {
@@ -271,48 +274,136 @@ public sealed class ThemeDownloader : IScheduledTask
 
         var series = GetEnabledLibraryItems().OfType<Series>().ToList();
         _seasonMetadataSyncStatus = new SeasonMetadataSyncStatus("Running", 0, series.Count, DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture), null, null);
+        _seasonMetadataSyncCancellation = new CancellationTokenSource();
         _ = Task.Run(async () =>
         {
-            try
-            {
-                await SynchronizeSeasonMetadataAsync(series, CancellationToken.None, removeManagedTags, removeManagedCollectionMemberships).ConfigureAwait(false);
-                await RebuildBrowserCacheAsync(CancellationToken.None).ConfigureAwait(false);
-                _seasonMetadataSyncStatus = _seasonMetadataSyncStatus with
-                {
-                    State = _seasonMetadataSyncStatus.Failed > 0 ? "CompletedWithErrors" : "Completed",
-                    CompletedAtUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
-                };
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Season metadata synchronization failed.");
-                _seasonMetadataSyncStatus = _seasonMetadataSyncStatus with
-                {
-                    State = "Failed",
-                    CompletedAtUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
-                    Error = ex.Message,
-                };
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _seasonMetadataSyncRunning, 0);
-            }
+            await RunSeasonMetadataMaintenanceReservedAsync(
+                series,
+                null,
+                removeManagedTags,
+                removeManagedCollectionMemberships,
+                forceRefresh,
+                swallowFailure: true,
+                _seasonMetadataSyncCancellation.Token).ConfigureAwait(false);
         });
         return _seasonMetadataSyncStatus;
+    }
+
+    public SeasonMetadataSyncStatus CancelSeasonMetadataSync()
+    {
+        _seasonMetadataSyncCancellation?.Cancel();
+        if (string.Equals(_seasonMetadataSyncStatus.State, "Running", StringComparison.Ordinal))
+        {
+            _seasonMetadataSyncStatus = _seasonMetadataSyncStatus with { State = "Cancelling" };
+        }
+
+        return _seasonMetadataSyncStatus;
+    }
+
+    public async Task ExecuteSeasonMetadataMaintenanceAsync(
+        IProgress<double> progress,
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
+    {
+        if (Interlocked.CompareExchange(ref _seasonMetadataSyncRunning, 1, 0) != 0)
+        {
+            _logger.LogInformation("Season metadata maintenance is already running; skipping duplicate request.");
+            return;
+        }
+
+        var series = GetEnabledLibraryItems().OfType<Series>().ToList();
+        _seasonMetadataSyncStatus = new SeasonMetadataSyncStatus("Running", 0, series.Count, DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture), null, null);
+        await RunSeasonMetadataMaintenanceReservedAsync(series, progress, false, false, forceRefresh, swallowFailure: false, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RunSeasonMetadataMaintenanceReservedAsync(
+        List<Series> series,
+        IProgress<double>? progress,
+        bool removeManagedTags,
+        bool removeManagedCollectionMemberships,
+        bool forceRefresh,
+        bool swallowFailure,
+        CancellationToken cancellationToken)
+    {
+        var entered = false;
+        try
+        {
+            await SeasonMetadataOperationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            entered = true;
+            await SynchronizeSeasonMetadataAsync(
+                series,
+                cancellationToken,
+                removeManagedTags,
+                removeManagedCollectionMemberships,
+                forceRefresh,
+                progress).ConfigureAwait(false);
+            await RebuildBrowserCacheAsync(cancellationToken).ConfigureAwait(false);
+            _seasonMetadataSyncStatus = _seasonMetadataSyncStatus with
+            {
+                State = _seasonMetadataSyncStatus.Failed > 0 ? "CompletedWithErrors" : "Completed",
+                CompletedAtUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+            };
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _seasonMetadataSyncStatus = _seasonMetadataSyncStatus with
+            {
+                State = "Cancelled",
+                CompletedAtUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+            };
+            if (!swallowFailure)
+            {
+                throw;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Season metadata synchronization failed.");
+            _seasonMetadataSyncStatus = _seasonMetadataSyncStatus with
+            {
+                State = "Failed",
+                CompletedAtUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                Error = ex.Message,
+            };
+            if (!swallowFailure)
+            {
+                throw;
+            }
+        }
+        finally
+        {
+            if (entered)
+            {
+                SeasonMetadataOperationGate.Release();
+            }
+
+            Interlocked.Exchange(ref _seasonMetadataSyncRunning, 0);
+        }
     }
 
     public AnimeThemesStorageStatus GetStorageStatus()
     {
         EnsureBrowserCacheRebuildStarted();
-        return _dataStore.GetStorageStatus(IsBrowserCacheRebuildRunning) with { SeasonFinder = _seasonFinderStore.GetStorageStatus() };
+        var config = Plugin.Instance?.Configuration ?? new PluginConfiguration();
+        return _dataStore.GetStorageStatus(IsBrowserCacheRebuildRunning) with
+        {
+            SeasonFinder = _seasonFinderStore.GetStorageStatus(),
+            CacheMaintenance = _seasonFinderStore.GetCacheMaintenanceStatus(config.SeasonMetadataCacheTtlDays, config.ProviderResponseCacheTtlDays),
+        };
     }
 
     public AnimeThemesMaintenanceResult ClearBrowserCache()
     {
         _dataStore.ClearBrowserCache();
         _seasonFinderStore.ClearCache();
-        _animeThemesService.ClearSearchCache();
         return new AnimeThemesMaintenanceResult(true, "Browser cache cleared.");
+    }
+
+    public AnimeThemesMaintenanceResult ClearProviderCache()
+    {
+        _seasonFinderStore.ClearProviderCache();
+        _animeThemesService.ClearProviderCache();
+        return new AnimeThemesMaintenanceResult(false, "Provider response cache cleared. Season metadata and Browser data were preserved.");
     }
 
     public AnimeThemesMaintenanceResult StartBrowserCacheRebuild()
@@ -415,7 +506,7 @@ public sealed class ThemeDownloader : IScheduledTask
                 broadcastSeasons = GetBroadcastSeasons(state);
                 var seasons = GetSeasonItems(series).Where(IsSeasonEligibleForThemeMatching).ToList();
                 var snapshot = _seasonFinderStore.GetSeasonMetadataSnapshot(series.Id.ToString("D"));
-                if (state.Rules.Count == 0 || !IsSeasonMetadataSnapshotFresh(snapshot, BuildSeasonMetadataFingerprint(series, seasons), seasons))
+                if (state.Rules.Count == 0 || !IsSeasonMetadataSnapshotFresh(snapshot, BuildSeasonMetadataFingerprint(series, seasons), seasons, GetSeasonMetadataCacheTtlDays()))
                 {
                     broadcastSeasons = await SynchronizeSeriesSeasonMetadataAsync(series, cancellationToken).ConfigureAwait(false);
                     anySeriesSynchronized = true;
@@ -2368,7 +2459,9 @@ public sealed class ThemeDownloader : IScheduledTask
         List<Series> seriesItems,
         CancellationToken cancellationToken,
         bool removeManagedTags = false,
-        bool removeManagedCollectionMemberships = false)
+        bool removeManagedCollectionMemberships = false,
+        bool forceRefresh = false,
+        IProgress<double>? progress = null)
     {
         for (var index = 0; index < seriesItems.Count; index++)
         {
@@ -2379,11 +2472,16 @@ public sealed class ThemeDownloader : IScheduledTask
                     seriesItems[index],
                     cancellationToken,
                     removeManagedTags,
-                    removeManagedCollectionMemberships).ConfigureAwait(false);
+                    removeManagedCollectionMemberships,
+                    forceRefresh).ConfigureAwait(false);
                 if (string.Equals(_seasonMetadataSyncStatus.State, "Running", StringComparison.Ordinal))
                 {
                     _seasonMetadataSyncStatus = _seasonMetadataSyncStatus with { Succeeded = _seasonMetadataSyncStatus.Succeeded + 1 };
                 }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -2395,6 +2493,8 @@ public sealed class ThemeDownloader : IScheduledTask
             {
                 _seasonMetadataSyncStatus = _seasonMetadataSyncStatus with { Processed = index + 1 };
             }
+
+            progress?.Report(seriesItems.Count == 0 ? 100 : (index + 1) * 100d / seriesItems.Count);
         }
 
         await FinalizeSeasonCollectionsAsync(removeManagedCollectionMemberships, cancellationToken).ConfigureAwait(false);
@@ -2881,7 +2981,8 @@ public sealed class ThemeDownloader : IScheduledTask
         Series series,
         CancellationToken cancellationToken,
         bool removeManagedTags = false,
-        bool removeManagedCollectionMemberships = false)
+        bool removeManagedCollectionMemberships = false,
+        bool forceRefresh = false)
     {
         await SeasonMetadataSyncGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -2890,6 +2991,7 @@ public sealed class ThemeDownloader : IScheduledTask
                 series,
                 removeManagedTags,
                 removeManagedCollectionMemberships,
+                forceRefresh,
                 cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -2902,6 +3004,7 @@ public sealed class ThemeDownloader : IScheduledTask
         Series series,
         bool removeManagedTags,
         bool removeManagedCollectionMemberships,
+        bool forceRefresh,
         CancellationToken cancellationToken)
     {
         var config = Plugin.Instance?.Configuration
@@ -2915,13 +3018,13 @@ public sealed class ThemeDownloader : IScheduledTask
         var fingerprint = BuildSeasonMetadataFingerprint(series, seasons);
         var persistedSnapshot = _seasonFinderStore.GetSeasonMetadataSnapshot(series.Id.ToString("D"));
         var snapshot = persistedSnapshot
-            ?? CreateSnapshotFromAutomationState(series, seasons, previousAutomation, fingerprint);
+            ?? CreateSnapshotFromAutomationState(series, seasons, previousAutomation, fingerprint, config.SeasonMetadataCacheTtlDays);
         if (snapshot != null && persistedSnapshot == null)
         {
             _seasonFinderStore.SaveSeasonMetadataSnapshot(snapshot);
         }
 
-        if (!IsSeasonMetadataSnapshotFresh(snapshot, fingerprint, seasons))
+        if (forceRefresh || !IsSeasonMetadataSnapshotFresh(snapshot, fingerprint, seasons, config.SeasonMetadataCacheTtlDays))
         {
             var stale = snapshot != null &&
                 string.Equals(snapshot.InputFingerprint, fingerprint, StringComparison.Ordinal) &&
@@ -2992,7 +3095,7 @@ public sealed class ThemeDownloader : IScheduledTask
                     SeriesName = series.Name,
                     InputFingerprint = BuildSeasonMetadataFingerprint(series, seasons),
                     ResolvedAtUtc = now.ToString("O", CultureInfo.InvariantCulture),
-                    ExpiresAtUtc = now.Add(SeasonMetadataCacheTtl).ToString("O", CultureInfo.InvariantCulture),
+                    ExpiresAtUtc = now.AddDays(config.SeasonMetadataCacheTtlDays).ToString("O", CultureInfo.InvariantCulture),
                     LastError = null,
                     Seasons = rows,
                 };
@@ -3110,18 +3213,20 @@ public sealed class ThemeDownloader : IScheduledTask
         }
     }
 
-    private static bool IsSeasonMetadataSnapshotFresh(SeasonMetadataSnapshot? snapshot, string fingerprint, IReadOnlyList<Season> seasons)
+    private static bool IsSeasonMetadataSnapshotFresh(SeasonMetadataSnapshot? snapshot, string fingerprint, IReadOnlyList<Season> seasons, int ttlDays)
     {
         return snapshot != null &&
             string.Equals(snapshot.InputFingerprint, fingerprint, StringComparison.Ordinal) &&
             IsSeasonMetadataSnapshotComplete(snapshot, seasons) &&
             DateTimeOffset.TryParse(
-                snapshot.ExpiresAtUtc,
+                snapshot.ResolvedAtUtc,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal,
-                out var expires) &&
-            expires > DateTimeOffset.UtcNow;
+                out var resolved) &&
+            resolved.AddDays(Math.Clamp(ttlDays, 1, 365)) > DateTimeOffset.UtcNow;
     }
+
+    private static int GetSeasonMetadataCacheTtlDays() => Math.Clamp(Plugin.Instance?.Configuration?.SeasonMetadataCacheTtlDays ?? 30, 1, 365);
 
     private static bool IsSeasonMetadataSnapshotComplete(SeasonMetadataSnapshot snapshot, IReadOnlyList<Season> seasons)
     {
@@ -3161,7 +3266,8 @@ public sealed class ThemeDownloader : IScheduledTask
         Series series,
         List<Season> seasons,
         SeasonAutomationState automation,
-        string fingerprint)
+        string fingerprint,
+        int ttlDays)
     {
         if (seasons.Count == 0 || automation.Rules.Count != seasons.Count ||
             seasons.Any(season => automation.Rules.All(rule => !string.Equals(rule.SeasonItemId, season.Id.ToString("D"), StringComparison.OrdinalIgnoreCase))))
@@ -3176,7 +3282,7 @@ public sealed class ThemeDownloader : IScheduledTask
             SeriesName = series.Name,
             InputFingerprint = fingerprint,
             ResolvedAtUtc = now.ToString("O", CultureInfo.InvariantCulture),
-            ExpiresAtUtc = now.Add(SeasonMetadataCacheTtl).ToString("O", CultureInfo.InvariantCulture),
+            ExpiresAtUtc = now.AddDays(Math.Clamp(ttlDays, 1, 365)).ToString("O", CultureInfo.InvariantCulture),
             Seasons = automation.Rules.Select(rule => new SeasonMetadataRow
             {
                 SeasonItemId = rule.SeasonItemId,

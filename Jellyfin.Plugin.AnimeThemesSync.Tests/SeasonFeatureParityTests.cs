@@ -181,6 +181,56 @@ public sealed class SeasonFeatureParityTests
         Assert.Contains("?? _libraryManager.RootFolder", downloader, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CacheManagementAndSeasonRefreshTask_HaveHostParity()
+    {
+        var root = FindRepositoryRoot();
+        var jellyfinPage = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+        var embyPage = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+        var embyScript = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js"));
+        var jellyfinConfig = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "PluginConfiguration.cs"));
+        var embyConfig = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "PluginConfiguration.cs"));
+        var jellyfinTask = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "ScheduledTasks", "SeasonMetadataRefreshTask.cs"));
+        var embyTask = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "ScheduledTasks", "SeasonMetadataRefreshTask.cs"));
+
+        foreach (var marker in new[]
+                 {
+                     "AtsSeasonMetadataCacheTtlDays",
+                     "AtsProviderResponseCacheTtlDays",
+                     "AtsSeasonCacheRefresh",
+                     "AtsSeasonCacheRebuild",
+                     "AtsProviderCacheClear",
+                 })
+        {
+            Assert.Contains(marker, jellyfinPage, StringComparison.Ordinal);
+            Assert.Contains(marker, embyPage, StringComparison.Ordinal);
+        }
+
+        foreach (var marker in new[]
+                 {
+                     "ForceRefresh",
+                     "SeasonMetadata/Cancel",
+                     "ProviderCache/Clear",
+                 })
+        {
+            Assert.Contains(marker, jellyfinPage, StringComparison.Ordinal);
+            Assert.Contains(marker, embyScript, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("CurrentConfigurationVersion = 9", jellyfinConfig, StringComparison.Ordinal);
+        Assert.Contains("CurrentConfigurationVersion = 9", embyConfig, StringComparison.Ordinal);
+        Assert.Contains("Math.Clamp(value, 1, 365)", jellyfinConfig, StringComparison.Ordinal);
+        Assert.Contains("Math.Clamp(value, 1, 365)", embyConfig, StringComparison.Ordinal);
+
+        foreach (var task in new[] { jellyfinTask, embyTask })
+        {
+            Assert.Contains("AnimeThemesSyncSeasonMetadataRefresh", task, StringComparison.Ordinal);
+            Assert.Contains("TimeSpan.FromDays(7)", task, StringComparison.Ordinal);
+            Assert.Contains("ExecuteSeasonMetadataMaintenanceAsync", task, StringComparison.Ordinal);
+            Assert.DoesNotContain("DownloadTheme", task, StringComparison.Ordinal);
+        }
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

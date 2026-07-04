@@ -59,7 +59,15 @@ public sealed class AnimeThemesSyncController : ControllerBase
     {
         return Ok(_themeDownloader.StartSeasonMetadataSync(
             request?.RemoveManagedTags == true,
-            request?.RemoveManagedCollectionMemberships == true));
+            request?.RemoveManagedCollectionMemberships == true,
+            request?.ForceRefresh == true));
+    }
+
+    [HttpPost("SeasonMetadata/Cancel")]
+    [ProducesResponseType(typeof(SeasonMetadataSyncStatus), StatusCodes.Status200OK)]
+    public ActionResult<SeasonMetadataSyncStatus> CancelSeasonMetadataSync()
+    {
+        return Ok(_themeDownloader.CancelSeasonMetadataSync());
     }
 
     [HttpGet("SeasonMetadata/Sync")]
@@ -88,6 +96,13 @@ public sealed class AnimeThemesSyncController : ControllerBase
     public ActionResult<AnimeThemesMaintenanceResult> ClearBrowserCache()
     {
         return Ok(_themeDownloader.ClearBrowserCache());
+    }
+
+    [HttpPost("ProviderCache/Clear")]
+    [ProducesResponseType(typeof(AnimeThemesMaintenanceResult), StatusCodes.Status200OK)]
+    public ActionResult<AnimeThemesMaintenanceResult> ClearProviderCache()
+    {
+        return Ok(_themeDownloader.ClearProviderCache());
     }
 
     [HttpPost("Extras/ImportLegacyManifests")]

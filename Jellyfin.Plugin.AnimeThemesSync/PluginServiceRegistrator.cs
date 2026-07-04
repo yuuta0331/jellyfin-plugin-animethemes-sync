@@ -50,6 +50,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
             return store;
         });
         serviceCollection.AddSingleton<ThemeDownloader>();
+        serviceCollection.AddSingleton<SeasonMetadataRefreshTask>();
         serviceCollection.AddHostedService<BrowserCacheWarmupService>();
         serviceCollection.AddHttpClient(Constants.AniListHttpClientName, client =>
         {
@@ -74,7 +75,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
                 httpClientFactory,
                 loggerFactory.CreateLogger<AniListService>(),
                 rateLimiter,
-                provider.GetRequiredService<ISeasonFinderDataStore>());
+                provider.GetRequiredService<ISeasonFinderDataStore>(),
+                () => Plugin.Instance?.Configuration?.ProviderResponseCacheTtlDays ?? 30);
         });
 
         // Register AnimeThemesService as Singleton
@@ -87,7 +89,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
                 httpClientFactory,
                 loggerFactory.CreateLogger<AnimeThemesService>(),
                 rateLimiter,
-                provider.GetRequiredService<ISeasonFinderDataStore>());
+                provider.GetRequiredService<ISeasonFinderDataStore>(),
+                () => Plugin.Instance?.Configuration?.ProviderResponseCacheTtlDays ?? 30);
         });
     }
 }

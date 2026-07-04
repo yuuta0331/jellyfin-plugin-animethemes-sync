@@ -42,8 +42,9 @@ public sealed class AniListService
     private readonly ILogger<AniListService> _logger;
     private readonly RateLimiter _rateLimiter;
     private readonly ISeasonFinderDataStore? _persistentCache;
-    private static readonly TimeSpan ApiFetchCacheTtl = TimeSpan.FromDays(30);
     private const int MaxRateLimitRetries = 2;
+    private const int StaleRetentionDays = 180;
+    private readonly Func<int>? _providerCacheTtlDays;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AniListService"/> class.
@@ -52,16 +53,19 @@ public sealed class AniListService
     /// <param name="logger">The logger.</param>
     /// <param name="rateLimiter">The rate limiter.</param>
     /// <param name="persistentCache">Optional persistent provider response cache.</param>
+    /// <param name="providerCacheTtlDays">Optional live provider cache TTL accessor.</param>
     public AniListService(
         IHttpClientFactory httpClientFactory,
         ILogger<AniListService> logger,
         RateLimiter rateLimiter,
-        ISeasonFinderDataStore? persistentCache = null)
+        ISeasonFinderDataStore? persistentCache = null,
+        Func<int>? providerCacheTtlDays = null)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _rateLimiter = rateLimiter;
         _persistentCache = persistentCache;
+        _providerCacheTtlDays = providerCacheTtlDays;
     }
 
     /// <summary>
@@ -386,11 +390,17 @@ public sealed class AniListService
     {
         var entry = _persistentCache?.GetApiFetchCache("anilist:relations:" + id.ToString(CultureInfo.InvariantCulture));
         if (entry == null ||
-            (requireFresh && (!DateTimeOffset.TryParse(
-                entry.ExpiresAtUtc,
+            !DateTimeOffset.TryParse(
+                entry.CreatedAtUtc,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal,
-                out var expires) || expires <= DateTimeOffset.UtcNow)))
+                out var created))
+        {
+            return null;
+        }
+
+        var ageLimitDays = GetProviderCacheTtlDays() + (requireFresh ? 0 : StaleRetentionDays);
+        if (created.AddDays(ageLimitDays) <= DateTimeOffset.UtcNow)
         {
             return null;
         }
@@ -414,15 +424,20 @@ public sealed class AniListService
         }
 
         var now = DateTimeOffset.UtcNow;
-        _persistentCache.UpsertApiFetchCache(new ApiFetchCacheEntry
-        {
-            CacheKey = "anilist:relations:" + id.ToString(CultureInfo.InvariantCulture),
-            Provider = "AniList",
-            PayloadJson = JsonSerializer.Serialize(media, _jsonOptions),
-            CreatedAtUtc = now.ToString("O", CultureInfo.InvariantCulture),
-            ExpiresAtUtc = now.Add(ApiFetchCacheTtl).ToString("O", CultureInfo.InvariantCulture),
-        });
+        var ttlDays = GetProviderCacheTtlDays();
+        _persistentCache.UpsertApiFetchCache(
+            new ApiFetchCacheEntry
+            {
+                CacheKey = "anilist:relations:" + id.ToString(CultureInfo.InvariantCulture),
+                Provider = "AniList",
+                PayloadJson = JsonSerializer.Serialize(media, _jsonOptions),
+                CreatedAtUtc = now.ToString("O", CultureInfo.InvariantCulture),
+                ExpiresAtUtc = now.AddDays(ttlDays).ToString("O", CultureInfo.InvariantCulture),
+            },
+            ttlDays);
     }
+
+    private int GetProviderCacheTtlDays() => Math.Clamp(_providerCacheTtlDays?.Invoke() ?? 30, 1, 365);
 
     private static List<AniListRelatedAnime> SortRelatedAnime(IEnumerable<AniListRelatedAnime> rows)
     {

@@ -23,7 +23,6 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
     private const int SearchCacheLimit = 200;
     private const int ApiFetchCacheLimit = 2000;
     private static readonly TimeSpan ApiFetchCacheRetention = TimeSpan.FromDays(180);
-    private static readonly TimeSpan SearchCacheTtl = TimeSpan.FromDays(7);
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
     private readonly IAnimeThemesDataPathProvider _pathProvider;
     private readonly IAnimeThemesServerIdentityProvider _serverIdentity;
@@ -787,7 +786,7 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
         }
     }
 
-    public void UpsertApiFetchCache(ApiFetchCacheEntry entry)
+    public void UpsertApiFetchCache(ApiFetchCacheEntry entry, int ttlDays = 30)
     {
         lock (_syncRoot)
         {
@@ -803,8 +802,9 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
                         ExpiresAtUtc = excluded.ExpiresAtUtc;
                     """, ("$serverKind", ServerKind), ("$key", entry.CacheKey), ("$provider", entry.Provider),
                     ("$json", entry.PayloadJson), ("$created", entry.CreatedAtUtc), ("$expires", entry.ExpiresAtUtc));
+                ttlDays = Math.Clamp(ttlDays, 1, 365);
                 Execute(connection, "DELETE FROM ApiFetchCache WHERE ServerKind = $serverKind AND CreatedAtUtc < $retention;",
-                    ("$serverKind", ServerKind), ("$retention", FormatDate(DateTimeOffset.UtcNow.Subtract(ApiFetchCacheRetention))));
+                    ("$serverKind", ServerKind), ("$retention", FormatDate(DateTimeOffset.UtcNow.AddDays(-ttlDays).Subtract(ApiFetchCacheRetention))));
                 Execute(connection, """
                     DELETE FROM ApiFetchCache WHERE ServerKind = $serverKind AND CacheKey IN (
                         SELECT CacheKey FROM ApiFetchCache WHERE ServerKind = $serverKind
@@ -960,6 +960,108 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
         }
     }
 
+    public CacheMaintenanceStatus GetCacheMaintenanceStatus(int seasonMetadataTtlDays, int providerResponseTtlDays)
+    {
+        lock (_syncRoot)
+        {
+            EnsureInitialized();
+            seasonMetadataTtlDays = Math.Clamp(seasonMetadataTtlDays, 1, 365);
+            providerResponseTtlDays = Math.Clamp(providerResponseTtlDays, 1, 365);
+            var now = DateTimeOffset.UtcNow;
+            var seasonCutoff = now.AddDays(-seasonMetadataTtlDays);
+            var providerCutoff = now.AddDays(-providerResponseTtlDays);
+            using var connection = OpenConnection();
+            var retentionCutoff = FormatDate(providerCutoff.Subtract(ApiFetchCacheRetention));
+            Execute(connection, "DELETE FROM ApiFetchCache WHERE ServerKind = $serverKind AND CreatedAtUtc < $retention;", ("$serverKind", ServerKind), ("$retention", retentionCutoff));
+            Execute(connection, "DELETE FROM AnimeSearchCache WHERE ServerKind = $serverKind AND CreatedAtUtc < $retention;", ("$serverKind", ServerKind), ("$retention", retentionCutoff));
+            var seasonResolved = new List<DateTimeOffset>();
+            var seasonErrors = 0;
+            string? lastSeasonError = null;
+            DateTimeOffset? lastSeasonErrorAt = null;
+            using (var statement = Prepare(connection, "SELECT ResolvedAtUtc, LastError FROM SeasonMetadataSnapshots WHERE ServerKind = $serverKind;", ("$serverKind", ServerKind)))
+            {
+                while (statement.MoveNext())
+                {
+                    var row = statement.Current;
+                    if (DateTimeOffset.TryParse(row.GetString(0), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var resolved))
+                    {
+                        seasonResolved.Add(resolved);
+                    }
+
+                    if (!row.IsDBNull(1) && !string.IsNullOrWhiteSpace(row.GetString(1)))
+                    {
+                        seasonErrors++;
+                        if (DateTimeOffset.TryParse(row.GetString(0), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var errorAt) &&
+                            (!lastSeasonErrorAt.HasValue || errorAt > lastSeasonErrorAt.Value))
+                        {
+                            lastSeasonErrorAt = errorAt;
+                            lastSeasonError = row.GetString(1);
+                        }
+                    }
+                }
+            }
+
+            var providerCreated = new List<DateTimeOffset>();
+            var animeThemesEntries = 0;
+            var aniListEntries = 0;
+            using (var statement = Prepare(connection, "SELECT Provider, CreatedAtUtc FROM ApiFetchCache WHERE ServerKind = $serverKind;", ("$serverKind", ServerKind)))
+            {
+                while (statement.MoveNext())
+                {
+                    var row = statement.Current;
+                    if (string.Equals(row.GetString(0), "AniList", StringComparison.OrdinalIgnoreCase))
+                    {
+                        aniListEntries++;
+                    }
+                    else
+                    {
+                        animeThemesEntries++;
+                    }
+
+                    if (DateTimeOffset.TryParse(row.GetString(1), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var created))
+                    {
+                        providerCreated.Add(created);
+                    }
+                }
+            }
+
+            using (var statement = Prepare(connection, "SELECT CreatedAtUtc FROM AnimeSearchCache WHERE ServerKind = $serverKind;", ("$serverKind", ServerKind)))
+            {
+                while (statement.MoveNext())
+                {
+                    if (DateTimeOffset.TryParse(statement.Current.GetString(0), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var created))
+                    {
+                        providerCreated.Add(created);
+                    }
+                }
+            }
+
+            var freshSeason = seasonResolved.Count(i => i > seasonCutoff);
+            var freshProvider = providerCreated.Count(i => i > providerCutoff);
+            var searchEntries = providerCreated.Count - animeThemesEntries - aniListEntries;
+            return new CacheMaintenanceStatus(
+                seasonResolved.Count,
+                ScalarInt(connection, "SELECT COUNT(*) FROM SeasonMetadataRows WHERE ServerKind = $serverKind;", ("$serverKind", ServerKind)),
+                freshSeason,
+                seasonResolved.Count - freshSeason,
+                seasonErrors,
+                providerCreated.Count,
+                freshProvider,
+                providerCreated.Count - freshProvider,
+                animeThemesEntries,
+                aniListEntries,
+                searchEntries,
+                seasonMetadataTtlDays,
+                providerResponseTtlDays,
+                ApiFetchCacheLimit,
+                (int)ApiFetchCacheRetention.TotalDays,
+                seasonResolved.Count > 0 ? FormatDate(seasonResolved.Max()) : null,
+                NextExpiry(seasonResolved, seasonCutoff, seasonMetadataTtlDays),
+                NextExpiry(providerCreated, providerCutoff, providerResponseTtlDays),
+                lastSeasonError);
+        }
+    }
+
     public void SetRebuildError(string? error)
     {
         lock (_syncRoot)
@@ -984,14 +1086,27 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
             InTransaction(connection, () =>
             {
                 Execute(connection, "DELETE FROM SeasonFinderRows WHERE ServerKind = $serverKind;", ("$serverKind", ServerKind));
-                Execute(connection, "DELETE FROM AnimeSearchCache WHERE ServerKind = $serverKind;", ("$serverKind", ServerKind));
                 Execute(connection, "UPDATE SeasonFinderCacheState SET Ready = 0, CacheVersion = '', LastFullScanUtc = NULL, LastError = NULL, UpdatedAtUtc = $now WHERE ServerKind = $serverKind;",
                     ("$serverKind", ServerKind), ("$now", FormatDate(DateTimeOffset.UtcNow)));
             });
         }
     }
 
-    public bool TryGetSearch(string query, int? year, out string json)
+    public void ClearProviderCache()
+    {
+        lock (_syncRoot)
+        {
+            EnsureInitialized();
+            using var connection = OpenConnection();
+            InTransaction(connection, () =>
+            {
+                Execute(connection, "DELETE FROM AnimeSearchCache WHERE ServerKind = $serverKind;", ("$serverKind", ServerKind));
+                Execute(connection, "DELETE FROM ApiFetchCache WHERE ServerKind = $serverKind;", ("$serverKind", ServerKind));
+            });
+        }
+    }
+
+    public bool TryGetSearch(string query, int? year, out string json, int ttlDays = 30)
     {
         lock (_syncRoot)
         {
@@ -999,23 +1114,22 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
             using var connection = OpenConnection();
             var key = BuildQueryKey(query, year);
             using var statement = Prepare(connection,
-                "SELECT ResultJson, ExpiresAtUtc FROM AnimeSearchCache WHERE ServerKind = $serverKind AND QueryKey = $key;",
+                "SELECT ResultJson, CreatedAtUtc FROM AnimeSearchCache WHERE ServerKind = $serverKind AND QueryKey = $key;",
                 ("$serverKind", ServerKind), ("$key", key));
+            ttlDays = Math.Clamp(ttlDays, 1, 365);
             if (statement.MoveNext() && DateTimeOffset.TryParse(statement.Current.GetString(1), CultureInfo.InvariantCulture,
-                    DateTimeStyles.AssumeUniversal, out var expires) && expires > DateTimeOffset.UtcNow)
+                    DateTimeStyles.AssumeUniversal, out var created) && created.AddDays(ttlDays) > DateTimeOffset.UtcNow)
             {
                 json = statement.Current.GetString(0);
                 return true;
             }
 
-            Execute(connection, "DELETE FROM AnimeSearchCache WHERE ServerKind = $serverKind AND QueryKey = $key;",
-                ("$serverKind", ServerKind), ("$key", key));
             json = string.Empty;
             return false;
         }
     }
 
-    public void SetSearch(string query, int? year, string json)
+    public void SetSearch(string query, int? year, string json, int ttlDays = 30)
     {
         lock (_syncRoot)
         {
@@ -1024,9 +1138,10 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
             InTransaction(connection, () =>
             {
                 var now = DateTimeOffset.UtcNow;
-                UpsertSearch(connection, BuildQueryKey(query, year), query.Trim(), year, json, FormatDate(now), FormatDate(now.Add(SearchCacheTtl)));
-                Execute(connection, "DELETE FROM AnimeSearchCache WHERE ServerKind = $serverKind AND ExpiresAtUtc <= $now;",
-                    ("$serverKind", ServerKind), ("$now", FormatDate(now)));
+                ttlDays = Math.Clamp(ttlDays, 1, 365);
+                UpsertSearch(connection, BuildQueryKey(query, year), query.Trim(), year, json, FormatDate(now), FormatDate(now.AddDays(ttlDays)));
+                Execute(connection, "DELETE FROM AnimeSearchCache WHERE ServerKind = $serverKind AND CreatedAtUtc < $retention;",
+                    ("$serverKind", ServerKind), ("$retention", FormatDate(now.AddDays(-ttlDays).Subtract(ApiFetchCacheRetention))));
                 Execute(connection, """
                     DELETE FROM AnimeSearchCache WHERE ServerKind = $serverKind AND QueryKey IN (
                         SELECT QueryKey FROM AnimeSearchCache WHERE ServerKind = $serverKind
@@ -1051,6 +1166,12 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
         }
         connection.Execute("PRAGMA foreign_keys=ON;");
         return connection;
+    }
+
+    private static string? NextExpiry(IReadOnlyList<DateTimeOffset> timestamps, DateTimeOffset cutoff, int ttlDays)
+    {
+        var next = timestamps.Where(i => i > cutoff).Select(i => i.AddDays(ttlDays)).OrderBy(i => i).FirstOrDefault();
+        return next == default ? null : FormatDate(next);
     }
 
     private void MigrateDocumentStore(IDatabaseConnection connection)

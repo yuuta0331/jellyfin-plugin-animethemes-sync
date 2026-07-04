@@ -86,7 +86,32 @@ public sealed record AnimeThemesStorageStatus(
     bool CacheReady,
     string? LastFullScanUtc,
     string? LastError,
-    SeasonFinderStorageStatus? SeasonFinder = null);
+    SeasonFinderStorageStatus? SeasonFinder = null,
+    CacheMaintenanceStatus? CacheMaintenance = null);
+
+/// <summary>
+/// Detailed persistent cache health shown by the Manager page.
+/// </summary>
+public sealed record CacheMaintenanceStatus(
+    int SeasonSeriesCount,
+    int SeasonRowCount,
+    int FreshSeasonSeriesCount,
+    int ExpiredSeasonSeriesCount,
+    int ErrorSeasonSeriesCount,
+    int ProviderEntryCount,
+    int FreshProviderEntryCount,
+    int StaleProviderEntryCount,
+    int AnimeThemesEntryCount,
+    int AniListEntryCount,
+    int SearchEntryCount,
+    int SeasonMetadataTtlDays,
+    int ProviderResponseTtlDays,
+    int ProviderEntryLimit,
+    int StaleRetentionDays,
+    string? LastSeasonResolvedAtUtc,
+    string? NextSeasonExpiryUtc,
+    string? NextProviderExpiryUtc,
+    string? LastSeasonError = null);
 
 /// <summary>
 /// Season Finder SQLite status.
@@ -139,6 +164,8 @@ public sealed class SeasonMetadataSyncRequest
     public bool RemoveManagedTags { get; set; }
 
     public bool RemoveManagedCollectionMemberships { get; set; }
+
+    public bool ForceRefresh { get; set; }
 }
 
 /// <summary>

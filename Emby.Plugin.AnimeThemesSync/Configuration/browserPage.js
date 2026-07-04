@@ -177,6 +177,14 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         var cacheState = page.querySelector('#AnimeThemesCacheState');
         var cachePath = page.querySelector('#AnimeThemesCachePath');
         var cacheLastScan = page.querySelector('#AnimeThemesCacheLastScan');
+        var seasonCacheFresh = page.querySelector('#AtsSeasonCacheFresh');
+        var seasonCacheExpired = page.querySelector('#AtsSeasonCacheExpired');
+        var seasonCacheErrors = page.querySelector('#AtsSeasonCacheErrors');
+        var providerCacheFresh = page.querySelector('#AtsProviderCacheFresh');
+        var providerCacheStale = page.querySelector('#AtsProviderCacheStale');
+        var cachePolicySummary = page.querySelector('#AtsCachePolicySummary');
+        var cacheExpirySummary = page.querySelector('#AtsCacheExpirySummary');
+        var seasonCacheCancelButton = page.querySelector('#AtsSeasonCacheCancel');
         var summaryMatchRate = page.querySelector('#AnimeThemesSummaryMatchRate');
         var cleanupWorkspace = page.querySelector('#AtsCleanupWorkspace');
         var cleanupState = page.querySelector('#AtsCleanupState');
@@ -227,6 +235,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             ThemeDownloadingEnabled: page.querySelector('#AtsThemeDownloadingEnabled'),
             MaxConcurrentDownloads: page.querySelector('#AtsMaxConcurrentDownloads'),
             DownloadTimeoutSeconds: page.querySelector('#AtsDownloadTimeoutSeconds'),
+            SeasonMetadataCacheTtlDays: page.querySelector('#AtsSeasonMetadataCacheTtlDays'),
+            ProviderResponseCacheTtlDays: page.querySelector('#AtsProviderResponseCacheTtlDays'),
             SegmentedDownloadEnabled: page.querySelector('#AtsSegmentedDownloadEnabled'),
             SegmentedDownloadSegments: page.querySelector('#AtsSegmentedDownloadSegments'),
             SegmentedDownloadOptions: page.querySelector('#AtsSegmentedDownloadOptions'),
@@ -1261,6 +1271,18 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             });
         }
 
+        function startSeasonCacheMaintenance(forceRefresh) {
+            if (forceRefresh && !window.confirm('Rebuild season metadata for every enabled Series? Existing provider responses will still be reused. Clear the provider cache first only when a complete provider refresh is intended.')) return;
+            Dashboard.showLoadingMsg();
+            apiPostJson('AnimeThemesSync/SeasonMetadata/Sync', { ForceRefresh: !!forceRefresh }).then(function () {
+                Dashboard.hideLoadingMsg();
+                pollSeasonMetadataSync();
+            }).catch(function (err) {
+                Dashboard.hideLoadingMsg();
+                Dashboard.alert({ title: 'Season Metadata', message: getErrorMessage(err) });
+            });
+        }
+
         function scheduleBrowserRefresh() {
             if (state.browserRefreshTimer) {
                 clearTimeout(state.browserRefreshTimer);
@@ -1826,13 +1848,21 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             var ready = !!value(storage, 'CacheReady', 'cacheReady');
             var rebuilding = !!value(storage, 'RebuildRunning', 'rebuildRunning');
             var finderStorage = value(storage, 'SeasonFinder', 'seasonFinder');
-            if (cacheBytes) cacheBytes.textContent = formatBytes(value(storage, 'DatabaseBytes', 'databaseBytes'));
+            var maintenance = value(storage, 'CacheMaintenance', 'cacheMaintenance') || {};
+            if (cacheBytes) cacheBytes.textContent = formatBytes((Number(value(storage, 'DatabaseBytes', 'databaseBytes')) || 0) + (Number(value(finderStorage, 'DatabaseBytes', 'databaseBytes')) || 0));
             if (cacheItems) cacheItems.textContent = text(value(storage, 'BrowserItemCount', 'browserItemCount')) + ' browser / ' + text(value(finderStorage, 'ItemCount', 'itemCount')) + ' seasons';
             if (cacheState) cacheState.textContent = rebuilding ? 'Updating' : (ready ? 'Ready' : 'Starting');
             if (cacheLastScan) cacheLastScan.textContent = text(value(storage, 'LastFullScanUtc', 'lastFullScanUtc'));
+            if (seasonCacheFresh) seasonCacheFresh.textContent = text(value(maintenance, 'FreshSeasonSeriesCount', 'freshSeasonSeriesCount'));
+            if (seasonCacheExpired) seasonCacheExpired.textContent = text(value(maintenance, 'ExpiredSeasonSeriesCount', 'expiredSeasonSeriesCount'));
+            if (seasonCacheErrors) seasonCacheErrors.textContent = text(value(maintenance, 'ErrorSeasonSeriesCount', 'errorSeasonSeriesCount'));
+            if (providerCacheFresh) providerCacheFresh.textContent = text(value(maintenance, 'FreshProviderEntryCount', 'freshProviderEntryCount'));
+            if (providerCacheStale) providerCacheStale.textContent = text(value(maintenance, 'StaleProviderEntryCount', 'staleProviderEntryCount'));
+            if (cachePolicySummary) cachePolicySummary.textContent = 'Season ' + text(value(maintenance, 'SeasonSeriesCount', 'seasonSeriesCount')) + ' series / ' + text(value(maintenance, 'SeasonRowCount', 'seasonRowCount')) + ' rows · Provider ' + text(value(maintenance, 'ProviderEntryCount', 'providerEntryCount')) + ' entries (' + text(value(maintenance, 'AnimeThemesEntryCount', 'animeThemesEntryCount')) + ' AnimeThemes / ' + text(value(maintenance, 'AniListEntryCount', 'aniListEntryCount')) + ' AniList / ' + text(value(maintenance, 'SearchEntryCount', 'searchEntryCount')) + ' search) · TTL ' + text(value(maintenance, 'SeasonMetadataTtlDays', 'seasonMetadataTtlDays')) + '/' + text(value(maintenance, 'ProviderResponseTtlDays', 'providerResponseTtlDays')) + ' days';
+            if (cacheExpirySummary) cacheExpirySummary.textContent = 'Last season resolve: ' + text(value(maintenance, 'LastSeasonResolvedAtUtc', 'lastSeasonResolvedAtUtc')) + ' · Next season expiry: ' + text(value(maintenance, 'NextSeasonExpiryUtc', 'nextSeasonExpiryUtc')) + ' · Next provider expiry: ' + text(value(maintenance, 'NextProviderExpiryUtc', 'nextProviderExpiryUtc'));
             if (cachePath) {
                 var path = value(storage, 'DatabasePath', 'databasePath');
-                var lastError = value(storage, 'LastError', 'lastError');
+                var lastError = value(maintenance, 'LastSeasonError', 'lastSeasonError') || value(storage, 'LastError', 'lastError');
                 var finderPath = value(finderStorage, 'DatabasePath', 'databasePath');
                 cachePath.textContent = lastError ? ('Last error: ' + lastError) : 'Browser and Season Finder data are available.';
                 cachePath.title = [path, finderPath].filter(Boolean).join(' | ');
@@ -2910,7 +2940,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function ensureSettingsConfig(config) {
             config = config || {};
-            config.ConfigurationVersion = 8;
+            config.ConfigurationVersion = 9;
             config.Series = ensureMediaConfig(getConfigValue(config, 'Series', null));
             config.Movie = ensureMediaConfig(getConfigValue(config, 'Movie', null));
             if (!Array.isArray(getConfigValue(config, 'SeasonThemeMappings', []))) {
@@ -2949,10 +2979,12 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function defaultSettingsConfig(existingConfig) {
             return ensureSettingsConfig({
-                ConfigurationVersion: 8,
+                ConfigurationVersion: 9,
                 ThemeDownloadingEnabled: true,
                 MaxConcurrentDownloads: 1,
                 DownloadTimeoutSeconds: 600,
+                SeasonMetadataCacheTtlDays: 30,
+                ProviderResponseCacheTtlDays: 30,
                 SegmentedDownloadEnabled: true,
                 SegmentedDownloadSegments: 4,
                 AllowAdd: true,
@@ -3028,10 +3060,12 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         function canonicalizeSettings(config) {
             config = ensureSettingsConfig(cloneSettings(config || {}));
             return {
-                ConfigurationVersion: 8,
+                ConfigurationVersion: 9,
                 ThemeDownloadingEnabled: !!getConfigValue(config, 'ThemeDownloadingEnabled', true),
                 MaxConcurrentDownloads: Math.max(1, parseInt(getConfigValue(config, 'MaxConcurrentDownloads', 1), 10) || 1),
                 DownloadTimeoutSeconds: Math.max(1, parseInt(getConfigValue(config, 'DownloadTimeoutSeconds', 600), 10) || 600),
+                SeasonMetadataCacheTtlDays: Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'SeasonMetadataCacheTtlDays', 30), 10) || 30)),
+                ProviderResponseCacheTtlDays: Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'ProviderResponseCacheTtlDays', 30), 10) || 30)),
                 SegmentedDownloadEnabled: !!getConfigValue(config, 'SegmentedDownloadEnabled', true),
                 SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 4), 10) || 4)),
                 AllowAdd: !!getConfigValue(config, 'AllowAdd', true),
@@ -3386,6 +3420,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             settingsFields.ThemeDownloadingEnabled.checked = !!getConfigValue(config, 'ThemeDownloadingEnabled', true);
             settingsFields.MaxConcurrentDownloads.value = getConfigValue(config, 'MaxConcurrentDownloads', 1);
             settingsFields.DownloadTimeoutSeconds.value = getConfigValue(config, 'DownloadTimeoutSeconds', 600);
+            settingsFields.SeasonMetadataCacheTtlDays.value = Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'SeasonMetadataCacheTtlDays', 30), 10) || 30));
+            settingsFields.ProviderResponseCacheTtlDays.value = Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'ProviderResponseCacheTtlDays', 30), 10) || 30));
             settingsFields.SegmentedDownloadEnabled.checked = !!getConfigValue(config, 'SegmentedDownloadEnabled', true);
             settingsFields.SegmentedDownloadSegments.value = Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 4), 10) || 4));
             settingsFields.AllowAdd.checked = !!getConfigValue(config, 'AllowAdd', true);
@@ -3440,10 +3476,12 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function readSettingsForm() {
             return {
-                ConfigurationVersion: 8,
+                ConfigurationVersion: 9,
                 ThemeDownloadingEnabled: settingsFields.ThemeDownloadingEnabled.checked,
                 MaxConcurrentDownloads: parseInt(settingsFields.MaxConcurrentDownloads.value, 10) || 1,
                 DownloadTimeoutSeconds: parseInt(settingsFields.DownloadTimeoutSeconds.value, 10) || 600,
+                SeasonMetadataCacheTtlDays: Math.max(1, Math.min(365, parseInt(settingsFields.SeasonMetadataCacheTtlDays.value, 10) || 30)),
+                ProviderResponseCacheTtlDays: Math.max(1, Math.min(365, parseInt(settingsFields.ProviderResponseCacheTtlDays.value, 10) || 30)),
                 SegmentedDownloadEnabled: settingsFields.SegmentedDownloadEnabled.checked,
                 SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(settingsFields.SegmentedDownloadSegments.value, 10) || 4)),
                 AllowAdd: settingsFields.AllowAdd.checked,
@@ -3681,20 +3719,30 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 var syncState = String(value(status, 'State', 'state') || 'Idle');
                 var processed = Number(value(status, 'Processed', 'processed') || 0);
                 var total = Number(value(status, 'Total', 'total') || 0);
-                if (syncState === 'Running') {
-                    setSettingsState('Settings saved. Synchronizing season metadata ' + processed + '/' + total + '...');
+                var succeeded = Number(value(status, 'Succeeded', 'succeeded') || 0);
+                var failed = Number(value(status, 'Failed', 'failed') || 0);
+            if (syncState === 'Running' || syncState === 'Cancelling') {
+                if (seasonCacheCancelButton) seasonCacheCancelButton.hidden = false;
+                setSettingsState((syncState === 'Cancelling' ? 'Cancelling season metadata sync ' : 'Synchronizing season metadata ') + processed + '/' + total + ' · ' + succeeded + ' succeeded / ' + failed + ' failed...');
                     window.setTimeout(pollSeasonMetadataSync, 1000);
-                } else if (syncState === 'Failed') {
+            } else if (syncState === 'Cancelled') {
+                if (seasonCacheCancelButton) seasonCacheCancelButton.hidden = true;
+                setSettingsState('Season metadata synchronization cancelled.');
+                loadItems(false, { silent: true, preserveCount: true });
+            } else if (syncState === 'Failed') {
+                if (seasonCacheCancelButton) seasonCacheCancelButton.hidden = true;
                     setSettingsState('Season metadata sync failed: ' + (value(status, 'Error', 'error') || 'Unknown error'));
-                } else if (syncState === 'CompletedWithErrors') {
-                    setSettingsState('Season metadata synchronized with warnings: ' + (value(status, 'Error', 'error') || 'See the server log for details.'));
+            } else if (syncState === 'CompletedWithErrors') {
+                if (seasonCacheCancelButton) seasonCacheCancelButton.hidden = true;
+                    setSettingsState('Season metadata synchronized with warnings: ' + succeeded + ' succeeded / ' + failed + ' failed. ' + (value(status, 'Error', 'error') || 'See the server log for details.'));
                     loadItems(false, { silent: true, preserveCount: true });
-                } else if (syncState === 'Completed') {
-                    setSettingsState('Settings saved. Season metadata synchronized.');
+            } else if (syncState === 'Completed') {
+                if (seasonCacheCancelButton) seasonCacheCancelButton.hidden = true;
+                setSettingsState('Season metadata synchronized: ' + succeeded + ' succeeded / ' + failed + ' failed.');
                     loadItems(false, { silent: true, preserveCount: true });
                 }
             }).catch(function () {
-                setSettingsState('Settings saved. Season metadata sync status unavailable.');
+            setSettingsState('Season metadata sync status unavailable.');
             });
         }
 
@@ -4834,6 +4882,26 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         page.querySelector('#AtsCleanupPrev').addEventListener('click', function () { state.cleanupStartIndex = Math.max(0, state.cleanupStartIndex - state.cleanupPageSize); loadCleanupFiles(); });
         page.querySelector('#AtsCleanupNext').addEventListener('click', function () { state.cleanupStartIndex += state.cleanupPageSize; loadCleanupFiles(); });
         var rebuildButton = page.querySelector('#AnimeThemesBrowserRebuildCache');
+        if (rebuildButton && rebuildButton.querySelector('span')) rebuildButton.querySelector('span').textContent = 'Rebuild display cache';
+        var seasonCacheRefreshButton = page.querySelector('#AtsSeasonCacheRefresh');
+        var seasonCacheRebuildButton = page.querySelector('#AtsSeasonCacheRebuild');
+        var providerCacheClearButton = page.querySelector('#AtsProviderCacheClear');
+        if (!seasonCacheCancelButton && seasonCacheRefreshButton) {
+            seasonCacheCancelButton = document.createElement('button');
+            seasonCacheCancelButton.id = 'AtsSeasonCacheCancel';
+            seasonCacheCancelButton.type = 'button';
+            seasonCacheCancelButton.className = 'emby-button ats-button-secondary ats-icon-button-text';
+            seasonCacheCancelButton.textContent = 'Cancel season refresh';
+            seasonCacheCancelButton.hidden = true;
+            seasonCacheRefreshButton.parentNode.insertBefore(seasonCacheCancelButton, seasonCacheRefreshButton.nextSibling);
+        }
+        if (seasonCacheCancelButton) seasonCacheCancelButton.addEventListener('click', function () { apiPost('AnimeThemesSync/SeasonMetadata/Cancel'); });
+        if (seasonCacheRefreshButton) seasonCacheRefreshButton.addEventListener('click', function () { startSeasonCacheMaintenance(false); });
+        if (seasonCacheRebuildButton) seasonCacheRebuildButton.addEventListener('click', function () { startSeasonCacheMaintenance(true); });
+        if (providerCacheClearButton) providerCacheClearButton.addEventListener('click', function () {
+            if (!window.confirm('Clear AnimeThemes search/identity responses and AniList relations? Season metadata and display data will be preserved, and no provider request starts automatically.')) return;
+            postMaintenance('AnimeThemesSync/ProviderCache/Clear', 'Provider Cache');
+        });
         if (rebuildButton) {
             rebuildButton.addEventListener('click', function () {
                 postMaintenance('AnimeThemesSync/BrowserCache/Rebuild', 'Browser Cache');
@@ -4841,6 +4909,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         }
 
         var clearCacheButton = page.querySelector('#AnimeThemesBrowserClearCache');
+        if (clearCacheButton && clearCacheButton.querySelector('span')) clearCacheButton.querySelector('span').textContent = 'Clear display cache';
         if (clearCacheButton) {
             clearCacheButton.addEventListener('click', function () {
                 postMaintenance('AnimeThemesSync/BrowserCache/Clear', 'Browser Cache');

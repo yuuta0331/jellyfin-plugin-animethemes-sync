@@ -14,7 +14,7 @@ namespace Emby.Plugin.AnimeThemesSync.Configuration;
 /// </summary>
 public class PluginConfiguration : BasePluginConfiguration
 {
-    public const int CurrentConfigurationVersion = 8;
+    public const int CurrentConfigurationVersion = 9;
 
     private int _maxConcurrentDownloads = 1;
     private string _tagSeasonSpring = "Spring";
@@ -26,6 +26,8 @@ public class PluginConfiguration : BasePluginConfiguration
     private int _seasonCollectionBackdropOverlayOpacity = 35;
     private string _seasonCollectionBackdropOverlayColor = "#000000";
     private int _seasonCollectionCanvasOpacity = 100;
+    private int _seasonMetadataCacheTtlDays = 30;
+    private int _providerResponseCacheTtlDays = 30;
     private string _seasonCollectionCanvasColor = "#000000";
     private string _extrasFileNameFormat = ThemeFilePlanner.DefaultExtrasFileNameFormat;
     private bool _legacyConfigurationLoaded;
@@ -76,6 +78,8 @@ public class PluginConfiguration : BasePluginConfiguration
         SeasonCollectionCanvasLandscapeType = SeasonCollectionLandscapeArtType.Thumb;
         SeasonCollectionCanvasColor = "#000000";
         SeasonCollectionCanvasOpacity = 100;
+        SeasonMetadataCacheTtlDays = 30;
+        ProviderResponseCacheTtlDays = 30;
         SeasonThemeMappings = [];
         TagLocalization = "None";
         Series = CreateDefaultMediaTypeConfig();
@@ -129,6 +133,18 @@ public class PluginConfiguration : BasePluginConfiguration
     }
 
     public bool SeasonThemeDownloadsEnabled { get; set; }
+
+    public int SeasonMetadataCacheTtlDays
+    {
+        get => _seasonMetadataCacheTtlDays;
+        set => _seasonMetadataCacheTtlDays = Math.Clamp(value, 1, 365);
+    }
+
+    public int ProviderResponseCacheTtlDays
+    {
+        get => _providerResponseCacheTtlDays;
+        set => _providerResponseCacheTtlDays = Math.Clamp(value, 1, 365);
+    }
 
     public bool TagsEnabled { get; set; }
 
