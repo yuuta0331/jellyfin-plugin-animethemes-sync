@@ -770,18 +770,61 @@
                 </div>
                 <div class="ats-download-content">
                     <p id="AnimeThemesCollectionDisableDialogDescription" class="ats-download-description">Choose what happens to collection memberships previously managed by AnimeThemes Sync.</p>
-                    <div class="ats-collection-choice-summary">
-                        <strong>Keep existing collections</strong>
-                        <span>Stops future synchronization but leaves existing collections and memberships unchanged.</span>
-                    </div>
-                    <div class="ats-collection-choice-summary ats-collection-choice-remove">
-                        <strong>Remove managed collections</strong>
-                        <span>Removes only memberships added by this plugin. Empty plugin-created collections are deleted; collections containing your own members are kept.</span>
+                    <div class="ats-choice-cards">
+                        <button is="emby-button" type="button" class="emby-button ats-choice-card" data-ats-choice="keep" role="radio" aria-checked="false">
+                            <span class="ats-choice-card-radio" aria-hidden="true"></span>
+                            <div>
+                                <strong>Keep existing collections</strong>
+                                <span>Stops future synchronization but leaves existing collections and memberships unchanged.</span>
+                            </div>
+                        </button>
+                        <button is="emby-button" type="button" class="emby-button ats-choice-card ats-choice-card-danger" data-ats-choice="remove" role="radio" aria-checked="false">
+                            <span class="ats-choice-card-radio" aria-hidden="true"></span>
+                            <div>
+                                <strong>Remove managed collections</strong>
+                                <span>Removes only memberships added by this plugin. Empty plugin-created collections are deleted; collections containing your own members are kept.</span>
+                            </div>
+                        </button>
                     </div>
                 </div>
-                <div class="ats-download-actions ats-collection-choice-actions">
-                    <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AnimeThemesCollectionDisableDialogKeep"><span>Keep existing collections</span></button>
-                    <button is="emby-button" type="button" class="raised emby-button ats-button-danger ats-icon-button-text" id="AnimeThemesCollectionDisableDialogRemove"><i class="md-icon ats-icon" aria-hidden="true">&#xE872;</i><span>Remove managed collections</span></button>
+                <div class="ats-choice-actions">
+                    <button is="emby-button" type="button" class="raised emby-button ats-choice-confirm" id="AnimeThemesCollectionDisableDialogConfirm" disabled><span>Confirm choice</span></button>
+                </div>
+            </div>
+        </div>
+
+        <div id="AnimeThemesTagDisableDialog" class="ats-player ats-download-dialog" aria-hidden="true">
+            <div class="ats-player-panel ats-download-panel" role="dialog" aria-modal="true" aria-labelledby="AnimeThemesTagDisableDialogTitle" aria-describedby="AnimeThemesTagDisableDialogDescription">
+                <div class="ats-player-header ats-download-header">
+                    <div class="ats-download-heading">
+                        <i class="md-icon ats-download-heading-icon" aria-hidden="true">&#xE892;</i>
+                        <div><h3 id="AnimeThemesTagDisableDialogTitle">Season Tags turned off</h3></div>
+                    </div>
+                    <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-download-close" id="AnimeThemesTagDisableDialogClose" aria-label="Cancel saving settings">
+                        <i class="md-icon ats-icon" aria-hidden="true">&#xE5CD;</i>
+                    </button>
+                </div>
+                <div class="ats-download-content">
+                    <p id="AnimeThemesTagDisableDialogDescription" class="ats-download-description">Choose what happens to tags previously managed by AnimeThemes Sync.</p>
+                    <div class="ats-choice-cards">
+                        <button is="emby-button" type="button" class="emby-button ats-choice-card" data-ats-choice="keep" role="radio" aria-checked="false">
+                            <span class="ats-choice-card-radio" aria-hidden="true"></span>
+                            <div>
+                                <strong>Keep existing tags</strong>
+                                <span>Stops future synchronization but leaves existing tags unchanged.</span>
+                            </div>
+                        </button>
+                        <button is="emby-button" type="button" class="emby-button ats-choice-card ats-choice-card-danger" data-ats-choice="remove" role="radio" aria-checked="false">
+                            <span class="ats-choice-card-radio" aria-hidden="true"></span>
+                            <div>
+                                <strong>Remove managed tags</strong>
+                                <span>Removes only tags added by this plugin from your seasons. Tags you created manually are kept.</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+                <div class="ats-choice-actions">
+                    <button is="emby-button" type="button" class="raised emby-button ats-choice-confirm" id="AnimeThemesTagDisableDialogConfirm" disabled><span>Confirm choice</span></button>
                 </div>
             </div>
         </div>
@@ -2353,31 +2396,109 @@
                 gap: .65rem;
             }
 
-            #AnimeThemesBrowserPage .ats-collection-choice-summary {
+            #AnimeThemesBrowserPage .ats-choice-cards {
                 display: grid;
-                gap: .3rem;
+                gap: .65rem;
+            }
+
+            #AnimeThemesBrowserPage .ats-choice-card {
+                display: grid;
+                grid-template-columns: 1.5rem 1fr;
+                gap: .75rem;
+                align-items: start;
+                width: 100%;
                 padding: .9rem;
-                border: 1px solid var(--ats-border);
+                border: 2px solid var(--ats-border);
                 border-radius: var(--ats-radius);
                 background: var(--ats-surface);
+                color: inherit;
+                text-align: left;
                 line-height: 1.4;
+                cursor: pointer;
+                transition: border-color .18s ease, background-color .18s ease;
             }
 
-            #AnimeThemesBrowserPage .ats-collection-choice-summary span {
-                opacity: .8;
+            #AnimeThemesBrowserPage .ats-choice-card:hover,
+            #AnimeThemesBrowserPage .ats-choice-card:focus-visible {
+                border-color: var(--ats-accent);
+                background: var(--ats-surface-hover);
+                outline: none;
             }
 
-            #AnimeThemesBrowserPage .ats-collection-choice-remove {
+            #AnimeThemesBrowserPage .ats-choice-card:focus-visible {
+                outline: 2px solid var(--ats-accent);
+                outline-offset: 2px;
+            }
+
+            #AnimeThemesBrowserPage .ats-choice-card.selected {
+                border-color: var(--ats-accent);
+                background: var(--ats-surface-hover);
+            }
+
+            #AnimeThemesBrowserPage .ats-choice-card.ats-choice-card-danger.selected {
                 border-color: var(--ats-danger-border);
                 background: var(--ats-danger-surface);
             }
 
-            #AnimeThemesBrowserPage .ats-collection-choice-actions {
-                flex-wrap: wrap;
+            #AnimeThemesBrowserPage .ats-choice-card > div {
+                display: grid;
+                gap: .3rem;
+                min-width: 0;
             }
 
-            #AnimeThemesBrowserPage .ats-collection-choice-actions .emby-button {
+            #AnimeThemesBrowserPage .ats-choice-card > div span {
+                opacity: .8;
+            }
+
+            #AnimeThemesBrowserPage .ats-choice-card-radio {
+                width: 1.25rem;
+                height: 1.25rem;
+                margin-top: .15rem;
+                border-radius: 50%;
+                border: 2px solid var(--ats-border-strong);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                transition: border-color .18s ease, background-color .18s ease;
+            }
+
+            #AnimeThemesBrowserPage .ats-choice-card.selected .ats-choice-card-radio {
+                border-color: var(--ats-accent);
+                background: var(--ats-accent);
+            }
+
+            #AnimeThemesBrowserPage .ats-choice-card.selected .ats-choice-card-radio::after {
+                content: "";
+                width: .45rem;
+                height: .45rem;
+                border-radius: 50%;
+                background: #fff;
+            }
+
+            #AnimeThemesBrowserPage .ats-choice-card.ats-choice-card-danger.selected .ats-choice-card-radio {
+                border-color: var(--ats-danger);
+                background: var(--ats-danger);
+            }
+
+            #AnimeThemesBrowserPage .ats-choice-actions {
+                display: flex;
+                justify-content: flex-end;
+                gap: .65rem;
+                padding: .85rem 1.1rem 1rem;
+                border-top: 1px solid var(--ats-border);
+                background: var(--ats-surface);
+            }
+
+            #AnimeThemesBrowserPage .ats-choice-actions .emby-button {
+                min-width: 8.5rem;
+                margin: 0;
                 white-space: normal;
+            }
+
+            #AnimeThemesBrowserPage .ats-choice-confirm:disabled {
+                opacity: .45;
+                pointer-events: none;
             }
 
             #AnimeThemesBrowserPage .ats-download-option {

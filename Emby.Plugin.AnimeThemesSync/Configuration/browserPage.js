@@ -88,7 +88,11 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             cleanupSelected: {},
             cleanupStartIndex: 0,
             cleanupTotal: 0,
-            cleanupPageSize: 50
+            cleanupPageSize: 50,
+            pendingCollectionDisableChoice: null,
+            pendingTagDisableChoice: null,
+            collectionDialogLastFocus: null,
+            tagDialogLastFocus: null
         };
         var browserToolbar = page.querySelector('.ats-browser-toolbar');
         var itemSelect = page.querySelector('#AnimeThemesBrowserItemSelect');
@@ -143,8 +147,12 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         var deleteDialogConfirm = page.querySelector('#AnimeThemesDeleteDialogConfirm');
 
         var collectionDisableDialog = page.querySelector('#AnimeThemesCollectionDisableDialog');
-        var collectionDisableKeep = page.querySelector('#AnimeThemesCollectionDisableDialogKeep');
-        var collectionDisableRemove = page.querySelector('#AnimeThemesCollectionDisableDialogRemove');
+        var collectionDisableChoiceCards = collectionDisableDialog ? collectionDisableDialog.querySelectorAll('.ats-choice-card') : [];
+        var collectionDisableDialogConfirm = page.querySelector('#AnimeThemesCollectionDisableDialogConfirm');
+
+        var tagDisableDialog = page.querySelector('#AnimeThemesTagDisableDialog');
+        var tagDisableChoiceCards = tagDisableDialog ? tagDisableDialog.querySelectorAll('.ats-choice-card') : [];
+        var tagDisableDialogConfirm = page.querySelector('#AnimeThemesTagDisableDialogConfirm');
 
         var downloadManager = page.querySelector('#AnimeThemesDownloadManager');
         var dmBadge = page.querySelector('#AnimeThemesDmBadge');
@@ -3508,33 +3516,36 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             }
             setSettingsState('Saving settings...');
             return ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
-                var tagsWereEnabled = !!getConfigValue(config, 'TagsEnabled', true);
-                var collectionsWereEnabled = !!getConfigValue(config, 'SeasonCollectionsEnabled', false);
-                config = collectSettingsFromForm(config || {});
-                var collectionChoice = collectionsWereEnabled && !config.SeasonCollectionsEnabled
-                    ? requestCollectionDisableChoice()
-                    : Promise.resolve(false);
-                return collectionChoice.then(function (removeManagedCollections) {
-                    var cleanup = {
-                        RemoveManagedTags: tagsWereEnabled && !config.TagsEnabled && window.confirm('Season Tags were turned off. Remove only the tags previously managed by this plugin?\n\nOK: remove managed tags\nCancel: keep existing tags'),
-                        RemoveManagedCollectionMemberships: removeManagedCollections
-                    };
-                    return ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function (result) {
-                        state.settingsLoaded = true;
-                        captureSettingsSnapshot();
-                        setSettingsState('Settings saved.');
-                        if (showResult) {
-                            Dashboard.processPluginConfigurationUpdateResult(result);
-                        }
-                        return apiPostJson('AnimeThemesSync/SeasonMetadata/Sync', cleanup).then(function () {
-                            setSettingsState('Settings saved. Season metadata sync started.');
-                            pollSeasonMetadataSync();
-                            return result;
-                        });
+            var tagsWereEnabled = !!getConfigValue(config, 'TagsEnabled', true);
+            var collectionsWereEnabled = !!getConfigValue(config, 'SeasonCollectionsEnabled', false);
+            config = collectSettingsFromForm(config || {});
+            var collectionChoice = collectionsWereEnabled && !config.SeasonCollectionsEnabled
+                ? requestCollectionDisableChoice()
+                : Promise.resolve(false);
+            var tagChoice = tagsWereEnabled && !config.TagsEnabled
+                ? requestTagDisableChoice()
+                : Promise.resolve(false);
+            return Promise.all([collectionChoice, tagChoice]).then(function (choices) {
+                var cleanup = {
+                    RemoveManagedTags: choices[1],
+                    RemoveManagedCollectionMemberships: choices[0]
+                };
+                return ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function (result) {
+                    state.settingsLoaded = true;
+                    captureSettingsSnapshot();
+                    setSettingsState('Settings saved.');
+                    if (showResult) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                    }
+                    return apiPostJson('AnimeThemesSync/SeasonMetadata/Sync', cleanup).then(function () {
+                        setSettingsState('Settings saved. Season metadata sync started.');
+                        pollSeasonMetadataSync();
+                        return result;
                     });
                 });
+                });
             }).catch(function (err) {
-                if (err && err.atsCollectionDialogCancelled) {
+                if (err && (err.atsCollectionDialogCancelled || err.atsTagDialogCancelled)) {
                     setSettingsState('Settings were not saved.');
                     syncSettingsDirty();
                     throw err;
@@ -3545,13 +3556,32 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             });
         }
 
+        function setupChoiceCards(dialog, confirmButton) {
+            dialog.addEventListener('click', function (event) {
+                var card = event.target.closest('.ats-choice-card');
+                if (!card) return;
+                dialog.querySelectorAll('.ats-choice-card').forEach(function (c) {
+                    c.classList.remove('selected');
+                    c.setAttribute('aria-checked', 'false');
+                });
+                card.classList.add('selected');
+                card.setAttribute('aria-checked', 'true');
+                confirmButton.disabled = false;
+            });
+        }
+
         function requestCollectionDisableChoice() {
             return new Promise(function (resolve, reject) {
+                collectionDisableDialog.querySelectorAll('.ats-choice-card').forEach(function (c) {
+                    c.classList.remove('selected');
+                    c.setAttribute('aria-checked', 'false');
+                });
+                collectionDisableDialogConfirm.disabled = true;
                 state.collectionDialogLastFocus = document.activeElement;
                 state.pendingCollectionDisableChoice = { resolve: resolve, reject: reject };
                 collectionDisableDialog.classList.add('open');
                 collectionDisableDialog.setAttribute('aria-hidden', 'false');
-                collectionDisableKeep.focus();
+                page.querySelector('#AnimeThemesCollectionDisableDialogClose').focus();
             });
         }
 
@@ -3579,7 +3609,64 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function trapCollectionDisableDialogFocus(event) {
             if (event.key !== 'Tab' || !collectionDisableDialog.classList.contains('open')) return false;
-            var focusable = [page.querySelector('#AnimeThemesCollectionDisableDialogClose'), collectionDisableKeep, collectionDisableRemove];
+            var closeButton = page.querySelector('#AnimeThemesCollectionDisableDialogClose');
+            var focusable = [closeButton,
+                collectionDisableChoiceCards[0],
+                collectionDisableChoiceCards[1],
+                collectionDisableDialogConfirm];
+            var currentIndex = focusable.indexOf(document.activeElement);
+            var nextIndex = event.shiftKey
+                ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
+                : (currentIndex < 0 || currentIndex === focusable.length - 1 ? 0 : currentIndex + 1);
+            event.preventDefault();
+            focusable[nextIndex].focus();
+            return true;
+        }
+
+        function requestTagDisableChoice() {
+            return new Promise(function (resolve, reject) {
+                tagDisableDialog.querySelectorAll('.ats-choice-card').forEach(function (c) {
+                    c.classList.remove('selected');
+                    c.setAttribute('aria-checked', 'false');
+                });
+                tagDisableDialogConfirm.disabled = true;
+                state.tagDialogLastFocus = document.activeElement;
+                state.pendingTagDisableChoice = { resolve: resolve, reject: reject };
+                tagDisableDialog.classList.add('open');
+                tagDisableDialog.setAttribute('aria-hidden', 'false');
+                page.querySelector('#AnimeThemesTagDisableDialogClose').focus();
+            });
+        }
+
+        function closeTagDisableDialog(removeManagedTags, cancelled) {
+            var pending = state.pendingTagDisableChoice;
+            state.pendingTagDisableChoice = null;
+            if (tagDisableDialog.contains(document.activeElement)) {
+                document.activeElement.blur();
+            }
+            tagDisableDialog.classList.remove('open');
+            tagDisableDialog.setAttribute('aria-hidden', 'true');
+            if (state.tagDialogLastFocus && typeof state.tagDialogLastFocus.focus === 'function') {
+                state.tagDialogLastFocus.focus();
+            }
+            state.tagDialogLastFocus = null;
+            if (!pending) return;
+            if (cancelled) {
+                var error = new Error('Tag cleanup choice was cancelled.');
+                error.atsTagDialogCancelled = true;
+                pending.reject(error);
+            } else {
+                pending.resolve(!!removeManagedTags);
+            }
+        }
+
+        function trapTagDisableDialogFocus(event) {
+            if (event.key !== 'Tab' || !tagDisableDialog.classList.contains('open')) return false;
+            var closeButton = page.querySelector('#AnimeThemesTagDisableDialogClose');
+            var focusable = [closeButton,
+                tagDisableChoiceCards[0],
+                tagDisableChoiceCards[1],
+                tagDisableDialogConfirm];
             var currentIndex = focusable.indexOf(document.activeElement);
             var nextIndex = event.shiftKey
                 ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
@@ -3625,7 +3712,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 setSettingsState('Scheduled task started.');
                 Dashboard.alert('Task started.');
             }).catch(function (err) {
-                if (err && err.atsCollectionDialogCancelled) {
+                if (err && (err.atsCollectionDialogCancelled || err.atsTagDialogCancelled)) {
                     return;
                 }
                 setSettingsState('Failed to start task.');
@@ -4875,19 +4962,39 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         page.querySelector('#AnimeThemesCollectionDisableDialogClose').addEventListener('click', function () {
             closeCollectionDisableDialog(false, true);
         });
-        collectionDisableKeep.addEventListener('click', function () {
-            closeCollectionDisableDialog(false, false);
-        });
-        collectionDisableRemove.addEventListener('click', function () {
-            closeCollectionDisableDialog(true, false);
+        setupChoiceCards(collectionDisableDialog, collectionDisableDialogConfirm);
+        collectionDisableDialogConfirm.addEventListener('click', function () {
+            var selected = collectionDisableDialog.querySelector('.ats-choice-card.selected');
+            if (selected) {
+                closeCollectionDisableDialog(selected.getAttribute('data-ats-choice') === 'remove', false);
+            }
         });
         collectionDisableDialog.addEventListener('click', function (event) {
             if (event.target === collectionDisableDialog) closeCollectionDisableDialog(false, true);
         });
 
+        setupChoiceCards(tagDisableDialog, tagDisableDialogConfirm);
+        tagDisableDialogConfirm.addEventListener('click', function () {
+            var selected = tagDisableDialog.querySelector('.ats-choice-card.selected');
+            if (selected) {
+                closeTagDisableDialog(selected.getAttribute('data-ats-choice') === 'remove', false);
+            }
+        });
+        page.querySelector('#AnimeThemesTagDisableDialogClose').addEventListener('click', function () {
+            closeTagDisableDialog(false, true);
+        });
+        tagDisableDialog.addEventListener('click', function (event) {
+            if (event.target === tagDisableDialog) closeTagDisableDialog(false, true);
+        });
+
         page.addEventListener('keydown', function (event) {
             if (trapCollectionDisableDialogFocus(event)) return;
+            if (trapTagDisableDialogFocus(event)) return;
             if (event.key === 'Escape') {
+                if (tagDisableDialog.classList.contains('open')) {
+                    closeTagDisableDialog(false, true);
+                    return;
+                }
                 if (collectionDisableDialog.classList.contains('open')) {
                     closeCollectionDisableDialog(false, true);
                     return;

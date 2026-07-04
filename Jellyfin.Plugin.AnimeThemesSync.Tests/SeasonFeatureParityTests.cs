@@ -41,8 +41,9 @@ public sealed class SeasonFeatureParityTests
                      "AtsSeasonCollectionPosterFillLandscapeType",
                      "AtsSeasonCollectionCanvasLandscapeType",
                      "AnimeThemesCollectionDisableDialog",
-                     "AnimeThemesCollectionDisableDialogKeep",
-                     "AnimeThemesCollectionDisableDialogRemove",
+                     "AnimeThemesCollectionDisableDialogConfirm",
+                     "AnimeThemesTagDisableDialog",
+                     "AnimeThemesTagDisableDialogConfirm",
                  })
         {
             Assert.Contains(marker, jellyfin, StringComparison.Ordinal);
@@ -73,10 +74,16 @@ public sealed class SeasonFeatureParityTests
         Assert.Contains("normalizeLandscapeArtType", embyScript, StringComparison.Ordinal);
         Assert.Contains("requestCollectionDisableChoice", jellyfin, StringComparison.Ordinal);
         Assert.Contains("requestCollectionDisableChoice", embyScript, StringComparison.Ordinal);
+        Assert.Contains("requestTagDisableChoice", jellyfin, StringComparison.Ordinal);
+        Assert.Contains("requestTagDisableChoice", embyScript, StringComparison.Ordinal);
         Assert.Contains("atsCollectionDialogCancelled", jellyfin, StringComparison.Ordinal);
         Assert.Contains("atsCollectionDialogCancelled", embyScript, StringComparison.Ordinal);
+        Assert.Contains("atsTagDialogCancelled", jellyfin, StringComparison.Ordinal);
+        Assert.Contains("atsTagDialogCancelled", embyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("Season Collections were turned off. Remove only collection memberships", jellyfin, StringComparison.Ordinal);
         Assert.DoesNotContain("Season Collections were turned off. Remove only collection memberships", embyScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("Season Tags were turned off. Remove only the tags", jellyfin, StringComparison.Ordinal);
+        Assert.DoesNotContain("Season Tags were turned off. Remove only the tags", embyScript, StringComparison.Ordinal);
         Assert.Contains("SeasonCollectionLandscapeSourceMode: 2", jellyfin, StringComparison.Ordinal);
         Assert.Contains("SeasonCollectionLandscapeSourceMode: 2", embyScript, StringComparison.Ordinal);
         Assert.Contains("SeasonCollectionBackdropOverlayEnabled: false", jellyfin, StringComparison.Ordinal);
