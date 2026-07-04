@@ -36,6 +36,7 @@ namespace Emby.Plugin.AnimeThemesSync.ScheduledTasks;
 public class ThemeDownloader : IScheduledTask
 {
     private const string BroadcastSeasonProviderKey = "AnimeThemesBroadcastSeason";
+    private const string EmbyDynamicCollectionImagePath = "emby://playlistcollage";
     private const string UserOwnedImageFingerprint = "user-owned";
     private static readonly SemaphoreSlim SeasonMetadataSyncGate = new(1, 1);
     private static readonly SemaphoreSlim SeasonCollectionFinalizeGate = new(1, 1);
@@ -2375,13 +2376,11 @@ public class ThemeDownloader : IScheduledTask
             return;
         }
 
-        List<BoxSet> managed;
+        List<BoxSet> collections;
         IReadOnlyList<ManagedSeasonCollectionAssetState> assetStates;
         try
         {
-            managed = GetSeasonCollections()
-                .Where(i => i.ProviderIds != null && i.ProviderIds.ContainsKey(BroadcastSeasonProviderKey))
-                .ToList();
+            collections = GetSeasonCollections();
             assetStates = _seasonFinderStore.GetCollectionAssetStates();
         }
         catch (Exception ex)
@@ -2391,42 +2390,71 @@ public class ThemeDownloader : IScheduledTask
         }
 
         var states = assetStates.ToDictionary(i => i.CollectionKey, StringComparer.OrdinalIgnoreCase);
+        var stateByCollectionItemId = assetStates
+            .Select(state => (State: state, Parsed: long.TryParse(state.CollectionItemId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var itemId), ItemId: itemId))
+            .Where(entry => entry.Parsed)
+            .GroupBy(entry => entry.ItemId)
+            .ToDictionary(group => group.Key, group => group.First().State);
+        var managed = collections
+            .Where(collection =>
+                (collection.ProviderIds != null && collection.ProviderIds.ContainsKey(BroadcastSeasonProviderKey)) ||
+                stateByCollectionItemId.ContainsKey(collection.InternalId))
+            .ToList();
+        _logger.Info(
+            "Finalizing {0} managed season collections from {1} discovered collections and {2} saved states.",
+            managed.Count,
+            collections.Count,
+            assetStates.Count);
         var liveCollectionKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var collection in managed)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!collection.ProviderIds.TryGetValue(BroadcastSeasonProviderKey, out var collectionKey) || string.IsNullOrWhiteSpace(collectionKey))
+            var providerCollectionKey = collection.ProviderIds.TryGetValue(BroadcastSeasonProviderKey, out var providerKey)
+                ? providerKey
+                : null;
+            var hasProviderKey = !string.IsNullOrWhiteSpace(providerCollectionKey);
+            stateByCollectionItemId.TryGetValue(collection.InternalId, out var stateByItemId);
+            var collectionKey = hasProviderKey ? providerCollectionKey : stateByItemId?.CollectionKey;
+
+            if (string.IsNullOrWhiteSpace(collectionKey))
             {
                 continue;
             }
 
-            liveCollectionKeys.Add(collectionKey);
-            states.TryGetValue(collectionKey, out var state);
-            state ??= new ManagedSeasonCollectionAssetState { CollectionKey = collectionKey };
+            var resolvedCollectionKey = collectionKey;
+            liveCollectionKeys.Add(resolvedCollectionKey);
+            states.TryGetValue(resolvedCollectionKey, out var state);
+            state ??= stateByItemId ?? new ManagedSeasonCollectionAssetState { CollectionKey = resolvedCollectionKey };
             state.CollectionItemId = collection.InternalId.ToString(CultureInfo.InvariantCulture);
             try
             {
                 var shouldLock = config.SeasonCollectionsEnabled && config.SeasonCollectionLockEnabled && !removeManagedCollectionMemberships;
                 var shouldUnlock = (!config.SeasonCollectionLockEnabled || removeManagedCollectionMemberships) && state.LockAppliedByPlugin;
-                var lockChanged = false;
+                var metadataChanged = false;
+                if (!hasProviderKey || !string.Equals(collection.ProviderIds[BroadcastSeasonProviderKey], resolvedCollectionKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    collection.ProviderIds[BroadcastSeasonProviderKey] = resolvedCollectionKey;
+                    metadataChanged = true;
+                }
+
                 if (shouldLock && !collection.IsLocked)
                 {
                     collection.IsLocked = true;
                     state.LockAppliedByPlugin = true;
-                    lockChanged = true;
+                    metadataChanged = true;
                 }
                 else if (shouldUnlock)
                 {
                     if (collection.IsLocked)
                     {
                         collection.IsLocked = false;
-                        lockChanged = true;
+                        metadataChanged = true;
                     }
 
                     state.LockAppliedByPlugin = false;
                 }
 
-                if (lockChanged)
+                if (metadataChanged)
                 {
                     var parent = collection.GetParent() ?? _libraryManager.RootFolder;
                     _libraryManager.UpdateItems(
@@ -2440,8 +2468,8 @@ public class ThemeDownloader : IScheduledTask
                 if (removeManagedCollectionMemberships && GetCollectionMembers(collection).Count == 0)
                 {
                     _libraryManager.DeleteItem(collection, new DeleteOptions { DeleteFileLocation = true });
-                    _seasonFinderStore.DeleteCollectionAssetState(collectionKey);
-                    liveCollectionKeys.Remove(collectionKey);
+                    _seasonFinderStore.DeleteCollectionAssetState(resolvedCollectionKey);
+                    liveCollectionKeys.Remove(resolvedCollectionKey);
                     _logger.Info("Deleted empty plugin-created season collection {0}.", collection.Name);
                     continue;
                 }
@@ -2480,14 +2508,13 @@ public class ThemeDownloader : IScheduledTask
         }
 
         var members = GetCollectionMembers(collection);
-        var memberArt = GetCollectionMemberArt(members);
+        var memberArt = await GetCollectionMemberArtAsync(members, cancellationToken).ConfigureAwait(false);
         if (memberArt.Count == 0)
         {
             _logger.Debug("No usable member artwork for collection {0}; skipping image generation.", collection.Name);
             return;
         }
 
-        var memberIds = members.Select(i => i.InternalId).ToArray();
         var backdropOverlay = config.SeasonCollectionBackdropOverlayEnabled
             ? FormattableString.Invariant($"{config.SeasonCollectionBackdropOverlayOpacity}:{config.SeasonCollectionBackdropOverlayColor}")
             : "off";
@@ -2514,6 +2541,13 @@ public class ThemeDownloader : IScheduledTask
             : CollectionImageLayoutEngine.BackdropMaxImages;
         var thumbSources = landscapeCanvasSources.Take(thumbCap).ToList();
         var backdropSources = landscapeCanvasSources.Take(backdropCap).ToList();
+        _logger.Info(
+            "Collection image plan for {0}: Members={1}, PrimarySources={2}, ThumbSources={3}, BackdropSources={4}.",
+            collection.Name,
+            members.Count,
+            primarySources.Count,
+            thumbSources.Count,
+            backdropSources.Count);
 
         var changed = false;
         if (primarySources.Count > 0)
@@ -2536,7 +2570,6 @@ public class ThemeDownloader : IScheduledTask
                 0,
                 canvasSettings,
                 config,
-                memberIds,
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -2555,7 +2588,6 @@ public class ThemeDownloader : IScheduledTask
                 0,
                 canvasSettings,
                 config,
-                memberIds,
                 cancellationToken).ConfigureAwait(false);
             changed |= await GenerateCollectionImageSlotAsync(
                 collection,
@@ -2570,7 +2602,6 @@ public class ThemeDownloader : IScheduledTask
                 backdropOpacity,
                 canvasSettings,
                 config,
-                memberIds,
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -2593,7 +2624,6 @@ public class ThemeDownloader : IScheduledTask
         int overlayOpacityPercent,
         string canvasSettings,
         PluginConfiguration config,
-        long[] memberIds,
         CancellationToken cancellationToken)
     {
         var (storedFingerprint, storedIdentity) = GetImageSlotState(state, imageType);
@@ -2610,9 +2640,10 @@ public class ThemeDownloader : IScheduledTask
             return false;
         }
 
-        if (slotImages.Count > 0 && (storedIdentity == null || trackedImage == null))
+        if (trackedImage == null && slotImages.Any(image => !IsEmbyDynamicCollectionImage(collection, image)))
         {
             SetImageSlotState(state, imageType, UserOwnedImageFingerprint, null);
+            _logger.Debug("Skipping the {0} image for collection {1} because the existing image is user-owned.", imageType, collection.Name);
             return true;
         }
 
@@ -2642,23 +2673,26 @@ public class ThemeDownloader : IScheduledTask
 
         slotImages = GetCollectionImageSlotEntries(collection, imageType);
         trackedImage = FindTrackedCollectionImage(slotImages, storedIdentity);
-        if (storedIdentity != null && trackedImage == null && slotImages.Count > 0)
+        if (trackedImage == null && slotImages.Any(image => !IsEmbyDynamicCollectionImage(collection, image)))
         {
             SetImageSlotState(state, imageType, UserOwnedImageFingerprint, null);
+            _logger.Debug("Skipping the {0} image for collection {1} because the image changed to a user-owned image while rendering.", imageType, collection.Name);
             return true;
         }
 
-        if (storedIdentity == null && slotImages.Count > 0)
+        var imagesToDelete = trackedImage != null
+            ? new[] { trackedImage }
+            : slotImages.Where(image => IsEmbyDynamicCollectionImage(collection, image)).OrderByDescending(image => image.Index).ToArray();
+        if (trackedImage == null && imagesToDelete.Length > 0)
         {
-            SetImageSlotState(state, imageType, UserOwnedImageFingerprint, null);
-            return true;
+            _logger.Info("Replacing {0} Emby-generated {1} image(s) for collection {2}.", imagesToDelete.Length, imageType, collection.Name);
         }
 
-        if (trackedImage != null)
+        foreach (var image in imagesToDelete)
         {
             try
             {
-                collection.DeleteImage(imageType, trackedImage.Index);
+                collection.DeleteImage(imageType, image.Index);
             }
             catch (Exception ex)
             {
@@ -2679,7 +2713,7 @@ public class ThemeDownloader : IScheduledTask
                 rendered.Value.MimeType.AsMemory(),
                 imageType,
                 null,
-                memberIds,
+                Array.Empty<long>(),
                 new DirectoryService(_fileSystem),
                 true,
                 cancellationToken).ConfigureAwait(false);
@@ -2717,6 +2751,29 @@ public class ThemeDownloader : IScheduledTask
         return storedIdentity == null
             ? null
             : images.FirstOrDefault(image => string.Equals(image.Identity, storedIdentity, StringComparison.Ordinal));
+    }
+
+    private bool IsEmbyDynamicCollectionImage(BoxSet collection, CollectionImageSlotEntry image)
+    {
+        if (image.Path?.StartsWith(EmbyDynamicCollectionImagePath, StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(image.Path) ||
+            !Path.GetFileNameWithoutExtension(image.Path).StartsWith("auto_poster", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        try
+        {
+            return _fileSystem.ContainsSubPath(collection.GetInternalMetadataPath(), image.Path);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private static CollectionImageSlotEntry? FindWrittenCollectionImage(
@@ -2781,8 +2838,11 @@ public class ThemeDownloader : IScheduledTask
 
     private List<BaseItem> GetCollectionMembers(BoxSet collection)
     {
-        var ids = collection.GetChildrenIds(new InternalItemsQuery()) ?? Array.Empty<long>();
-        return ids.Select(id => _libraryManager.GetItemById(id))
+        return collection.GetItemList(new InternalItemsQuery
+            {
+                Recursive = false,
+                EnableTotalRecordCount = false,
+            })
             .Where(i => i != null)
             .OrderBy(i => i.PremiereDate ?? DateTimeOffset.MaxValue)
             .ThenBy(i => i.SortName, StringComparer.Ordinal)
@@ -2790,7 +2850,9 @@ public class ThemeDownloader : IScheduledTask
             .ToList();
     }
 
-    private static List<CollectionMemberArtwork> GetCollectionMemberArt(List<BaseItem> members)
+    private async Task<List<CollectionMemberArtwork>> GetCollectionMemberArtAsync(
+        List<BaseItem> members,
+        CancellationToken cancellationToken)
     {
         var art = new List<CollectionMemberArtwork>();
         var seenPosters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2798,24 +2860,24 @@ public class ThemeDownloader : IScheduledTask
         var seenBackdrops = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var member in members)
         {
-            var posterInfo = member.GetImageInfo(ImageType.Primary, 0);
-            var thumbInfo = member.GetImageInfo(ImageType.Thumb, 0);
-            var backdropInfo = member.GetImageInfo(ImageType.Backdrop, 0);
+            var posterInfo = await GetLocalImageInfoAsync(member, ImageType.Primary, cancellationToken).ConfigureAwait(false);
+            var thumbInfo = await GetLocalImageInfoAsync(member, ImageType.Thumb, cancellationToken).ConfigureAwait(false);
+            var backdropInfo = await GetLocalImageInfoAsync(member, ImageType.Backdrop, cancellationToken).ConfigureAwait(false);
             if (member is Season season && season.Series != null)
             {
-                if (posterInfo == null || !posterInfo.IsLocalFile)
+                if (posterInfo == null)
                 {
-                    posterInfo = season.Series.GetImageInfo(ImageType.Primary, 0);
+                    posterInfo = await GetLocalImageInfoAsync(season.Series, ImageType.Primary, cancellationToken).ConfigureAwait(false);
                 }
 
-                if (thumbInfo == null || !thumbInfo.IsLocalFile)
+                if (thumbInfo == null)
                 {
-                    thumbInfo = season.Series.GetImageInfo(ImageType.Thumb, 0);
+                    thumbInfo = await GetLocalImageInfoAsync(season.Series, ImageType.Thumb, cancellationToken).ConfigureAwait(false);
                 }
 
-                if (backdropInfo == null || !backdropInfo.IsLocalFile)
+                if (backdropInfo == null)
                 {
-                    backdropInfo = season.Series.GetImageInfo(ImageType.Backdrop, 0);
+                    backdropInfo = await GetLocalImageInfoAsync(season.Series, ImageType.Backdrop, cancellationToken).ConfigureAwait(false);
                 }
             }
 
@@ -2830,6 +2892,36 @@ public class ThemeDownloader : IScheduledTask
         }
 
         return art;
+    }
+
+    private async Task<ItemImageInfo?> GetLocalImageInfoAsync(
+        BaseItem item,
+        ImageType imageType,
+        CancellationToken cancellationToken)
+    {
+        var image = item.GetImageInfo(imageType, 0);
+        if (image == null || image.IsLocalFile)
+        {
+            return image;
+        }
+
+        try
+        {
+            return await _libraryManager.ConvertImageToLocal(item, image, 0, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn(
+                "Could not localize the {0} image for {1}; the image will not be used in collection artwork. Error: {2}",
+                imageType,
+                item.Name,
+                ex.GetBaseException().Message);
+            return null;
+        }
     }
 
     private static CollectionImageSource? BuildImageSource(ItemImageInfo? info, CollectionImageSourceKind kind, HashSet<string> seenPaths)
@@ -3301,7 +3393,11 @@ public class ThemeDownloader : IScheduledTask
                         string.Equals(i.ItemId, member.Id.ToString("D"), StringComparison.OrdinalIgnoreCase) &&
                         string.Equals(i.CollectionName, collectionSeason.Label, StringComparison.OrdinalIgnoreCase));
                     var collection = await GetOrCreateSeasonCollectionAsync(collectionSeason, cancellationToken, member.InternalId).ConfigureAwait(false);
-                    var children = collection.GetChildrenIds(new InternalItemsQuery()) ?? Array.Empty<long>();
+                    var children = collection.GetItemIdList(new InternalItemsQuery
+                    {
+                        Recursive = false,
+                        EnableTotalRecordCount = false,
+                    });
                     var contains = children.Contains(member.InternalId);
                     var addedByPlugin = old?.AddedByPlugin == true;
                     if (!contains)
@@ -3359,35 +3455,26 @@ public class ThemeDownloader : IScheduledTask
     private async Task<BoxSet> GetOrCreateSeasonCollectionAsync(BroadcastSeasonValue broadcastSeason, CancellationToken cancellationToken, long? initialMemberId = null)
     {
         var collections = GetSeasonCollections();
+        var config = Plugin.Instance?.Configuration;
+        var lockOnCreate = config?.SeasonCollectionLockEnabled ?? false;
         var managed = collections.FirstOrDefault(i =>
             i.ProviderIds != null &&
             i.ProviderIds.TryGetValue(BroadcastSeasonProviderKey, out var key) &&
             string.Equals(key, broadcastSeason.Key, StringComparison.OrdinalIgnoreCase));
         if (managed != null)
         {
-            if (!string.Equals(managed.Name, broadcastSeason.Label, StringComparison.Ordinal))
-            {
-                managed.Name = broadcastSeason.Label;
-                var parent = managed.GetParent() ?? _libraryManager.RootFolder;
-                _libraryManager.UpdateItems(
-                    new List<BaseItem> { managed },
-                    parent,
-                    ItemUpdateType.MetadataEdit,
-                    new MetadataRefreshOptions(_fileSystem),
-                    cancellationToken);
-            }
-
+            EnsureManagedSeasonCollection(managed, broadcastSeason, lockOnCreate, cancellationToken);
             return managed;
         }
 
         var existing = collections.FirstOrDefault(i => string.Equals(i.Name, broadcastSeason.Label, StringComparison.OrdinalIgnoreCase));
         if (existing != null)
         {
+            EnsureManagedSeasonCollection(existing, broadcastSeason, lockOnCreate, cancellationToken);
+            RecordManagedSeasonCollection(broadcastSeason.Key, existing.InternalId.ToString(CultureInfo.InvariantCulture), lockOnCreate);
             return existing;
         }
 
-        var config = Plugin.Instance?.Configuration;
-        var lockOnCreate = config?.SeasonCollectionLockEnabled ?? false;
         var created = await _collectionManager.CreateCollection(new CollectionCreationOptions
         {
             Name = broadcastSeason.Label,
@@ -3408,21 +3495,64 @@ public class ThemeDownloader : IScheduledTask
                 ?? throw new InvalidOperationException($"Emby did not return or persist collection '{broadcastSeason.Label}'.");
         }
 
-        if (lockOnCreate)
-        {
-            RecordCollectionLockApplied(broadcastSeason.Key, created.InternalId.ToString(CultureInfo.InvariantCulture));
-        }
+        EnsureManagedSeasonCollection(created, broadcastSeason, lockOnCreate, cancellationToken);
+        RecordManagedSeasonCollection(broadcastSeason.Key, created.InternalId.ToString(CultureInfo.InvariantCulture), lockOnCreate);
 
         return created;
     }
 
-    private void RecordCollectionLockApplied(string collectionKey, string collectionItemId)
+    private void EnsureManagedSeasonCollection(
+        BoxSet collection,
+        BroadcastSeasonValue broadcastSeason,
+        bool lockOnCreate,
+        CancellationToken cancellationToken)
+    {
+        var changed = false;
+        if (!string.Equals(collection.Name, broadcastSeason.Label, StringComparison.Ordinal))
+        {
+            collection.Name = broadcastSeason.Label;
+            changed = true;
+        }
+
+        if (!collection.ProviderIds.TryGetValue(BroadcastSeasonProviderKey, out var key) ||
+            !string.Equals(key, broadcastSeason.Key, StringComparison.OrdinalIgnoreCase))
+        {
+            collection.ProviderIds[BroadcastSeasonProviderKey] = broadcastSeason.Key;
+            changed = true;
+        }
+
+        if (lockOnCreate && !collection.IsLocked)
+        {
+            collection.IsLocked = true;
+            changed = true;
+        }
+
+        if (!changed)
+        {
+            return;
+        }
+
+        var parent = collection.GetParent() ?? _libraryManager.RootFolder;
+        _libraryManager.UpdateItems(
+            new List<BaseItem> { collection },
+            parent,
+            ItemUpdateType.MetadataEdit,
+            new MetadataRefreshOptions(_fileSystem),
+            cancellationToken);
+        _logger.Info("Marked season collection {0} as managed with key {1}; Locked={2}.", collection.Name, broadcastSeason.Key, collection.IsLocked);
+    }
+
+    private void RecordManagedSeasonCollection(string collectionKey, string collectionItemId, bool lockApplied)
     {
         var state = _seasonFinderStore.GetCollectionAssetStates()
                 .FirstOrDefault(i => string.Equals(i.CollectionKey, collectionKey, StringComparison.OrdinalIgnoreCase))
             ?? new ManagedSeasonCollectionAssetState { CollectionKey = collectionKey };
         state.CollectionItemId = collectionItemId;
-        state.LockAppliedByPlugin = true;
+        if (lockApplied)
+        {
+            state.LockAppliedByPlugin = true;
+        }
+
         state.UpdatedAtUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
         _seasonFinderStore.UpsertCollectionAssetState(state);
     }

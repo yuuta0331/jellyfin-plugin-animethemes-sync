@@ -113,9 +113,27 @@ public sealed class SeasonFeatureParityTests
         }
 
         Assert.Contains("DeleteImageAsync(imageType, trackedImage.Index)", jellyfinDownloader, StringComparison.Ordinal);
-        Assert.Contains("DeleteImage(imageType, trackedImage.Index)", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("DeleteImage(imageType, image.Index)", embyDownloader, StringComparison.Ordinal);
         Assert.Contains("GetLinkedChildren().Count == 0", jellyfinDownloader, StringComparison.Ordinal);
         Assert.Contains("GetCollectionMembers(collection).Count == 0", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("GetItemList(new InternalItemsQuery", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("GetItemIdList(new InternalItemsQuery", embyDownloader, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetChildrenIds(new InternalItemsQuery", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("emby://playlistcollage", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("auto_poster", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("collection.GetInternalMetadataPath()", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("slotImages.Any(image => !IsEmbyDynamicCollectionImage(collection, image))", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("Array.Empty<long>()", embyDownloader, StringComparison.Ordinal);
+        Assert.DoesNotContain("long[] memberIds", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("EnsureManagedSeasonCollection", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("collection.ProviderIds[BroadcastSeasonProviderKey] = broadcastSeason.Key", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("stateByCollectionItemId", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("stateByItemId?.CollectionKey", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("Collection image plan for {0}", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("Replacing {0} Emby-generated {1} image(s)", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("GetCollectionMemberArtAsync", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("ConvertImageToLocal", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("Could not localize the {0} image", embyDownloader, StringComparison.Ordinal);
 
         foreach (var rendererMarker in new[]
                  {
@@ -145,12 +163,14 @@ public sealed class SeasonFeatureParityTests
     }
 
     [Fact]
-    public void EmbySynchronizer_DefendsEmptyCollectionsAndRootSeriesParents()
+    public void EmbySynchronizer_UsesBoxSetItemQueriesAndDefendsRootSeriesParents()
     {
         var root = FindRepositoryRoot();
         var downloader = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs"));
 
-        Assert.Contains("GetChildrenIds(new InternalItemsQuery()) ?? Array.Empty<long>()", downloader, StringComparison.Ordinal);
+        Assert.Contains("GetItemList(new InternalItemsQuery", downloader, StringComparison.Ordinal);
+        Assert.Contains("GetItemIdList(new InternalItemsQuery", downloader, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetChildrenIds(new InternalItemsQuery", downloader, StringComparison.Ordinal);
         Assert.Contains("?? _libraryManager.RootFolder", downloader, StringComparison.Ordinal);
     }
 
