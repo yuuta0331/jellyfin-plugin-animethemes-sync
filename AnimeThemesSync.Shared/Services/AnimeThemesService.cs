@@ -20,6 +20,7 @@ namespace AnimeThemesSync.Shared.Services;
 public sealed class AnimeThemesService
 {
     private const int SearchCacheLimit = 100;
+    private const int AnimeCacheLimit = 500;
     private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
     private static readonly ConcurrentDictionary<string, AnimeCacheEntry> _animeCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly object _searchCacheLock = new();
@@ -476,6 +477,22 @@ public sealed class AnimeThemesService
         if (!string.IsNullOrWhiteSpace(anime.Slug))
         {
             _animeCache[$"slug:{anime.Slug}"] = entry;
+        }
+
+        if (_animeCache.Count <= AnimeCacheLimit)
+        {
+            return;
+        }
+
+        // Entries carry a TTL but the key count was unbounded; evicted entries are
+        // still served quickly from the persistent provider cache.
+        foreach (var staleKey in _animeCache
+                     .OrderBy(pair => pair.Value.CreatedAtUtc)
+                     .Take(_animeCache.Count - AnimeCacheLimit)
+                     .Select(pair => pair.Key)
+                     .ToList())
+        {
+            _animeCache.TryRemove(staleKey, out _);
         }
     }
 
