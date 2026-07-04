@@ -330,6 +330,7 @@ public sealed class ThemeDownloader : IScheduledTask
         {
             await SeasonMetadataOperationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             entered = true;
+            _seasonFinderStore.PruneProviderCaches(Math.Clamp(Plugin.Instance?.Configuration?.ProviderResponseCacheTtlDays ?? 30, 1, 365));
             await SynchronizeSeasonMetadataAsync(
                 series,
                 cancellationToken,

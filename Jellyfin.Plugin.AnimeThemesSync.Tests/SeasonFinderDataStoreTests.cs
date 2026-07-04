@@ -507,6 +507,50 @@ public sealed class SeasonFinderDataStoreTests
     }
 
     [Fact]
+    public void CacheMaintenanceStatus_IsReadOnlyAndPruneRemovesRetiredRows()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            store.EnsureInitialized();
+            var retired = DateTimeOffset.UtcNow.AddDays(-400).ToString("O");
+            using (var connection = new SqliteConnection("Data Source=" + store.DatabasePath + ";Pooling=False"))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = """
+                    INSERT INTO ApiFetchCache (ServerKind, CacheKey, Provider, PayloadJson, CreatedAtUtc, ExpiresAtUtc)
+                    VALUES ('Test', 'animethemes:slug:retired', 'AnimeThemes', '{}', $created, $created);
+                    INSERT INTO AnimeSearchCache (ServerKind, QueryKey, Query, Year, ResultJson, CreatedAtUtc, ExpiresAtUtc)
+                    VALUES ('Test', 'retired|', 'retired', NULL, '[]', $created, $created);
+                    """;
+                command.Parameters.AddWithValue("$created", retired);
+                command.ExecuteNonQuery();
+            }
+
+            _ = store.GetCacheMaintenanceStatus(30, 30);
+            Assert.Equal(2, CountProviderCacheRows(store.DatabasePath));
+
+            store.PruneProviderCaches(30);
+            Assert.Equal(0, CountProviderCacheRows(store.DatabasePath));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    private static int CountProviderCacheRows(string databasePath)
+    {
+        using var connection = new SqliteConnection("Data Source=" + databasePath + ";Pooling=False");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT (SELECT COUNT(*) FROM ApiFetchCache) + (SELECT COUNT(*) FROM AnimeSearchCache);";
+        return Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    [Fact]
     public void ClearProviderCache_PreservesSeasonMetadataAndBrowserProjection()
     {
         var directory = CreateTempDirectory();

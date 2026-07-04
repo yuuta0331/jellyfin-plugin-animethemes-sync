@@ -55,6 +55,8 @@ public interface ISeasonFinderDataStore
 
     CacheMaintenanceStatus GetCacheMaintenanceStatus(int seasonMetadataTtlDays, int providerResponseTtlDays);
 
+    void PruneProviderCaches(int providerResponseTtlDays);
+
     void SetRebuildError(string? error);
 
     void ClearCache();

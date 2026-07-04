@@ -960,6 +960,28 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
         }
     }
 
+    /// <summary>
+    /// Removes provider cache rows that fell out of the stale-retention window
+    /// (TTL plus <see cref="ApiFetchCacheRetention"/>). Writes also prune on upsert;
+    /// this explicit pass keeps idle databases tidy and keeps
+    /// <see cref="GetCacheMaintenanceStatus"/> read-only.
+    /// </summary>
+    public void PruneProviderCaches(int providerResponseTtlDays)
+    {
+        lock (_syncRoot)
+        {
+            EnsureInitialized();
+            providerResponseTtlDays = Math.Clamp(providerResponseTtlDays, 1, 365);
+            var retentionCutoff = FormatDate(DateTimeOffset.UtcNow.AddDays(-providerResponseTtlDays).Subtract(ApiFetchCacheRetention));
+            using var connection = OpenConnection();
+            InTransaction(connection, () =>
+            {
+                Execute(connection, "DELETE FROM ApiFetchCache WHERE ServerKind = $serverKind AND CreatedAtUtc < $retention;", ("$serverKind", ServerKind), ("$retention", retentionCutoff));
+                Execute(connection, "DELETE FROM AnimeSearchCache WHERE ServerKind = $serverKind AND CreatedAtUtc < $retention;", ("$serverKind", ServerKind), ("$retention", retentionCutoff));
+            });
+        }
+    }
+
     public CacheMaintenanceStatus GetCacheMaintenanceStatus(int seasonMetadataTtlDays, int providerResponseTtlDays)
     {
         lock (_syncRoot)
@@ -971,9 +993,6 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
             var seasonCutoff = now.AddDays(-seasonMetadataTtlDays);
             var providerCutoff = now.AddDays(-providerResponseTtlDays);
             using var connection = OpenConnection();
-            var retentionCutoff = FormatDate(providerCutoff.Subtract(ApiFetchCacheRetention));
-            Execute(connection, "DELETE FROM ApiFetchCache WHERE ServerKind = $serverKind AND CreatedAtUtc < $retention;", ("$serverKind", ServerKind), ("$retention", retentionCutoff));
-            Execute(connection, "DELETE FROM AnimeSearchCache WHERE ServerKind = $serverKind AND CreatedAtUtc < $retention;", ("$serverKind", ServerKind), ("$retention", retentionCutoff));
             var seasonResolved = new List<DateTimeOffset>();
             var seasonErrors = 0;
             string? lastSeasonError = null;
