@@ -223,17 +223,28 @@ public sealed class AnimeThemesDataStore
                 .Where(i => Guid.TryParse(i.ItemId, out _))
                 .Where(i => MatchesBrowserQuery(i, libraryId, searchTerm, itemType, linkFilter, savedFilter, broadcastSeason));
 
-            var broadcastSeasons = document.BrowserItems
-                .Where(i => IsCurrentServer(i.ServerKind))
-                .Where(i => string.IsNullOrWhiteSpace(libraryId) || string.Equals(i.LibraryId, libraryId, StringComparison.OrdinalIgnoreCase))
-                .Where(i => string.IsNullOrWhiteSpace(itemType) || string.Equals(itemType, "all", StringComparison.OrdinalIgnoreCase) || string.Equals(i.ItemType, itemType, StringComparison.OrdinalIgnoreCase))
-                .SelectMany(i => i.BroadcastSeasons ?? [])
-                .GroupBy(i => i.Key, StringComparer.OrdinalIgnoreCase)
-                .Select(i => i.First())
-                .OrderByDescending(i => i.Year)
-                .ThenByDescending(i => GetSeasonOrder(i.Season))
-                .ThenBy(i => i.Label, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            // The aggregation walks every stored item, so memoize it per filter until
+            // the next document write invalidates the memo.
+            var broadcastSeasonsKey = string.Join(
+                "|",
+                ServerKind,
+                libraryId?.Trim() ?? string.Empty,
+                (itemType ?? string.Empty).Trim().ToLowerInvariant());
+            if (!State.BroadcastSeasonsByFilter.TryGetValue(broadcastSeasonsKey, out var broadcastSeasons))
+            {
+                broadcastSeasons = document.BrowserItems
+                    .Where(i => IsCurrentServer(i.ServerKind))
+                    .Where(i => string.IsNullOrWhiteSpace(libraryId) || string.Equals(i.LibraryId, libraryId, StringComparison.OrdinalIgnoreCase))
+                    .Where(i => string.IsNullOrWhiteSpace(itemType) || string.Equals(itemType, "all", StringComparison.OrdinalIgnoreCase) || string.Equals(i.ItemType, itemType, StringComparison.OrdinalIgnoreCase))
+                    .SelectMany(i => i.BroadcastSeasons ?? [])
+                    .GroupBy(i => i.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(i => i.First())
+                    .OrderByDescending(i => i.Year)
+                    .ThenByDescending(i => GetSeasonOrder(i.Season))
+                    .ThenBy(i => i.Label, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                State.BroadcastSeasonsByFilter[broadcastSeasonsKey] = broadcastSeasons;
+            }
 
             filtered = SortBrowserItems(filtered, sortBy, sortOrder);
             var materialized = filtered.ToList();
@@ -583,6 +594,7 @@ public sealed class AnimeThemesDataStore
         }
 
         State.Cache = document;
+        State.BroadcastSeasonsByFilter.Clear();
     }
 
     /// <summary>
@@ -900,6 +912,9 @@ public sealed class AnimeThemesDataStore
     private sealed class SharedState
     {
         public CacheDocument? Cache { get; set; }
+
+        // Memoized QueryBrowserItems aggregations, cleared on every document write.
+        public Dictionary<string, List<BroadcastSeasonValue>> BroadcastSeasonsByFilter { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private sealed class CacheDocument

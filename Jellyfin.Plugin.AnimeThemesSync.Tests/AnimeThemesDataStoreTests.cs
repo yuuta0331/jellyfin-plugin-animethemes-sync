@@ -389,6 +389,35 @@ public sealed class AnimeThemesDataStoreTests
     }
 
     [Fact]
+    public void BrowserItems_BroadcastSeasonAggregationRefreshesAfterWrites()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var winter = CreateBrowserItem("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "Winter Show", "Series", 0, 0, 0, 0);
+            winter.BroadcastSeasons.Add(new BroadcastSeasonValue("2024-winter", "Winter 2024", 2024, "winter"));
+            store.ReplaceBrowserItems(new[] { winter }, Array.Empty<(string, string?, int)>());
+
+            // Query twice so the second response is served from the memo.
+            _ = store.QueryBrowserItems(null, 0, 80, "SortName", "Ascending", null, "all", "all", "all");
+            var memoized = store.QueryBrowserItems(null, 0, 80, "SortName", "Ascending", null, "all", "all", "all");
+            Assert.Equal(new[] { "2024-winter" }, memoized.BroadcastSeasons!.Select(i => i.Key));
+
+            var spring = CreateBrowserItem("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "Spring Show", "Series", 0, 0, 0, 0);
+            spring.BroadcastSeasons.Add(new BroadcastSeasonValue("2025-spring", "Spring 2025", 2025, "spring"));
+            store.UpsertBrowserItem(spring);
+
+            var refreshed = store.QueryBrowserItems(null, 0, 80, "SortName", "Ascending", null, "all", "all", "all");
+            Assert.Equal(new[] { "2025-spring", "2024-winter" }, refreshed.BroadcastSeasons!.Select(i => i.Key));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
     public void LoadDocument_RecoversFromInterruptedSaveWithValidTempFile()
     {
         var directory = CreateTempDirectory();
