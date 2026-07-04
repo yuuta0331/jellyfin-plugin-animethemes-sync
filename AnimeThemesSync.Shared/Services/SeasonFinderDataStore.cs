@@ -1151,7 +1151,9 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
             var seasonRows = Convert.ToInt32(countCommand.ExecuteScalar(), CultureInfo.InvariantCulture);
             var freshSeason = seasonResolved.Count(i => i > seasonCutoff);
             var freshProvider = providerCreated.Count(i => i > providerCutoff);
-            var searchEntries = providerCreated.Count - animeThemesEntries - aniListEntries;
+            // ApiFetchCache rows with an unparseable CreatedAtUtc are counted in the
+            // provider buckets but not in providerCreated, so clamp the derived value.
+            var searchEntries = Math.Max(0, providerCreated.Count - animeThemesEntries - aniListEntries);
             return new CacheMaintenanceStatus(
                 seasonResolved.Count,
                 seasonRows,

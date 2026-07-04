@@ -70,10 +70,10 @@ public sealed class AnimeThemesService
             return cached;
         }
 
-        var stale = GetPersistedAnime(cacheKey, requireFresh: false);
-        var persisted = GetPersistedAnime(cacheKey, requireFresh: true);
+        var (persisted, stale) = GetPersistedAnimeStates(cacheKey);
         if (persisted != null)
         {
+            CacheAnime(cacheKey, persisted);
             return persisted;
         }
 
@@ -130,10 +130,10 @@ public sealed class AnimeThemesService
             return cached;
         }
 
-        var stale = GetPersistedAnime(cacheKey, requireFresh: false);
-        var persisted = GetPersistedAnime(cacheKey, requireFresh: true);
+        var (persisted, stale) = GetPersistedAnimeStates(cacheKey);
         if (persisted != null)
         {
+            CacheAnime(cacheKey, persisted);
             return persisted;
         }
 
@@ -390,7 +390,12 @@ public sealed class AnimeThemesService
         }
     }
 
-    private AnimeThemesAnime? GetPersistedAnime(string cacheKey, bool requireFresh)
+    /// <summary>
+    /// Reads the persisted entry once and classifies it: Fresh is set while the entry
+    /// is within the provider TTL, Stale is set while it is still usable as a fallback
+    /// (TTL plus the stale retention window).
+    /// </summary>
+    private (AnimeThemesAnime? Fresh, AnimeThemesAnime? Stale) GetPersistedAnimeStates(string cacheKey)
     {
         var entry = _persistentCache?.GetApiFetchCache("animethemes:" + cacheKey.ToLowerInvariant());
         if (entry == null ||
@@ -400,24 +405,33 @@ public sealed class AnimeThemesService
                 DateTimeStyles.AssumeUniversal,
                 out var created))
         {
-            return null;
+            return (null, null);
         }
 
-        var ageLimitDays = GetProviderCacheTtlDays() + (requireFresh ? 0 : StaleRetentionDays);
-        if (created.AddDays(ageLimitDays) <= DateTimeOffset.UtcNow)
+        var now = DateTimeOffset.UtcNow;
+        var ttlDays = GetProviderCacheTtlDays();
+        if (created.AddDays(ttlDays + StaleRetentionDays) <= now)
         {
-            return null;
+            return (null, null);
         }
 
+        AnimeThemesAnime? anime;
         try
         {
-            return JsonSerializer.Deserialize<AnimeThemesAnime>(entry.PayloadJson, _jsonOptions);
+            anime = JsonSerializer.Deserialize<AnimeThemesAnime>(entry.PayloadJson, _jsonOptions);
         }
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Ignoring invalid persistent AnimeThemes cache entry {CacheKey}.", cacheKey);
-            return null;
+            return (null, null);
         }
+
+        if (anime == null)
+        {
+            return (null, null);
+        }
+
+        return created.AddDays(ttlDays) > now ? (anime, anime) : (null, anime);
     }
 
     private void PersistAnime(string cacheKey, AnimeThemesAnime anime)

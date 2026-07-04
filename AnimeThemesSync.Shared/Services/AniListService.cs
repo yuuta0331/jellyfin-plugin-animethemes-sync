@@ -270,8 +270,7 @@ public sealed class AniListService
 
     private async Task<AniListMedia?> ExecuteMediaWithRelations(int id, CancellationToken cancellationToken)
     {
-        var stale = GetPersistedRelation(id, requireFresh: false);
-        var persisted = GetPersistedRelation(id, requireFresh: true);
+        var (persisted, stale) = GetPersistedRelationStates(id);
         if (persisted != null)
         {
             return persisted;
@@ -386,21 +385,39 @@ public sealed class AniListService
         }
     }
 
-    private AniListMedia? GetPersistedRelation(int id, bool requireFresh)
+    /// <summary>
+    /// Reads the persisted entry once and classifies it: Fresh is set while the entry
+    /// is within the provider TTL, Stale is set while it is still usable as a fallback
+    /// (TTL plus the stale retention window).
+    /// </summary>
+    private (AniListMedia? Fresh, AniListMedia? Stale) GetPersistedRelationStates(int id)
     {
+        var media = ReadPersistedRelation(id, out var created);
+        if (media == null)
+        {
+            return (null, null);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var ttlDays = GetProviderCacheTtlDays();
+        if (created.AddDays(ttlDays + StaleRetentionDays) <= now)
+        {
+            return (null, null);
+        }
+
+        return created.AddDays(ttlDays) > now ? (media, media) : (null, media);
+    }
+
+    private AniListMedia? ReadPersistedRelation(int id, out DateTimeOffset created)
+    {
+        created = default;
         var entry = _persistentCache?.GetApiFetchCache("anilist:relations:" + id.ToString(CultureInfo.InvariantCulture));
         if (entry == null ||
             !DateTimeOffset.TryParse(
                 entry.CreatedAtUtc,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal,
-                out var created))
-        {
-            return null;
-        }
-
-        var ageLimitDays = GetProviderCacheTtlDays() + (requireFresh ? 0 : StaleRetentionDays);
-        if (created.AddDays(ageLimitDays) <= DateTimeOffset.UtcNow)
+                out created))
         {
             return null;
         }

@@ -1038,7 +1038,9 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
 
             var freshSeason = seasonResolved.Count(i => i > seasonCutoff);
             var freshProvider = providerCreated.Count(i => i > providerCutoff);
-            var searchEntries = providerCreated.Count - animeThemesEntries - aniListEntries;
+            // ApiFetchCache rows with an unparseable CreatedAtUtc are counted in the
+            // provider buckets but not in providerCreated, so clamp the derived value.
+            var searchEntries = Math.Max(0, providerCreated.Count - animeThemesEntries - aniListEntries);
             return new CacheMaintenanceStatus(
                 seasonResolved.Count,
                 ScalarInt(connection, "SELECT COUNT(*) FROM SeasonMetadataRows WHERE ServerKind = $serverKind;", ("$serverKind", ServerKind)),

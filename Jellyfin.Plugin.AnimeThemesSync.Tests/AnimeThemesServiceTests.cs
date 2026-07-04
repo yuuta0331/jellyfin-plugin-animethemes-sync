@@ -219,6 +219,32 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
         }
 
         [Fact]
+        public async Task GetAnimeBySlug_FreshPersistentHit_IsServedFromMemoryOnRepeat()
+        {
+            var slug = "persistent-then-memory-" + Guid.NewGuid().ToString("N");
+            var cache = new Mock<ISeasonFinderDataStore>();
+            cache.Setup(i => i.GetApiFetchCache("animethemes:slug:" + slug)).Returns(new ApiFetchCacheEntry
+            {
+                CacheKey = "animethemes:slug:" + slug,
+                Provider = "AnimeThemes",
+                PayloadJson = "{\"id\":777,\"name\":\"Persistent\",\"slug\":\"" + slug + "\"}",
+                CreatedAtUtc = DateTimeOffset.UtcNow.ToString("O"),
+                ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(1).ToString("O"),
+            });
+            var limiter = new RateLimiter(new Mock<ILogger<RateLimiter>>().Object, "AnimeThemes", 80);
+            var service = new AnimeThemesService(_mockHttpClientFactory.Object, _mockLogger.Object, limiter, cache.Object);
+
+            var first = await service.GetAnimeBySlug(slug, CancellationToken.None);
+            var second = await service.GetAnimeBySlug(slug, CancellationToken.None);
+
+            Assert.NotNull(first);
+            Assert.NotNull(second);
+            Assert.Equal("Persistent", second.Name);
+            cache.Verify(i => i.GetApiFetchCache("animethemes:slug:" + slug), Times.Once);
+            _mockHttpClientFactory.Verify(i => i.CreateClient("AnimeThemes"), Times.Never);
+        }
+
+        [Fact]
         public async Task GetAnimeBySlug_RateLimited_RetriesTwiceThenUsesStaleCache()
         {
             var slug = "rate-limited-" + Guid.NewGuid().ToString("N");
