@@ -474,10 +474,10 @@ public sealed class ThemeDownloader : IScheduledTask
 
     private void RefreshBrowserCacheForItem(BaseItem item)
     {
-        var record = BuildBrowserCacheRecord(item);
-        if (record != null)
+        var target = ResolveBrowserCacheTarget(item);
+        if (target != null)
         {
-            _dataStore.UpsertBrowserItem(record);
+            _dataStore.UpsertBrowserItem(BuildBrowserTargetRecord(target));
         }
     }
 
@@ -487,37 +487,97 @@ public sealed class ThemeDownloader : IScheduledTask
     /// </summary>
     private void RefreshBrowserCacheForItems(IEnumerable<BaseItem> items)
     {
-        var records = new List<BrowserItemRecord>();
-        var seenItemIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _dataStore.UpsertBrowserItems(ResolveBrowserCacheTargets(items)
+            .Select(BuildBrowserTargetRecord)
+            .ToList());
+    }
+
+    /// <summary>
+    /// Applies a debounced batch of library change events to the browser cache.
+    /// Additions and updates refresh only the affected items without network calls;
+    /// removals and an unbuilt cache fall back to a full rebuild because the caches
+    /// have no per-item delete path.
+    /// </summary>
+    public void ApplyLibraryChanges(IReadOnlyCollection<BaseItem> changedItems, bool anyItemRemoved)
+    {
+        if (anyItemRemoved || !_dataStore.IsBrowserCacheReady() || !_seasonFinderStore.IsCacheReady())
+        {
+            _ = StartBrowserCacheRebuild();
+            return;
+        }
+
+        if (changedItems.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var targets = ResolveBrowserCacheTargets(changedItems);
+            _dataStore.UpsertBrowserItems(targets.Select(BuildBrowserTargetRecord).ToList());
+            foreach (var series in targets.OfType<Series>())
+            {
+                RefreshSeasonFinderRowsForSeries(series);
+            }
+
+            _logger.LogDebug("Applied {Count} changed library items to the AnimeThemes browser cache.", targets.Count);
+        }
+        catch (Exception ex)
+        {
+            // Runs on a timer thread; an unhandled exception would take down the host.
+            _logger.LogError(ex, "Failed to apply library changes to the AnimeThemes browser cache.");
+        }
+    }
+
+    private List<BaseItem> ResolveBrowserCacheTargets(IEnumerable<BaseItem> items)
+    {
+        var targets = new Dictionary<Guid, BaseItem>();
         foreach (var item in items)
         {
-            var record = BuildBrowserCacheRecord(item);
-            if (record != null && seenItemIds.Add(record.ItemId))
+            var target = ResolveBrowserCacheTarget(item);
+            if (target != null)
             {
-                records.Add(record);
+                targets[target.Id] = target;
             }
         }
 
-        _dataStore.UpsertBrowserItems(records);
+        return [.. targets.Values];
     }
 
-    private BrowserItemRecord? BuildBrowserCacheRecord(BaseItem item)
+    private BaseItem? ResolveBrowserCacheTarget(BaseItem item)
     {
+        if (item is Episode episode)
+        {
+            item = episode.Series ?? item;
+        }
+
         if (item is Season season)
         {
             item = FindSeriesForSeason(season) ?? item;
         }
 
-        if (item is not Series and not Movie)
-        {
-            return null;
-        }
+        return item is Series or Movie ? item : null;
+    }
 
-        var libraryId = ResolveLibraryId(item);
-        var broadcastSeasons = item is Series seriesItem
+    private BrowserItemRecord BuildBrowserTargetRecord(BaseItem target)
+    {
+        var libraryId = ResolveLibraryId(target);
+        var broadcastSeasons = target is Series seriesItem
             ? GetBroadcastSeasons(_seasonFinderStore.GetSeasonAutomationState(seriesItem.Id.ToString("D")))
             : [];
-        return BuildBrowserItemRecord(item, libraryId, broadcastSeasons);
+        return BuildBrowserItemRecord(target, libraryId, broadcastSeasons);
+    }
+
+    private void RefreshSeasonFinderRowsForSeries(Series series)
+    {
+        var libraryId = ResolveLibraryId(series);
+        foreach (var record in GetSeasonItems(series)
+                     .Where(IsSeasonEligibleForThemeMatching)
+                     .Where(season => !string.IsNullOrWhiteSpace(season.Path))
+                     .Select(season => BuildSeasonFinderRecord(series, season, libraryId)))
+        {
+            _seasonFinderStore.UpsertRow(record);
+        }
     }
 
     private void ImportLegacyExtrasManifestForPath(string? itemPath, ref int manifests, ref int files)

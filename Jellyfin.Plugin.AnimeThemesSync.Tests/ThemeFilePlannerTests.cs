@@ -1316,6 +1316,9 @@ public class ThemeFilePlannerTests
             Assert.Contains("item = FindSeriesForSeason(season) ?? item;", content, StringComparison.Ordinal);
             Assert.Contains("RefreshBrowserCacheForItem(series);", content, StringComparison.Ordinal);
             Assert.Contains("FileDeleteRetryService.DeleteAsync", content, StringComparison.Ordinal);
+            Assert.Contains("public void ApplyLibraryChanges(IReadOnlyCollection<BaseItem> changedItems, bool anyItemRemoved)", content, StringComparison.Ordinal);
+            Assert.Contains("item = episode.Series ?? item;", content, StringComparison.Ordinal);
+            Assert.Contains("RefreshSeasonFinderRowsForSeries(series);", content, StringComparison.Ordinal);
         }
 
         var retryService = File.ReadAllText(Path.Combine(root, "AnimeThemesSync.Shared", "Services", "FileDeleteRetryService.cs"));
