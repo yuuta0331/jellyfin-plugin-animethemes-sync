@@ -211,8 +211,22 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
                 {
                     connection.Execute(schemaStatement + ";");
                 }
+                var storedSchemaVersion = GetStoredSchemaVersion(connection);
+                if (storedSchemaVersion < CurrentSchemaVersion)
+                {
+                    // Schema history: v1 introduced the base tables, v2 added the season
+                    // automation tables, v3 added ManagedSeasonCollectionAssets. All of these
+                    // are new tables, which the CREATE TABLE IF NOT EXISTS block above already
+                    // provides for older databases. Changes to columns of existing tables must
+                    // be applied here as idempotent steps gated on storedSchemaVersion, e.g.:
+                    //   if (storedSchemaVersion < 4)
+                    //   {
+                    //       EnsureColumn(connection, "SeasonFinderRows", "NewColumn", "TEXT NULL");
+                    //   }
+                    UpsertMetadata(connection, "SchemaVersion", CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture));
+                }
+
                 MigrateDocumentStore(connection);
-                UpsertMetadata(connection, "SchemaVersion", CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture));
             });
             _initialized = true;
         }
@@ -1061,6 +1075,32 @@ internal sealed class EmbySeasonFinderDataStore : ISeasonFinderDataStore
     private static void UpsertMetadata(IDatabaseConnection connection, string key, string value) =>
         Execute(connection, "INSERT INTO SchemaMetadata (Key, Value) VALUES ($key, $value) ON CONFLICT(Key) DO UPDATE SET Value = excluded.Value;",
             ("$key", key), ("$value", value));
+
+    private static int GetStoredSchemaVersion(IDatabaseConnection connection) =>
+        GetMetadata(connection, "SchemaVersion") is string value &&
+        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : 0;
+
+    /// <summary>
+    /// Adds a column to an existing table when it is missing. Migration steps must stay
+    /// idempotent because databases created before SchemaMetadata tracking report version 0.
+    /// </summary>
+    internal static void EnsureColumn(IDatabaseConnection connection, string table, string column, string definition)
+    {
+        using (var statement = connection.PrepareStatement("PRAGMA table_info(" + table + ");"))
+        {
+            while (statement.MoveNext())
+            {
+                if (string.Equals(statement.Current.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+        }
+
+        connection.Execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition + ";");
+    }
 
     private static string BuildQueryKey(string query, int? year) =>
         string.Join("|", query.Trim().ToLowerInvariant(), year?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);

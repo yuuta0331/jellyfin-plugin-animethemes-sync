@@ -215,7 +215,21 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
                     PRIMARY KEY (ServerKind, CollectionKey)
                 );
                 """);
-            UpsertMetadata(connection, transaction, "SchemaVersion", CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture));
+            var storedSchemaVersion = GetStoredSchemaVersion(connection, transaction);
+            if (storedSchemaVersion < CurrentSchemaVersion)
+            {
+                // Schema history: v1 introduced the base tables, v2 added the season
+                // automation tables, v3 added ManagedSeasonCollectionAssets. All of these
+                // are new tables, which the CREATE TABLE IF NOT EXISTS block above already
+                // provides for older databases. Changes to columns of existing tables must
+                // be applied here as idempotent steps gated on storedSchemaVersion, e.g.:
+                //   if (storedSchemaVersion < 4)
+                //   {
+                //       EnsureColumn(connection, transaction, "SeasonFinderRows", "NewColumn", "TEXT NULL");
+                //   }
+                UpsertMetadata(connection, transaction, "SchemaVersion", CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture));
+            }
+
             transaction.Commit();
             _initialized = true;
         }
@@ -1077,6 +1091,40 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
         command.CommandText = "SELECT Value FROM SchemaMetadata WHERE Key = $key;";
         command.Parameters.AddWithValue("$key", key);
         return command.ExecuteScalar() as string;
+    }
+
+    private static int GetStoredSchemaVersion(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT Value FROM SchemaMetadata WHERE Key = 'SchemaVersion';";
+        return command.ExecuteScalar() is string value &&
+               int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : 0;
+    }
+
+    /// <summary>
+    /// Adds a column to an existing table when it is missing. Migration steps must stay
+    /// idempotent because databases created before SchemaMetadata tracking report version 0.
+    /// </summary>
+    internal static void EnsureColumn(SqliteConnection connection, SqliteTransaction? transaction, string table, string column, string definition)
+    {
+        using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "PRAGMA table_info(" + table + ");";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+        }
+
+        Execute(connection, transaction, "ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition + ";");
     }
 
     private static void UpsertMetadata(SqliteConnection connection, SqliteTransaction transaction, string key, string value)

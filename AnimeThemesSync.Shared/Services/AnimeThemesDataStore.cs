@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -17,11 +18,16 @@ public sealed class AnimeThemesDataStore
     private const int CurrentSchemaVersion = 5;
     private const int DefaultLimit = 80;
     private const int MaxLimit = 100;
+
+    // Emby constructs a store per API request while the scheduled task holds its own
+    // instance, so every instance that points at the same cache file must share one
+    // lock and one in-memory document. Per-instance state would let concurrent
+    // full-document saves overwrite each other and collide on the temp file.
+    private static readonly ConcurrentDictionary<string, SharedState> SharedStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly IAnimeThemesDataPathProvider _pathProvider;
     private readonly IAnimeThemesServerIdentityProvider _serverIdentity;
     private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = false };
-    private readonly object _syncRoot = new();
-    private CacheDocument? _cache;
+    private SharedState? _state;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AnimeThemesDataStore"/> class.
@@ -42,12 +48,24 @@ public sealed class AnimeThemesDataStore
     /// </summary>
     public string ServerKind => _serverIdentity.ServerKind;
 
+    private SharedState State => _state ??= SharedStates.GetOrAdd(Path.GetFullPath(DatabasePath), _ => new SharedState());
+
+    /// <summary>
+    /// Detaches this store's shared in-memory state so the next access reloads from
+    /// disk, simulating a process restart in tests.
+    /// </summary>
+    internal void ResetSharedStateForTests()
+    {
+        SharedStates.TryRemove(Path.GetFullPath(DatabasePath), out _);
+        _state = null;
+    }
+
     /// <summary>
     /// Ensures that the cache file exists and can be read.
     /// </summary>
     public void EnsureInitialized()
     {
-        lock (_syncRoot)
+        lock (State)
         {
             _ = LoadDocument();
         }
@@ -59,7 +77,7 @@ public sealed class AnimeThemesDataStore
     /// </summary>
     public void ClearBrowserCache()
     {
-        lock (_syncRoot)
+        lock (State)
         {
             var document = LoadDocument();
             document.BrowserItems.RemoveAll(i => IsCurrentServer(i.ServerKind));
@@ -79,7 +97,7 @@ public sealed class AnimeThemesDataStore
     /// </summary>
     public void ReplaceBrowserItems(IEnumerable<BrowserItemRecord> records, IEnumerable<(string LibraryId, string? LibraryName, int ItemCount)> libraries)
     {
-        lock (_syncRoot)
+        lock (State)
         {
             var document = LoadDocument();
             document.BrowserItems.RemoveAll(i => IsCurrentServer(i.ServerKind));
@@ -120,11 +138,34 @@ public sealed class AnimeThemesDataStore
     /// </summary>
     public void UpsertBrowserItem(BrowserItemRecord record)
     {
-        lock (_syncRoot)
+        UpsertBrowserItems([record]);
+    }
+
+    /// <summary>
+    /// Upserts multiple BrowserItems rows with a single document write.
+    /// Later records win when the same ItemId appears more than once.
+    /// </summary>
+    public void UpsertBrowserItems(IReadOnlyCollection<BrowserItemRecord> records)
+    {
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        lock (State)
         {
             var document = LoadDocument();
-            document.BrowserItems.RemoveAll(i => IsCurrentServer(i.ServerKind) && string.Equals(i.ItemId, record.ItemId, StringComparison.OrdinalIgnoreCase));
-            document.BrowserItems.Add(ToStoredBrowserItem(record));
+            var itemIds = records
+                .Select(record => record.ItemId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            document.BrowserItems.RemoveAll(i => IsCurrentServer(i.ServerKind) && itemIds.Contains(i.ItemId));
+            foreach (var record in records
+                         .GroupBy(record => record.ItemId, StringComparer.OrdinalIgnoreCase)
+                         .Select(group => group.Last()))
+            {
+                document.BrowserItems.Add(ToStoredBrowserItem(record));
+            }
+
             SaveDocument(document);
         }
     }
@@ -134,7 +175,7 @@ public sealed class AnimeThemesDataStore
     /// </summary>
     public SeasonMetadataState? GetSeasonMetadataState(string seriesItemId)
     {
-        lock (_syncRoot)
+        lock (State)
         {
             return LoadDocument().SeasonMetadataStates
                 .FirstOrDefault(i => IsCurrentServer(i.ServerKind) && string.Equals(i.SeriesItemId, seriesItemId, StringComparison.OrdinalIgnoreCase));
@@ -146,7 +187,7 @@ public sealed class AnimeThemesDataStore
     /// </summary>
     public void SaveSeasonMetadataState(SeasonMetadataState state)
     {
-        lock (_syncRoot)
+        lock (State)
         {
             var document = LoadDocument();
             document.SeasonMetadataStates.RemoveAll(i =>
@@ -172,13 +213,14 @@ public sealed class AnimeThemesDataStore
         string? savedFilter,
         string? broadcastSeason = null)
     {
-        lock (_syncRoot)
+        lock (State)
         {
             var document = LoadDocument();
             var normalizedStart = Math.Max(0, startIndex ?? 0);
             var normalizedLimit = Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit);
             var filtered = document.BrowserItems
                 .Where(i => IsCurrentServer(i.ServerKind))
+                .Where(i => Guid.TryParse(i.ItemId, out _))
                 .Where(i => MatchesBrowserQuery(i, libraryId, searchTerm, itemType, linkFilter, savedFilter, broadcastSeason));
 
             var broadcastSeasons = document.BrowserItems
@@ -217,7 +259,7 @@ public sealed class AnimeThemesDataStore
     /// </summary>
     public ThemeBrowserSummary GetBrowserSummary()
     {
-        lock (_syncRoot)
+        lock (State)
         {
             var items = LoadDocument().BrowserItems.Where(i => IsCurrentServer(i.ServerKind)).ToList();
             return new ThemeBrowserSummary(
@@ -238,7 +280,7 @@ public sealed class AnimeThemesDataStore
     /// </summary>
     public AnimeThemesStorageStatus GetStorageStatus(bool rebuildRunning)
     {
-        lock (_syncRoot)
+        lock (State)
         {
             var document = LoadDocument();
             var file = new FileInfo(DatabasePath);
@@ -260,7 +302,7 @@ public sealed class AnimeThemesDataStore
     /// </summary>
     public bool IsBrowserCacheReady()
     {
-        lock (_syncRoot)
+        lock (State)
         {
             return IsBrowserCacheReady(LoadDocument());
         }
@@ -271,7 +313,7 @@ public sealed class AnimeThemesDataStore
     /// </summary>
     public void SetBrowserCacheRebuildError(string? error)
     {
-        lock (_syncRoot)
+        lock (State)
         {
             var document = LoadDocument();
             var state = GetOrCreateServerCacheState(document);
@@ -291,7 +333,7 @@ public sealed class AnimeThemesDataStore
             return null;
         }
 
-        lock (_syncRoot)
+        lock (State)
         {
             return LoadDocument().ExtraFiles
                 .Where(i => IsCurrentServer(i.ServerKind) && string.Equals(i.Key, plan.Key, StringComparison.OrdinalIgnoreCase))
@@ -321,7 +363,7 @@ public sealed class AnimeThemesDataStore
         }
 
         var info = new FileInfo(plan.TargetPath);
-        lock (_syncRoot)
+        lock (State)
         {
             var document = LoadDocument();
             var logicalItemId = plan.OutputTarget?.LogicalItemId.ToString("D");
@@ -401,7 +443,7 @@ public sealed class AnimeThemesDataStore
     {
         var logicalItemId = outputTarget.LogicalItemId.ToString("D");
         var info = new FileInfo(path);
-        lock (_syncRoot)
+        lock (State)
         {
             var document = LoadDocument();
             document.ThemeFiles.RemoveAll(i =>
@@ -431,7 +473,7 @@ public sealed class AnimeThemesDataStore
 
     public IReadOnlyList<ThemeFileRegistryEntry> GetThemeFiles()
     {
-        lock (_syncRoot)
+        lock (State)
         {
             return LoadDocument().ThemeFiles
                 .Where(file => IsCurrentServer(file.ServerKind) && Guid.TryParse(file.LogicalItemId, out _))
@@ -453,7 +495,7 @@ public sealed class AnimeThemesDataStore
             return;
         }
 
-        lock (_syncRoot)
+        lock (State)
         {
             var document = LoadDocument();
             document.ThemeFiles.RemoveAll(file => IsCurrentServer(file.ServerKind) && normalized.Contains(file.Path));
@@ -463,37 +505,38 @@ public sealed class AnimeThemesDataStore
 
     private CacheDocument LoadDocument()
     {
-        if (_cache != null)
+        if (State.Cache != null)
         {
-            return _cache;
+            return State.Cache;
         }
 
         Directory.CreateDirectory(_pathProvider.GetPluginDataDirectory());
+        RecoverFromIncompleteSave();
         if (!File.Exists(DatabasePath))
         {
-            _cache = new CacheDocument();
-            SaveDocument(_cache);
-            return _cache;
+            State.Cache = new CacheDocument();
+            SaveDocument(State.Cache);
+            return State.Cache;
         }
 
         try
         {
-            _cache = JsonSerializer.Deserialize<CacheDocument>(File.ReadAllText(DatabasePath), _jsonOptions) ?? new CacheDocument();
-            _cache.SchemaVersion = Math.Max(_cache.SchemaVersion, CurrentSchemaVersion);
-            _cache.ExtraFiles ??= [];
-            _cache.BrowserItems ??= [];
-            _cache.ThemeFiles ??= [];
-            _cache.LibrarySyncState ??= [];
-            _cache.ServerCacheState ??= [];
-            _cache.SeasonMetadataStates ??= [];
-            foreach (var seasonMetadataState in _cache.SeasonMetadataStates)
+            State.Cache = JsonSerializer.Deserialize<CacheDocument>(File.ReadAllText(DatabasePath), _jsonOptions) ?? new CacheDocument();
+            State.Cache.SchemaVersion = Math.Max(State.Cache.SchemaVersion, CurrentSchemaVersion);
+            State.Cache.ExtraFiles ??= [];
+            State.Cache.BrowserItems ??= [];
+            State.Cache.ThemeFiles ??= [];
+            State.Cache.LibrarySyncState ??= [];
+            State.Cache.ServerCacheState ??= [];
+            State.Cache.SeasonMetadataStates ??= [];
+            foreach (var seasonMetadataState in State.Cache.SeasonMetadataStates)
             {
                 seasonMetadataState.ManagedTags ??= new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
                 seasonMetadataState.CollectionMemberships ??= [];
                 seasonMetadataState.BroadcastSeasons ??= [];
             }
 
-            foreach (var themeFile in _cache.ThemeFiles)
+            foreach (var themeFile in State.Cache.ThemeFiles)
             {
                 if (string.IsNullOrWhiteSpace(themeFile.LogicalItemId))
                 {
@@ -506,7 +549,7 @@ public sealed class AnimeThemesDataStore
                 }
             }
 
-            return _cache;
+            return State.Cache;
         }
         catch (JsonException)
         {
@@ -517,9 +560,9 @@ public sealed class AnimeThemesDataStore
             QuarantineCacheFile();
         }
 
-        _cache = new CacheDocument();
-        SaveDocument(_cache);
-        return _cache;
+        State.Cache = new CacheDocument();
+        SaveDocument(State.Cache);
+        return State.Cache;
     }
 
     private void SaveDocument(CacheDocument document)
@@ -531,11 +574,61 @@ public sealed class AnimeThemesDataStore
         File.WriteAllText(tempPath, JsonSerializer.Serialize(document, _jsonOptions));
         if (File.Exists(DatabasePath))
         {
-            File.Delete(DatabasePath);
+            // File.Replace keeps the destination present at all times, unlike Delete+Move.
+            File.Replace(tempPath, DatabasePath, null);
+        }
+        else
+        {
+            File.Move(tempPath, DatabasePath);
         }
 
-        File.Move(tempPath, DatabasePath);
-        _cache = document;
+        State.Cache = document;
+    }
+
+    /// <summary>
+    /// Completes a save that was interrupted between writing the temp file and
+    /// replacing the destination (the pre-Replace Delete+Move scheme could leave
+    /// only the temp file behind). A temp file with unreadable JSON is quarantined.
+    /// A temp file that is locked by another writer (external process, antivirus,
+    /// or backup scan) is left alone: recovery is opportunistic housekeeping and
+    /// runs again on the next cold load, so failing the whole load here would turn
+    /// a transient lock into a plugin error.
+    /// </summary>
+    private void RecoverFromIncompleteSave()
+    {
+        var tempPath = DatabasePath + ".tmp";
+        if (!File.Exists(tempPath))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(DatabasePath))
+            {
+                // The destination survived, so the temp file is a leftover partial write.
+                QuarantineFile(tempPath);
+                return;
+            }
+
+            _ = JsonSerializer.Deserialize<CacheDocument>(File.ReadAllText(tempPath), _jsonOptions);
+            File.Move(tempPath, DatabasePath);
+        }
+        catch (JsonException)
+        {
+            try
+            {
+                QuarantineFile(tempPath);
+            }
+            catch (IOException)
+            {
+                // Locked unreadable temp file: leave it for the next cold load.
+            }
+        }
+        catch (IOException)
+        {
+            // Locked temp file: skip recovery for now; the main document load proceeds.
+        }
     }
 
     private bool IsCurrentServer(string? serverKind)
@@ -754,13 +847,18 @@ public sealed class AnimeThemesDataStore
 
     private void QuarantineCacheFile()
     {
-        if (!File.Exists(DatabasePath))
+        QuarantineFile(DatabasePath);
+    }
+
+    private static void QuarantineFile(string path)
+    {
+        if (!File.Exists(path))
         {
             return;
         }
 
         var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
-        File.Move(DatabasePath, DatabasePath + ".corrupt-" + timestamp);
+        File.Move(path, path + ".corrupt-" + timestamp);
     }
 
     private static bool Contains(string? value, string term)
@@ -795,6 +893,13 @@ public sealed class AnimeThemesDataStore
     private static string FormatDate(DateTime date)
     {
         return DateTime.SpecifyKind(date, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture);
+    }
+
+    // Instances of this private type double as the lock object for all stores that
+    // point at the same cache file; nothing outside this class can observe or lock it.
+    private sealed class SharedState
+    {
+        public CacheDocument? Cache { get; set; }
     }
 
     private sealed class CacheDocument

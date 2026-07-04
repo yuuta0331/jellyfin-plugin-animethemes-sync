@@ -111,6 +111,7 @@ public sealed class AnimeThemesDataStoreTests
             });
 
             store.ClearBrowserCache();
+            store.ResetSharedStateForTests();
             var reopened = CreateStore(directory);
             reopened.EnsureInitialized();
             var state = reopened.GetSeasonMetadataState("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
@@ -140,6 +141,7 @@ public sealed class AnimeThemesDataStoreTests
                 BroadcastSeasons = null!,
             });
 
+            store.ResetSharedStateForTests();
             var reopened = CreateStore(directory);
             reopened.EnsureInitialized();
             var state = reopened.GetSeasonMetadataState("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
@@ -379,6 +381,161 @@ public sealed class AnimeThemesDataStoreTests
             };
 
             Assert.Null(store.FindPreviousExtraPath(newPlan));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void LoadDocument_RecoversFromInterruptedSaveWithValidTempFile()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            File.WriteAllText(
+                store.DatabasePath + ".tmp",
+                "{\"SchemaVersion\":5,\"BrowserItems\":[{\"ServerKind\":\"Test\",\"ItemId\":\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\",\"Name\":\"Recovered\",\"ItemType\":\"Series\"}]}");
+
+            store.EnsureInitialized();
+
+            Assert.True(File.Exists(store.DatabasePath));
+            Assert.False(File.Exists(store.DatabasePath + ".tmp"));
+            var page = store.QueryBrowserItems(null, 0, 80, "SortName", "Ascending", null, "all", "all", "all");
+            Assert.Equal("Recovered", Assert.Single(page.Items).Name);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void LoadDocument_QuarantinesCorruptTempLeftover()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            File.WriteAllText(store.DatabasePath + ".tmp", "{partial write");
+
+            store.EnsureInitialized();
+
+            Assert.True(File.Exists(store.DatabasePath));
+            Assert.False(File.Exists(store.DatabasePath + ".tmp"));
+            Assert.Contains(Directory.GetFiles(directory), path => path.Contains(".tmp.corrupt-", StringComparison.Ordinal));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void LoadDocument_KeepsMainFileWhenStaleTempExists()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var seed = CreateStore(directory);
+            seed.ReplaceBrowserItems(
+                new[] { CreateBrowserItem("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "Kept", "Series", videos: 0, songs: 0, extras: 0, bytes: 0) },
+                Array.Empty<(string, string?, int)>());
+            File.WriteAllText(seed.DatabasePath + ".tmp", "{partial write");
+
+            seed.ResetSharedStateForTests();
+            var reopened = CreateStore(directory);
+            reopened.EnsureInitialized();
+
+            Assert.False(File.Exists(reopened.DatabasePath + ".tmp"));
+            var page = reopened.QueryBrowserItems(null, 0, 80, "SortName", "Ascending", null, "all", "all", "all");
+            Assert.Equal("Kept", Assert.Single(page.Items).Name);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void QueryBrowserItems_SkipsRowsWithInvalidItemIds()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(
+                store.DatabasePath,
+                "{\"SchemaVersion\":5,\"BrowserItems\":[" +
+                "{\"ServerKind\":\"Test\",\"ItemId\":\"not-a-guid\",\"Name\":\"Broken\",\"ItemType\":\"Series\"}," +
+                "{\"ServerKind\":\"Test\",\"ItemId\":\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\",\"Name\":\"Valid\",\"ItemType\":\"Series\"}]}");
+
+            var page = store.QueryBrowserItems(null, 0, 80, "SortName", "Ascending", null, "all", "all", "all");
+
+            Assert.Equal(1, page.TotalRecordCount);
+            Assert.Equal("Valid", Assert.Single(page.Items).Name);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void UpsertBrowserItems_ReplacesExistingRowsAndLastDuplicateWins()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            store.ReplaceBrowserItems(
+                new[] { CreateBrowserItem("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "Original", "Series", videos: 0, songs: 0, extras: 0, bytes: 0) },
+                Array.Empty<(string, string?, int)>());
+
+            store.UpsertBrowserItems(new[]
+            {
+                CreateBrowserItem("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "First Update", "Series", videos: 1, songs: 0, extras: 0, bytes: 1),
+                CreateBrowserItem("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "Added", "Movie", videos: 0, songs: 0, extras: 0, bytes: 0),
+                CreateBrowserItem("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "Second Update", "Series", videos: 2, songs: 0, extras: 0, bytes: 2),
+            });
+
+            var page = store.QueryBrowserItems(null, 0, 80, "SortName", "Ascending", null, "all", "all", "all");
+            Assert.Equal(2, page.TotalRecordCount);
+            var updated = page.Items.Single(item => item.Name == "Second Update");
+            Assert.Equal(2, updated.ThemeVideos);
+            Assert.DoesNotContain(page.Items, item => item.Name is "Original" or "First Update");
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void ConcurrentInstances_ShareOneDocumentAndDoNotLoseWrites()
+    {
+        // Emby constructs a store per API request while the scheduled task holds its
+        // own instance; both point at the same cache file within one process.
+        var directory = CreateTempDirectory();
+        try
+        {
+            var taskInstance = CreateStore(directory);
+            taskInstance.EnsureInitialized();
+
+            var requestInstance = CreateStore(directory);
+            requestInstance.UpsertBrowserItem(CreateBrowserItem("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "FromRequest", "Series", videos: 0, songs: 0, extras: 0, bytes: 0));
+            taskInstance.UpsertBrowserItem(CreateBrowserItem("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "FromTask", "Series", videos: 0, songs: 0, extras: 0, bytes: 0));
+
+            taskInstance.ResetSharedStateForTests();
+            var reloaded = CreateStore(directory);
+            var page = reloaded.QueryBrowserItems(null, 0, 80, "SortName", "Ascending", null, "all", "all", "all");
+
+            Assert.Equal(2, page.TotalRecordCount);
+            Assert.Contains(page.Items, item => item.Name == "FromRequest");
+            Assert.Contains(page.Items, item => item.Name == "FromTask");
         }
         finally
         {

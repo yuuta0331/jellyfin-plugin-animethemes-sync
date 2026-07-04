@@ -95,7 +95,7 @@ public sealed class ThemeDownloader : IScheduledTask
         _collectionManager = collectionManager;
         _seasonFinderStore.MigrateLegacyMappings(Plugin.Instance?.Configuration?.SeasonThemeMappings);
         ThemeExtrasManifestService.ConfigureStore(_dataStore);
-        ThemeDownloadJobService.Configure(Plugin.Instance?.Configuration?.MaxConcurrentDownloads ?? 2);
+        ThemeDownloadJobService.Configure(Plugin.Instance?.Configuration?.MaxConcurrentDownloads ?? 1);
     }
 
     /// <inheritdoc />
@@ -474,6 +474,35 @@ public sealed class ThemeDownloader : IScheduledTask
 
     private void RefreshBrowserCacheForItem(BaseItem item)
     {
+        var record = BuildBrowserCacheRecord(item);
+        if (record != null)
+        {
+            _dataStore.UpsertBrowserItem(record);
+        }
+    }
+
+    /// <summary>
+    /// Batched variant of <see cref="RefreshBrowserCacheForItem"/> that writes the
+    /// cache document once instead of once per item.
+    /// </summary>
+    private void RefreshBrowserCacheForItems(IEnumerable<BaseItem> items)
+    {
+        var records = new List<BrowserItemRecord>();
+        var seenItemIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in items)
+        {
+            var record = BuildBrowserCacheRecord(item);
+            if (record != null && seenItemIds.Add(record.ItemId))
+            {
+                records.Add(record);
+            }
+        }
+
+        _dataStore.UpsertBrowserItems(records);
+    }
+
+    private BrowserItemRecord? BuildBrowserCacheRecord(BaseItem item)
+    {
         if (item is Season season)
         {
             item = FindSeriesForSeason(season) ?? item;
@@ -481,14 +510,14 @@ public sealed class ThemeDownloader : IScheduledTask
 
         if (item is not Series and not Movie)
         {
-            return;
+            return null;
         }
 
         var libraryId = ResolveLibraryId(item);
         var broadcastSeasons = item is Series seriesItem
             ? GetBroadcastSeasons(_seasonFinderStore.GetSeasonAutomationState(seriesItem.Id.ToString("D")))
             : [];
-        _dataStore.UpsertBrowserItem(BuildBrowserItemRecord(item, libraryId, broadcastSeasons));
+        return BuildBrowserItemRecord(item, libraryId, broadcastSeasons);
     }
 
     private void ImportLegacyExtrasManifestForPath(string? itemPath, ref int manifests, ref int files)
@@ -2061,10 +2090,7 @@ public sealed class ThemeDownloader : IScheduledTask
         }
 
         // ── Cleanup ──
-        foreach (var item in items)
-        {
-            RefreshBrowserCacheForItem(item);
-        }
+        RefreshBrowserCacheForItems(items);
 
         progress?.Report(100);
 

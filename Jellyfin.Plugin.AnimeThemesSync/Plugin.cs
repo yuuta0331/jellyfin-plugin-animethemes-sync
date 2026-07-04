@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Text;
 using AnimeThemesSync.Shared;
 using AnimeThemesSync.Shared.Configuration;
 using Jellyfin.Plugin.AnimeThemesSync.Configuration;
@@ -26,7 +25,6 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         : base(applicationPaths, xmlSerializer)
     {
         Instance = this;
-        Console.OutputEncoding = Encoding.UTF8;
         if (Configuration.Normalize())
         {
             UpdateConfiguration(Configuration);

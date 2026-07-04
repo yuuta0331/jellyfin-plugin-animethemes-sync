@@ -27,7 +27,10 @@ public static class ThemeDownloadJobService
     private static readonly Dictionary<string, MutableJobStatus> Jobs = new(StringComparer.Ordinal);
     private static readonly Queue<string> PendingQueue = new();
     private static int _runningCount;
-    private static int _maxConcurrentDownloads = 2;
+
+    // Matches the PluginConfiguration.MaxConcurrentDownloads default so behavior
+    // is identical whether or not Configure has run yet.
+    private static int _maxConcurrentDownloads = 1;
     private static TimeSpan _terminalRetention = TimeSpan.FromMinutes(30);
     private static int _maxTerminalHistory = 100;
 
@@ -36,7 +39,7 @@ public static class ThemeDownloadJobService
         List<MutableJobStatus> jobsToStart;
         lock (SyncRoot)
         {
-            _maxConcurrentDownloads = maxConcurrentDownloads > 0 ? maxConcurrentDownloads : 2;
+            _maxConcurrentDownloads = maxConcurrentDownloads > 0 ? maxConcurrentDownloads : 1;
             PruneTerminalJobsLocked(DateTimeOffset.UtcNow);
             jobsToStart = PumpQueueLocked();
         }
@@ -272,7 +275,7 @@ public static class ThemeDownloadJobService
             Jobs.Clear();
             PendingQueue.Clear();
             _runningCount = 0;
-            _maxConcurrentDownloads = 2;
+            _maxConcurrentDownloads = 1;
             _terminalRetention = TimeSpan.FromMinutes(30);
             _maxTerminalHistory = 100;
         }

@@ -405,6 +405,78 @@ public sealed class SeasonFinderDataStoreTests
         }
     }
 
+    [Fact]
+    public void EnsureInitialized_UpgradesStoredSchemaVersionWithoutTouchingData()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            store.MigrateLegacyMappings(new[] { CreateMapping("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "kept-slug", true) });
+
+            // Simulate a database written by an older plugin version.
+            using (var connection = new SqliteConnection("Data Source=" + store.DatabasePath + ";Pooling=False"))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "UPDATE SchemaMetadata SET Value = '1' WHERE Key = 'SchemaVersion';";
+                command.ExecuteNonQuery();
+            }
+
+            var reopened = CreateStore(directory);
+            reopened.EnsureInitialized();
+
+            using (var connection = new SqliteConnection("Data Source=" + store.DatabasePath + ";Pooling=False"))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "SELECT Value FROM SchemaMetadata WHERE Key = 'SchemaVersion';";
+                Assert.Equal("3", command.ExecuteScalar());
+            }
+
+            var mapping = Assert.Single(reopened.GetSeasonThemeMappings());
+            Assert.Equal("kept-slug", mapping.AnimeThemesSlug);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void EnsureColumn_AddsMissingColumnOnceAndIsIdempotent()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            store.EnsureInitialized();
+
+            using var connection = new SqliteConnection("Data Source=" + store.DatabasePath + ";Pooling=False");
+            connection.Open();
+            SeasonFinderDataStore.EnsureColumn(connection, null, "SeasonFinderRows", "MigrationProbe", "TEXT NULL");
+            SeasonFinderDataStore.EnsureColumn(connection, null, "SeasonFinderRows", "MigrationProbe", "TEXT NULL");
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA table_info(SeasonFinderRows);";
+            using var reader = command.ExecuteReader();
+            var found = 0;
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(1), "MigrationProbe", StringComparison.OrdinalIgnoreCase))
+                {
+                    found++;
+                }
+            }
+
+            Assert.Equal(1, found);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
     private static SeasonFinderDataStore CreateStore(string directory, string serverKind = "Test")
     {
         return new SeasonFinderDataStore(new TestPathProvider(directory), new TestIdentityProvider(serverKind));
