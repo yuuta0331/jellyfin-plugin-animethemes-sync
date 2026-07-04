@@ -17,10 +17,12 @@ namespace AnimeThemesSync.Shared.Services;
 /// </summary>
 public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
 {
-    private const int CurrentSchemaVersion = 3;
+    private const int CurrentSchemaVersion = 4;
     private const int DefaultLimit = 80;
     private const int MaxLimit = 100;
     private const int SearchCacheLimit = 200;
+    private const int ApiFetchCacheLimit = 2000;
+    private static readonly TimeSpan ApiFetchCacheRetention = TimeSpan.FromDays(180);
     private static readonly TimeSpan SearchCacheTtl = TimeSpan.FromDays(7);
     private readonly IAnimeThemesDataPathProvider _pathProvider;
     private readonly IAnimeThemesServerIdentityProvider _serverIdentity;
@@ -214,16 +216,58 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
                     UpdatedAtUtc TEXT NOT NULL,
                     PRIMARY KEY (ServerKind, CollectionKey)
                 );
+                CREATE TABLE IF NOT EXISTS SeasonMetadataSnapshots (
+                    ServerKind TEXT NOT NULL,
+                    SeriesItemId TEXT NOT NULL,
+                    SeriesName TEXT NULL,
+                    InputFingerprint TEXT NOT NULL,
+                    ResolvedAtUtc TEXT NOT NULL,
+                    ExpiresAtUtc TEXT NOT NULL,
+                    LastError TEXT NULL,
+                    PRIMARY KEY (ServerKind, SeriesItemId)
+                );
+                CREATE INDEX IF NOT EXISTS IX_SeasonMetadataSnapshots_Expiry
+                    ON SeasonMetadataSnapshots(ServerKind, ExpiresAtUtc);
+                CREATE TABLE IF NOT EXISTS SeasonMetadataRows (
+                    ServerKind TEXT NOT NULL,
+                    SeriesItemId TEXT NOT NULL,
+                    SeasonItemId TEXT NOT NULL,
+                    SeasonName TEXT NOT NULL,
+                    SeasonNumber INTEGER NULL,
+                    Status TEXT NOT NULL,
+                    Source TEXT NOT NULL,
+                    SameAsSeries INTEGER NOT NULL,
+                    AnimeThemesSlug TEXT NULL,
+                    AniListId INTEGER NULL,
+                    MyAnimeListId INTEGER NULL,
+                    AnimeYear INTEGER NULL,
+                    AnimeSeason TEXT NULL,
+                    PRIMARY KEY (ServerKind, SeriesItemId, SeasonItemId)
+                );
+                CREATE INDEX IF NOT EXISTS IX_SeasonMetadataRows_Broadcast
+                    ON SeasonMetadataRows(ServerKind, AnimeYear, AnimeSeason);
+                CREATE TABLE IF NOT EXISTS ApiFetchCache (
+                    ServerKind TEXT NOT NULL,
+                    CacheKey TEXT NOT NULL,
+                    Provider TEXT NOT NULL,
+                    PayloadJson TEXT NOT NULL,
+                    CreatedAtUtc TEXT NOT NULL,
+                    ExpiresAtUtc TEXT NOT NULL,
+                    PRIMARY KEY (ServerKind, CacheKey)
+                );
+                CREATE INDEX IF NOT EXISTS IX_ApiFetchCache_Expiry
+                    ON ApiFetchCache(ServerKind, ExpiresAtUtc);
                 """);
             var storedSchemaVersion = GetStoredSchemaVersion(connection, transaction);
             if (storedSchemaVersion < CurrentSchemaVersion)
             {
                 // Schema history: v1 introduced the base tables, v2 added the season
-                // automation tables, v3 added ManagedSeasonCollectionAssets. All of these
+                // automation tables, v3 added ManagedSeasonCollectionAssets, and v4 added
+                // persistent season metadata and provider response caches. All of these
                 // are new tables, which the CREATE TABLE IF NOT EXISTS block above already
                 // provides for older databases. Changes to columns of existing tables must
                 // be applied here as idempotent steps gated on storedSchemaVersion, e.g.:
-                //   if (storedSchemaVersion < 4)
+                //   if (storedSchemaVersion < 5)
                 //   {
                 //       EnsureColumn(connection, transaction, "SeasonFinderRows", "NewColumn", "TEXT NULL");
                 //   }
@@ -682,6 +726,166 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
                     ("$error", member.LastError), ("$updated", member.UpdatedAtUtc));
             }
 
+            transaction.Commit();
+        }
+    }
+
+    /// <inheritdoc />
+    public SeasonMetadataSnapshot? GetSeasonMetadataSnapshot(string seriesItemId)
+    {
+        lock (_syncRoot)
+        {
+            EnsureInitialized();
+            using var connection = OpenConnection();
+            SeasonMetadataSnapshot? snapshot;
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = """
+                    SELECT SeriesItemId, SeriesName, InputFingerprint, ResolvedAtUtc, ExpiresAtUtc, LastError
+                    FROM SeasonMetadataSnapshots
+                    WHERE ServerKind = $serverKind AND SeriesItemId = $seriesId;
+                    """;
+                command.Parameters.AddWithValue("$serverKind", ServerKind);
+                command.Parameters.AddWithValue("$seriesId", seriesItemId);
+                using var reader = command.ExecuteReader();
+                if (!reader.Read())
+                {
+                    return null;
+                }
+
+                snapshot = new SeasonMetadataSnapshot
+                {
+                    SeriesItemId = reader.GetString(0),
+                    SeriesName = GetNullableString(reader, 1),
+                    InputFingerprint = reader.GetString(2),
+                    ResolvedAtUtc = reader.GetString(3),
+                    ExpiresAtUtc = reader.GetString(4),
+                    LastError = GetNullableString(reader, 5),
+                };
+            }
+
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = """
+                    SELECT SeasonItemId, SeasonName, SeasonNumber, Status, Source, SameAsSeries,
+                           AnimeThemesSlug, AniListId, MyAnimeListId, AnimeYear, AnimeSeason
+                    FROM SeasonMetadataRows
+                    WHERE ServerKind = $serverKind AND SeriesItemId = $seriesId
+                    ORDER BY SeasonNumber, SeasonName;
+                    """;
+                command.Parameters.AddWithValue("$serverKind", ServerKind);
+                command.Parameters.AddWithValue("$seriesId", seriesItemId);
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    snapshot.Seasons.Add(new SeasonMetadataRow
+                    {
+                        SeasonItemId = reader.GetString(0),
+                        SeasonName = reader.GetString(1),
+                        SeasonNumber = GetNullableInt32(reader, 2),
+                        Status = reader.GetString(3),
+                        Source = reader.GetString(4),
+                        SameAsSeries = reader.GetInt32(5) != 0,
+                        AnimeThemesSlug = GetNullableString(reader, 6),
+                        AniListId = GetNullableInt32(reader, 7),
+                        MyAnimeListId = GetNullableInt32(reader, 8),
+                        AnimeYear = GetNullableInt32(reader, 9),
+                        AnimeSeason = GetNullableString(reader, 10),
+                    });
+                }
+            }
+
+            return snapshot;
+        }
+    }
+
+    /// <inheritdoc />
+    public void SaveSeasonMetadataSnapshot(SeasonMetadataSnapshot snapshot)
+    {
+        lock (_syncRoot)
+        {
+            EnsureInitialized();
+            using var connection = OpenConnection();
+            using var transaction = connection.BeginTransaction();
+            Execute(connection, transaction, """
+                INSERT INTO SeasonMetadataSnapshots (ServerKind, SeriesItemId, SeriesName, InputFingerprint,
+                    ResolvedAtUtc, ExpiresAtUtc, LastError)
+                VALUES ($serverKind, $seriesId, $seriesName, $fingerprint, $resolved, $expires, $error)
+                ON CONFLICT(ServerKind, SeriesItemId) DO UPDATE SET SeriesName = excluded.SeriesName,
+                    InputFingerprint = excluded.InputFingerprint, ResolvedAtUtc = excluded.ResolvedAtUtc,
+                    ExpiresAtUtc = excluded.ExpiresAtUtc, LastError = excluded.LastError;
+                DELETE FROM SeasonMetadataRows WHERE ServerKind = $serverKind AND SeriesItemId = $seriesId;
+                """, ("$serverKind", ServerKind), ("$seriesId", snapshot.SeriesItemId), ("$seriesName", snapshot.SeriesName),
+                ("$fingerprint", snapshot.InputFingerprint), ("$resolved", snapshot.ResolvedAtUtc),
+                ("$expires", snapshot.ExpiresAtUtc), ("$error", snapshot.LastError));
+            foreach (var row in snapshot.Seasons)
+            {
+                Execute(connection, transaction, """
+                    INSERT INTO SeasonMetadataRows (ServerKind, SeriesItemId, SeasonItemId, SeasonName, SeasonNumber,
+                        Status, Source, SameAsSeries, AnimeThemesSlug, AniListId, MyAnimeListId, AnimeYear, AnimeSeason)
+                    VALUES ($serverKind, $seriesId, $seasonId, $seasonName, $seasonNumber, $status, $source,
+                        $sameAsSeries, $slug, $aniListId, $malId, $year, $season);
+                    """, ("$serverKind", ServerKind), ("$seriesId", snapshot.SeriesItemId),
+                    ("$seasonId", row.SeasonItemId), ("$seasonName", row.SeasonName), ("$seasonNumber", row.SeasonNumber),
+                    ("$status", row.Status), ("$source", row.Source), ("$sameAsSeries", row.SameAsSeries ? 1 : 0),
+                    ("$slug", row.AnimeThemesSlug), ("$aniListId", row.AniListId), ("$malId", row.MyAnimeListId),
+                    ("$year", row.AnimeYear), ("$season", row.AnimeSeason));
+            }
+
+            transaction.Commit();
+        }
+    }
+
+    /// <inheritdoc />
+    public ApiFetchCacheEntry? GetApiFetchCache(string cacheKey)
+    {
+        lock (_syncRoot)
+        {
+            EnsureInitialized();
+            using var connection = OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT CacheKey, Provider, PayloadJson, CreatedAtUtc, ExpiresAtUtc
+                FROM ApiFetchCache WHERE ServerKind = $serverKind AND CacheKey = $key;
+                """;
+            command.Parameters.AddWithValue("$serverKind", ServerKind);
+            command.Parameters.AddWithValue("$key", cacheKey);
+            using var reader = command.ExecuteReader();
+            return reader.Read()
+                ? new ApiFetchCacheEntry
+                {
+                    CacheKey = reader.GetString(0), Provider = reader.GetString(1), PayloadJson = reader.GetString(2),
+                    CreatedAtUtc = reader.GetString(3), ExpiresAtUtc = reader.GetString(4),
+                }
+                : null;
+        }
+    }
+
+    /// <inheritdoc />
+    public void UpsertApiFetchCache(ApiFetchCacheEntry entry)
+    {
+        lock (_syncRoot)
+        {
+            EnsureInitialized();
+            using var connection = OpenConnection();
+            using var transaction = connection.BeginTransaction();
+            Execute(connection, transaction, """
+                INSERT INTO ApiFetchCache (ServerKind, CacheKey, Provider, PayloadJson, CreatedAtUtc, ExpiresAtUtc)
+                VALUES ($serverKind, $key, $provider, $json, $created, $expires)
+                ON CONFLICT(ServerKind, CacheKey) DO UPDATE SET Provider = excluded.Provider,
+                    PayloadJson = excluded.PayloadJson, CreatedAtUtc = excluded.CreatedAtUtc,
+                    ExpiresAtUtc = excluded.ExpiresAtUtc;
+                """, ("$serverKind", ServerKind), ("$key", entry.CacheKey), ("$provider", entry.Provider),
+                ("$json", entry.PayloadJson), ("$created", entry.CreatedAtUtc), ("$expires", entry.ExpiresAtUtc));
+            Execute(connection, transaction,
+                "DELETE FROM ApiFetchCache WHERE ServerKind = $serverKind AND CreatedAtUtc < $retention;",
+                ("$serverKind", ServerKind), ("$retention", FormatDate(DateTimeOffset.UtcNow.Subtract(ApiFetchCacheRetention))));
+            Execute(connection, transaction, """
+                DELETE FROM ApiFetchCache WHERE ServerKind = $serverKind AND CacheKey IN (
+                    SELECT CacheKey FROM ApiFetchCache WHERE ServerKind = $serverKind
+                    ORDER BY CreatedAtUtc DESC LIMIT -1 OFFSET $limit
+                );
+                """, ("$serverKind", ServerKind), ("$limit", ApiFetchCacheLimit));
             transaction.Commit();
         }
     }

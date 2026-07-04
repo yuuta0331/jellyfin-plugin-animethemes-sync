@@ -31,6 +31,14 @@ public interface ISeasonFinderDataStore
 
     void SaveSeasonAutomationState(SeasonAutomationState state);
 
+    SeasonMetadataSnapshot? GetSeasonMetadataSnapshot(string seriesItemId);
+
+    void SaveSeasonMetadataSnapshot(SeasonMetadataSnapshot snapshot);
+
+    ApiFetchCacheEntry? GetApiFetchCache(string cacheKey);
+
+    void UpsertApiFetchCache(ApiFetchCacheEntry entry);
+
     IReadOnlyList<ManagedSeasonCollectionAssetState> GetCollectionAssetStates();
 
     void UpsertCollectionAssetState(ManagedSeasonCollectionAssetState state);

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -9,6 +11,8 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using AnimeThemesSync.Shared.Interfaces;
+using AnimeThemesSync.Shared.Models;
 
 namespace AnimeThemesSync.Shared.Services;
 
@@ -37,6 +41,9 @@ public sealed class AniListService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AniListService> _logger;
     private readonly RateLimiter _rateLimiter;
+    private readonly ISeasonFinderDataStore? _persistentCache;
+    private static readonly TimeSpan ApiFetchCacheTtl = TimeSpan.FromDays(30);
+    private const int MaxRateLimitRetries = 2;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AniListService"/> class.
@@ -44,11 +51,17 @@ public sealed class AniListService
     /// <param name="httpClientFactory">The HTTP client factory.</param>
     /// <param name="logger">The logger.</param>
     /// <param name="rateLimiter">The rate limiter.</param>
-    public AniListService(IHttpClientFactory httpClientFactory, ILogger<AniListService> logger, RateLimiter rateLimiter)
+    /// <param name="persistentCache">Optional persistent provider response cache.</param>
+    public AniListService(
+        IHttpClientFactory httpClientFactory,
+        ILogger<AniListService> logger,
+        RateLimiter rateLimiter,
+        ISeasonFinderDataStore? persistentCache = null)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _rateLimiter = rateLimiter;
+        _persistentCache = persistentCache;
     }
 
     /// <summary>
@@ -253,6 +266,13 @@ public sealed class AniListService
 
     private async Task<AniListMedia?> ExecuteMediaWithRelations(int id, CancellationToken cancellationToken)
     {
+        var stale = GetPersistedRelation(id, requireFresh: false);
+        var persisted = GetPersistedRelation(id, requireFresh: true);
+        if (persisted != null)
+        {
+            return persisted;
+        }
+
         var query = @"
             query ($id: Int) {
                 Media(id: $id, type: ANIME) {
@@ -292,38 +312,116 @@ public sealed class AniListService
 
         var client = _httpClientFactory.CreateClient(Constants.AniListHttpClientName);
         var json = JsonSerializer.Serialize(requestBody);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         try
         {
-            await _rateLimiter.WaitIfNeededAsync(cancellationToken).ConfigureAwait(false);
-
-            var response = await client.PostAsync(new Uri(Constants.AniListBaseUrl), content, cancellationToken).ConfigureAwait(false);
-
-            _rateLimiter.UpdateState(response.Headers);
-
+            using var response = await PostWithRateLimitRetryAsync(client, json, id, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
             var responseStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
             var result = await JsonSerializer.DeserializeAsync<AniListMediaResponse>(responseStream, _jsonOptions, cancellationToken).ConfigureAwait(false);
+            var media = result?.Data?.Media;
+            if (media != null)
+            {
+                PersistRelation(id, media);
+                return media;
+            }
 
-            return result?.Data?.Media;
+            return stale;
         }
         catch (OperationCanceledException ex) when (IsNonUserCancellation(cancellationToken))
         {
             _logger.LogWarning(ex, "AniList relation request timed out or was interrupted for AniListId={AniListId}.", id);
-            return null;
+            return stale;
         }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "AniList relation request failed for AniListId={AniListId}.", id);
-            return null;
+            return stale;
         }
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "AniList relation request returned invalid JSON for AniListId={AniListId}.", id);
+            return stale;
+        }
+    }
+
+    private async Task<HttpResponseMessage> PostWithRateLimitRetryAsync(
+        HttpClient client,
+        string json,
+        int id,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            await _rateLimiter.WaitIfNeededAsync(cancellationToken).ConfigureAwait(false);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await client.PostAsync(new Uri(Constants.AniListBaseUrl), content, cancellationToken).ConfigureAwait(false);
+            _rateLimiter.UpdateState(response.Headers);
+            if (response.StatusCode != HttpStatusCode.TooManyRequests || attempt >= MaxRateLimitRetries)
+            {
+                return response;
+            }
+
+            var delay = response.Headers.RetryAfter?.Delta
+                ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow)
+                ?? TimeSpan.FromSeconds(30);
+            if (delay < TimeSpan.Zero)
+            {
+                delay = TimeSpan.Zero;
+            }
+
+            response.Dispose();
+            _logger.LogWarning(
+                "AniList rate limited relation request for AniListId={AniListId}. Retrying in {Delay} seconds (attempt {Attempt}/{Maximum}).",
+                id,
+                delay.TotalSeconds,
+                attempt + 1,
+                MaxRateLimitRetries);
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private AniListMedia? GetPersistedRelation(int id, bool requireFresh)
+    {
+        var entry = _persistentCache?.GetApiFetchCache("anilist:relations:" + id.ToString(CultureInfo.InvariantCulture));
+        if (entry == null ||
+            (requireFresh && (!DateTimeOffset.TryParse(
+                entry.ExpiresAtUtc,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var expires) || expires <= DateTimeOffset.UtcNow)))
+        {
             return null;
         }
+
+        try
+        {
+            return JsonSerializer.Deserialize<AniListMedia>(entry.PayloadJson, _jsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Ignoring invalid persistent AniList relation cache for AniListId={AniListId}.", id);
+            return null;
+        }
+    }
+
+    private void PersistRelation(int id, AniListMedia media)
+    {
+        if (_persistentCache == null)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        _persistentCache.UpsertApiFetchCache(new ApiFetchCacheEntry
+        {
+            CacheKey = "anilist:relations:" + id.ToString(CultureInfo.InvariantCulture),
+            Provider = "AniList",
+            PayloadJson = JsonSerializer.Serialize(media, _jsonOptions),
+            CreatedAtUtc = now.ToString("O", CultureInfo.InvariantCulture),
+            ExpiresAtUtc = now.Add(ApiFetchCacheTtl).ToString("O", CultureInfo.InvariantCulture),
+        });
     }
 
     private static List<AniListRelatedAnime> SortRelatedAnime(IEnumerable<AniListRelatedAnime> rows)

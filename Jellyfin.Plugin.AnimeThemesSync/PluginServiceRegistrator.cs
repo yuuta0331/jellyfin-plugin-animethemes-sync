@@ -70,7 +70,11 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
             var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
             var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
             var rateLimiter = new RateLimiter(loggerFactory.CreateLogger<RateLimiter>(), Constants.AniListHttpClientName, 90);
-            return new AniListService(httpClientFactory, loggerFactory.CreateLogger<AniListService>(), rateLimiter);
+            return new AniListService(
+                httpClientFactory,
+                loggerFactory.CreateLogger<AniListService>(),
+                rateLimiter,
+                provider.GetRequiredService<ISeasonFinderDataStore>());
         });
 
         // Register AnimeThemesService as Singleton

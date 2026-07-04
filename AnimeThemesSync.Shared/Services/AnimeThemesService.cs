@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -24,6 +25,8 @@ public sealed class AnimeThemesService
     private static readonly object _searchCacheLock = new();
     private static readonly Dictionary<string, SearchCacheEntry> _searchCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly TimeSpan SearchCacheTtl = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan ApiFetchCacheTtl = TimeSpan.FromDays(30);
+    private const int MaxRateLimitRetries = 2;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AnimeThemesService> _logger;
     private readonly RateLimiter _rateLimiter;
@@ -35,7 +38,7 @@ public sealed class AnimeThemesService
     /// <param name="httpClientFactory">The HTTP client factory.</param>
     /// <param name="logger">The logger.</param>
     /// <param name="rateLimiter">The rate limiter.</param>
-    /// <param name="persistentCache">The optional persistent search cache.</param>
+    /// <param name="persistentCache">The optional persistent search and provider response cache.</param>
     public AnimeThemesService(
         IHttpClientFactory httpClientFactory,
         ILogger<AnimeThemesService> logger,
@@ -63,6 +66,14 @@ public sealed class AnimeThemesService
             return cached;
         }
 
+        var stale = GetPersistedAnime(cacheKey, requireFresh: false);
+        var persisted = GetPersistedAnime(cacheKey, requireFresh: true);
+        if (persisted != null)
+        {
+            CacheAnime(cacheKey, persisted);
+            return persisted;
+        }
+
         var url = $"{Constants.AnimeThemesBaseUrl}/resource?filter[site]={site}&filter[external_id]={externalId}&include=anime";
 
         var resourceResponse = await GetResourceFromUrl(url, cancellationToken).ConfigureAwait(false);
@@ -70,6 +81,13 @@ public sealed class AnimeThemesService
 
         if (resource?.Anime == null || resource.Anime.Count == 0)
         {
+            if (stale != null)
+            {
+                _logger.LogWarning("Using stale AnimeThemes cache for {Site}:{Id} after provider lookup failed.", site, externalId);
+                CacheAnime(cacheKey, stale);
+                return stale;
+            }
+
             _logger.LogWarning("No AnimeThemes resource found for {Site}:{Id}", site, externalId);
             return null;
         }
@@ -84,7 +102,14 @@ public sealed class AnimeThemesService
         var anime = await GetAnimeBySlug(partialAnime.Slug, cancellationToken).ConfigureAwait(false);
         if (anime != null)
         {
-            _animeCache[cacheKey] = anime;
+            CacheAnime(cacheKey, anime);
+            PersistAnime(cacheKey, anime);
+        }
+        else if (stale != null)
+        {
+            _logger.LogWarning("Using stale AnimeThemes cache for {Site}:{Id} after anime lookup failed.", site, externalId);
+            CacheAnime(cacheKey, stale);
+            return stale;
         }
 
         return anime;
@@ -104,16 +129,27 @@ public sealed class AnimeThemesService
             return cached;
         }
 
+        var stale = GetPersistedAnime(cacheKey, requireFresh: false);
+        var persisted = GetPersistedAnime(cacheKey, requireFresh: true);
+        if (persisted != null)
+        {
+            CacheAnime(cacheKey, persisted);
+            return persisted;
+        }
+
         const string Include = "images,resources,animethemes.animethemeentries.videos.audio,animethemes.group,animethemes.song,animethemes.song.artists,animethemes.song.performances.artist";
         var url = $"{Constants.AnimeThemesBaseUrl}/anime/{slug}?include={Include}";
         var anime = await GetAnimeFromUrl(url, cancellationToken).ConfigureAwait(false);
         if (anime != null)
         {
-            _animeCache[cacheKey] = anime;
-            if (!string.IsNullOrWhiteSpace(anime.Slug))
-            {
-                _animeCache[$"slug:{anime.Slug}"] = anime;
-            }
+            CacheAnime(cacheKey, anime);
+            PersistAnime(cacheKey, anime);
+        }
+        else if (stale != null)
+        {
+            _logger.LogWarning("Using stale AnimeThemes cache for slug {Slug} after provider lookup failed.", slug);
+            CacheAnime(cacheKey, stale);
+            return stale;
         }
 
         return anime;
@@ -233,10 +269,8 @@ public sealed class AnimeThemesService
     {
         try
         {
-            await _rateLimiter.WaitIfNeededAsync(cancellationToken).ConfigureAwait(false);
-
             var client = CreateClient();
-            var response = await client.GetAsync(new Uri(url), cancellationToken).ConfigureAwait(false);
+            using var response = await GetWithRateLimitRetryAsync(client, url, cancellationToken).ConfigureAwait(false);
 
             _rateLimiter.UpdateState(response.Headers);
 
@@ -248,6 +282,10 @@ public sealed class AnimeThemesService
 
             var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
             return await JsonSerializer.DeserializeAsync<T>(stream, _jsonOptions, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -270,10 +308,8 @@ public sealed class AnimeThemesService
     {
         try
         {
-            await _rateLimiter.WaitIfNeededAsync(cancellationToken).ConfigureAwait(false);
-
             var client = CreateClient();
-            var response = await client.GetAsync(new Uri(url), cancellationToken).ConfigureAwait(false);
+            using var response = await GetWithRateLimitRetryAsync(client, url, cancellationToken).ConfigureAwait(false);
 
             _rateLimiter.UpdateState(response.Headers);
 
@@ -302,10 +338,98 @@ public sealed class AnimeThemesService
 
             return null;
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching data from AnimeThemes: {Url}", url);
             return null;
+        }
+    }
+
+    private async Task<HttpResponseMessage> GetWithRateLimitRetryAsync(
+        HttpClient client,
+        string url,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            await _rateLimiter.WaitIfNeededAsync(cancellationToken).ConfigureAwait(false);
+            var response = await client.GetAsync(new Uri(url), cancellationToken).ConfigureAwait(false);
+            _rateLimiter.UpdateState(response.Headers);
+            if (response.StatusCode != HttpStatusCode.TooManyRequests || attempt >= MaxRateLimitRetries)
+            {
+                return response;
+            }
+
+            var delay = response.Headers.RetryAfter?.Delta
+                ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow)
+                ?? TimeSpan.FromSeconds(30);
+            if (delay < TimeSpan.Zero)
+            {
+                delay = TimeSpan.Zero;
+            }
+
+            response.Dispose();
+            _logger.LogWarning(
+                "AnimeThemes rate limited request. Retrying in {Delay} seconds (attempt {Attempt}/{Maximum}).",
+                delay.TotalSeconds,
+                attempt + 1,
+                MaxRateLimitRetries);
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private AnimeThemesAnime? GetPersistedAnime(string cacheKey, bool requireFresh)
+    {
+        var entry = _persistentCache?.GetApiFetchCache("animethemes:" + cacheKey.ToLowerInvariant());
+        if (entry == null ||
+            (requireFresh && (!DateTimeOffset.TryParse(
+                entry.ExpiresAtUtc,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var expires) || expires <= DateTimeOffset.UtcNow)))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<AnimeThemesAnime>(entry.PayloadJson, _jsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Ignoring invalid persistent AnimeThemes cache entry {CacheKey}.", cacheKey);
+            return null;
+        }
+    }
+
+    private void PersistAnime(string cacheKey, AnimeThemesAnime anime)
+    {
+        if (_persistentCache == null)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        _persistentCache.UpsertApiFetchCache(new ApiFetchCacheEntry
+        {
+            CacheKey = "animethemes:" + cacheKey.ToLowerInvariant(),
+            Provider = "AnimeThemes",
+            PayloadJson = JsonSerializer.Serialize(anime, _jsonOptions),
+            CreatedAtUtc = now.ToString("O", CultureInfo.InvariantCulture),
+            ExpiresAtUtc = now.Add(ApiFetchCacheTtl).ToString("O", CultureInfo.InvariantCulture),
+        });
+    }
+
+    private static void CacheAnime(string cacheKey, AnimeThemesAnime anime)
+    {
+        _animeCache[cacheKey] = anime;
+        if (!string.IsNullOrWhiteSpace(anime.Slug))
+        {
+            _animeCache[$"slug:{anime.Slug}"] = anime;
         }
     }
 

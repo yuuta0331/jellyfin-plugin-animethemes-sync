@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using AnimeThemesSync.Shared;
+using AnimeThemesSync.Shared.Interfaces;
+using AnimeThemesSync.Shared.Models;
 using AnimeThemesSync.Shared.Services;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -170,6 +172,29 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
 
             // Assert
             Assert.Empty(result);
+        }
+
+        [Fact]
+        public async Task GetRelatedAnimeChainAsync_FreshPersistentCache_DoesNotRequestProvider()
+        {
+            var cache = new Mock<ISeasonFinderDataStore>();
+            cache.Setup(i => i.GetApiFetchCache("anilist:relations:123")).Returns(new ApiFetchCacheEntry
+            {
+                CacheKey = "anilist:relations:123",
+                Provider = "AniList",
+                PayloadJson = "{\"id\":123,\"idMal\":456,\"type\":\"ANIME\",\"format\":\"TV\",\"season\":\"SPRING\",\"seasonYear\":2024,\"title\":{\"romaji\":\"Cached Anime\"},\"relations\":{\"edges\":[]}}",
+                CreatedAtUtc = DateTimeOffset.UtcNow.ToString("O"),
+                ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(1).ToString("O"),
+            });
+            var limiter = new RateLimiter(new Mock<ILogger<RateLimiter>>().Object, "AniList", 90);
+            var service = new AniListService(_mockHttpClientFactory.Object, _mockLogger.Object, limiter, cache.Object);
+
+            var result = await service.GetRelatedAnimeChainAsync(123, 2, CancellationToken.None);
+
+            var anime = Assert.Single(result);
+            Assert.Equal(123, anime.AniListId);
+            Assert.Equal("Cached Anime", anime.RomajiTitle);
+            _mockHttpClientFactory.Verify(i => i.CreateClient("AniList"), Times.Never);
         }
 
         // =====================================================

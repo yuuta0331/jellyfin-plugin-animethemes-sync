@@ -1,9 +1,12 @@
 using System;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using AnimeThemesSync.Shared;
+using AnimeThemesSync.Shared.Interfaces;
+using AnimeThemesSync.Shared.Models;
 using AnimeThemesSync.Shared.Services;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -190,6 +193,60 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
             Assert.Equal("けいおん!!", synonym.Text);
             Assert.Equal("Native", synonym.Type);
             _mockHttp.VerifyNoOutstandingExpectation();
+        }
+
+        [Fact]
+        public async Task GetAnimeBySlug_FreshPersistentCache_DoesNotRequestProvider()
+        {
+            var slug = "persistent-cache-only-" + Guid.NewGuid().ToString("N");
+            var cache = new Mock<ISeasonFinderDataStore>();
+            cache.Setup(i => i.GetApiFetchCache("animethemes:slug:" + slug)).Returns(new ApiFetchCacheEntry
+            {
+                CacheKey = "animethemes:slug:" + slug,
+                Provider = "AnimeThemes",
+                PayloadJson = "{\"id\":123,\"name\":\"Persistent\",\"slug\":\"" + slug + "\",\"year\":2024,\"season\":\"Spring\"}",
+                CreatedAtUtc = DateTimeOffset.UtcNow.ToString("O"),
+                ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(1).ToString("O"),
+            });
+            var limiter = new RateLimiter(new Mock<ILogger<RateLimiter>>().Object, "AnimeThemes", 80);
+            var service = new AnimeThemesService(_mockHttpClientFactory.Object, _mockLogger.Object, limiter, cache.Object);
+
+            var result = await service.GetAnimeBySlug(slug, CancellationToken.None);
+
+            Assert.NotNull(result);
+            Assert.Equal("Persistent", result.Name);
+            _mockHttpClientFactory.Verify(i => i.CreateClient("AnimeThemes"), Times.Never);
+        }
+
+        [Fact]
+        public async Task GetAnimeBySlug_RateLimited_RetriesTwiceThenUsesStaleCache()
+        {
+            var slug = "rate-limited-" + Guid.NewGuid().ToString("N");
+            var cache = new Mock<ISeasonFinderDataStore>();
+            cache.Setup(i => i.GetApiFetchCache("animethemes:slug:" + slug)).Returns(new ApiFetchCacheEntry
+            {
+                CacheKey = "animethemes:slug:" + slug,
+                Provider = "AnimeThemes",
+                PayloadJson = "{\"id\":321,\"name\":\"Stale\",\"slug\":\"" + slug + "\"}",
+                CreatedAtUtc = DateTimeOffset.UtcNow.AddDays(-31).ToString("O"),
+                ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(-1).ToString("O"),
+            });
+            var requests = 0;
+            _mockHttp.When("https://api.animethemes.moe/anime/" + slug + "*").Respond(_ =>
+            {
+                requests++;
+                var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+                response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
+                return response;
+            });
+            var limiter = new RateLimiter(new Mock<ILogger<RateLimiter>>().Object, "AnimeThemes", 80);
+            var service = new AnimeThemesService(_mockHttpClientFactory.Object, _mockLogger.Object, limiter, cache.Object);
+
+            var result = await service.GetAnimeBySlug(slug, CancellationToken.None);
+
+            Assert.NotNull(result);
+            Assert.Equal("Stale", result.Name);
+            Assert.Equal(3, requests);
         }
     }
 }

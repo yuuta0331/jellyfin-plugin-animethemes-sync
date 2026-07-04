@@ -406,6 +406,139 @@ public sealed class SeasonFinderDataStoreTests
     }
 
     [Fact]
+    public void SeasonMetadataAndApiFetchCache_PersistAndSurviveBrowserCacheClear()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            store.SaveSeasonMetadataSnapshot(new SeasonMetadataSnapshot
+            {
+                SeriesItemId = "series-1",
+                SeriesName = "Example",
+                InputFingerprint = "fingerprint-1",
+                ResolvedAtUtc = "2026-07-04T00:00:00.0000000+00:00",
+                ExpiresAtUtc = "2026-08-03T00:00:00.0000000+00:00",
+                Seasons =
+                [
+                    new SeasonMetadataRow
+                    {
+                        SeasonItemId = "season-1", SeasonName = "Season 1", SeasonNumber = 1,
+                        Status = "Direct", Source = "SeasonProviderIds", SameAsSeries = false,
+                        AnimeThemesSlug = "example", AniListId = 100, MyAnimeListId = 200,
+                        AnimeYear = 2024, AnimeSeason = "SPRING",
+                    },
+                ],
+            });
+            store.UpsertApiFetchCache(new ApiFetchCacheEntry
+            {
+                CacheKey = "animethemes:slug:example",
+                Provider = "AnimeThemes",
+                PayloadJson = "{\"slug\":\"example\"}",
+                CreatedAtUtc = "2026-07-04T00:00:00.0000000+00:00",
+                ExpiresAtUtc = "2026-08-03T00:00:00.0000000+00:00",
+            });
+
+            store.ClearCache();
+
+            var reopened = CreateStore(directory);
+            var snapshot = reopened.GetSeasonMetadataSnapshot("series-1");
+            Assert.NotNull(snapshot);
+            Assert.Equal("fingerprint-1", snapshot.InputFingerprint);
+            var season = Assert.Single(snapshot.Seasons);
+            Assert.Equal("example", season.AnimeThemesSlug);
+            Assert.Equal(2024, season.AnimeYear);
+            var api = reopened.GetApiFetchCache("animethemes:slug:example");
+            Assert.NotNull(api);
+            Assert.Equal("AnimeThemes", api.Provider);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void SeasonMetadataAndApiFetchCache_AreScopedByServerKind()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var jellyfin = CreateStore(directory, "Jellyfin");
+            var emby = CreateStore(directory, "Emby");
+            jellyfin.SaveSeasonMetadataSnapshot(new SeasonMetadataSnapshot
+            {
+                SeriesItemId = "series-1", InputFingerprint = "jf", ResolvedAtUtc = "now", ExpiresAtUtc = "later",
+            });
+            jellyfin.UpsertApiFetchCache(new ApiFetchCacheEntry
+            {
+                CacheKey = "key", Provider = "provider", PayloadJson = "{}", CreatedAtUtc = "2026-07-04T00:00:00Z", ExpiresAtUtc = "2026-08-03T00:00:00Z",
+            });
+
+            Assert.NotNull(jellyfin.GetSeasonMetadataSnapshot("series-1"));
+            Assert.Null(emby.GetSeasonMetadataSnapshot("series-1"));
+            Assert.NotNull(jellyfin.GetApiFetchCache("key"));
+            Assert.Null(emby.GetApiFetchCache("key"));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void ApiFetchCache_PrunesToConfiguredLimit()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            store.EnsureInitialized();
+            using (var connection = new SqliteConnection("Data Source=" + store.DatabasePath + ";Pooling=False"))
+            {
+                connection.Open();
+                using var transaction = connection.BeginTransaction();
+                using var command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = """
+                    INSERT INTO ApiFetchCache (ServerKind, CacheKey, Provider, PayloadJson, CreatedAtUtc, ExpiresAtUtc)
+                    VALUES ('Test', $key, 'Test', '{}', $created, $expires);
+                    """;
+                var key = command.Parameters.Add("$key", Microsoft.Data.Sqlite.SqliteType.Text);
+                var created = command.Parameters.Add("$created", Microsoft.Data.Sqlite.SqliteType.Text);
+                var expires = command.Parameters.Add("$expires", Microsoft.Data.Sqlite.SqliteType.Text);
+                var now = DateTimeOffset.UtcNow;
+                for (var index = 0; index < 2001; index++)
+                {
+                    key.Value = "key-" + index;
+                    created.Value = now.AddSeconds(index).ToString("O");
+                    expires.Value = now.AddDays(30).ToString("O");
+                    command.ExecuteNonQuery();
+                }
+
+                transaction.Commit();
+            }
+
+            store.UpsertApiFetchCache(new ApiFetchCacheEntry
+            {
+                CacheKey = "newest", Provider = "Test", PayloadJson = "{}",
+                CreatedAtUtc = DateTimeOffset.UtcNow.AddDays(1).ToString("O"),
+                ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(31).ToString("O"),
+            });
+
+            using var verify = new SqliteConnection("Data Source=" + store.DatabasePath + ";Pooling=False");
+            verify.Open();
+            using var count = verify.CreateCommand();
+            count.CommandText = "SELECT COUNT(*) FROM ApiFetchCache WHERE ServerKind = 'Test';";
+            Assert.Equal(2000L, Convert.ToInt64(count.ExecuteScalar()));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
     public void EnsureInitialized_UpgradesStoredSchemaVersionWithoutTouchingData()
     {
         var directory = CreateTempDirectory();
@@ -431,7 +564,7 @@ public sealed class SeasonFinderDataStoreTests
                 connection.Open();
                 using var command = connection.CreateCommand();
                 command.CommandText = "SELECT Value FROM SchemaMetadata WHERE Key = 'SchemaVersion';";
-                Assert.Equal("3", command.ExecuteScalar());
+                Assert.Equal("4", command.ExecuteScalar());
             }
 
             var mapping = Assert.Single(reopened.GetSeasonThemeMappings());

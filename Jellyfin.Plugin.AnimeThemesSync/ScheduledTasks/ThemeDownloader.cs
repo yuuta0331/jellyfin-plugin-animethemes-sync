@@ -5,6 +5,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using AnimeThemesSync.Shared;
@@ -36,6 +38,7 @@ public sealed class ThemeDownloader : IScheduledTask
     private const string BroadcastSeasonProviderKey = "AnimeThemesBroadcastSeason";
     private const string UserOwnedImageFingerprint = "user-owned";
     private static readonly SemaphoreSlim SeasonMetadataSyncGate = new(1, 1);
+    private static readonly TimeSpan SeasonMetadataCacheTtl = TimeSpan.FromDays(30);
     private static readonly SemaphoreSlim SeasonCollectionFinalizeGate = new(1, 1);
     private readonly ILibraryManager _libraryManager;
     private readonly IFileSystem _fileSystem;
@@ -410,7 +413,9 @@ public sealed class ThemeDownloader : IScheduledTask
             {
                 var state = _seasonFinderStore.GetSeasonAutomationState(series.Id.ToString("D"));
                 broadcastSeasons = GetBroadcastSeasons(state);
-                if (state.Rules.Count == 0)
+                var seasons = GetSeasonItems(series).Where(IsSeasonEligibleForThemeMatching).ToList();
+                var snapshot = _seasonFinderStore.GetSeasonMetadataSnapshot(series.Id.ToString("D"));
+                if (state.Rules.Count == 0 || !IsSeasonMetadataSnapshotFresh(snapshot, BuildSeasonMetadataFingerprint(series, seasons), seasons))
                 {
                     broadcastSeasons = await SynchronizeSeriesSeasonMetadataAsync(series, cancellationToken).ConfigureAwait(false);
                     anySeriesSynchronized = true;
@@ -2907,40 +2912,95 @@ public sealed class ThemeDownloader : IScheduledTask
             previousAutomation,
             _dataStore.GetSeasonMetadataState(series.Id.ToString("D")));
         var seasons = GetSeasonItems(series).Where(IsSeasonEligibleForThemeMatching).ToList();
-        var seriesAnime = await ResolveAnime(series, cancellationToken, logMissingIds: false).ConfigureAwait(false);
-        var automaticSeasonAnime = seriesAnime == null
-            ? new Dictionary<Guid, AnimeThemesAnime>()
-            : await BuildAutomaticSeasonAnimeMapAsync(series, seasons, seriesAnime, cancellationToken).ConfigureAwait(false);
-        var resolved = new List<(Season Season, BroadcastSeasonValue BroadcastSeason)>();
-        foreach (var season in seasons)
+        var fingerprint = BuildSeasonMetadataFingerprint(series, seasons);
+        var persistedSnapshot = _seasonFinderStore.GetSeasonMetadataSnapshot(series.Id.ToString("D"));
+        var snapshot = persistedSnapshot
+            ?? CreateSnapshotFromAutomationState(series, seasons, previousAutomation, fingerprint);
+        if (snapshot != null && persistedSnapshot == null)
         {
-            automaticSeasonAnime.TryGetValue(season.Id, out var automaticAnime);
-            var matchState = BuildSeasonThemeMatchState(series, season, automaticAnime);
-            var resolution = await ResolveSeasonBrowserAnimeAsync(series, season, seriesAnime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false);
-            if (resolution.Anime == null)
+            _seasonFinderStore.SaveSeasonMetadataSnapshot(snapshot);
+        }
+
+        if (!IsSeasonMetadataSnapshotFresh(snapshot, fingerprint, seasons))
+        {
+            var stale = snapshot != null &&
+                string.Equals(snapshot.InputFingerprint, fingerprint, StringComparison.Ordinal) &&
+                IsSeasonMetadataSnapshotComplete(snapshot, seasons)
+                ? snapshot
+                : null;
+            var seriesAnime = await ResolveAnime(series, cancellationToken, logMissingIds: false).ConfigureAwait(false);
+            var automaticSeasonAnime = seriesAnime == null
+                ? new Dictionary<Guid, AnimeThemesAnime>()
+                : await BuildAutomaticSeasonAnimeMapAsync(series, seasons, seriesAnime, cancellationToken).ConfigureAwait(false);
+            var rows = new List<SeasonMetadataRow>();
+            var refreshFailed = false;
+            foreach (var season in seasons)
             {
-                if (!string.Equals(matchState.Status, "Unmatched", StringComparison.OrdinalIgnoreCase))
+                automaticSeasonAnime.TryGetValue(season.Id, out var automaticAnime);
+                var matchState = BuildSeasonThemeMatchState(series, season, automaticAnime);
+                var resolution = await ResolveSeasonBrowserAnimeAsync(series, season, seriesAnime, automaticSeasonAnime, cancellationToken).ConfigureAwait(false);
+                if (resolution.Anime == null && !string.Equals(matchState.Status, "Unmatched", StringComparison.OrdinalIgnoreCase))
                 {
-                    _logger.LogWarning("Keeping previous season metadata for {SeriesName} because {SeasonName} could not be resolved.", series.Name, season.Name);
+                    refreshFailed = true;
+                    break;
+                }
+
+                var resolvedIds = ExtractAnimeExternalIds(resolution.Anime);
+                rows.Add(new SeasonMetadataRow
+                {
+                    SeasonItemId = season.Id.ToString("D"),
+                    SeasonName = season.Name ?? $"Season {season.IndexNumber}",
+                    SeasonNumber = season.IndexNumber,
+                    Status = matchState.Status,
+                    Source = matchState.Source,
+                    SameAsSeries = resolution.SameAsSeries,
+                    AnimeThemesSlug = resolution.Anime?.Slug ?? matchState.AnimeThemesSlug,
+                    AniListId = resolvedIds.AniListId ?? matchState.AniListId,
+                    MyAnimeListId = resolvedIds.MyAnimeListId ?? matchState.MyAnimeListId,
+                    AnimeYear = resolution.Anime?.Year,
+                    AnimeSeason = resolution.Anime?.Season,
+                });
+            }
+
+            if (refreshFailed)
+            {
+                const string RefreshError = "One or more identified seasons could not be resolved from the providers.";
+                if (stale == null)
+                {
+                    var failedAt = DateTimeOffset.UtcNow;
+                    _seasonFinderStore.SaveSeasonMetadataSnapshot(new SeasonMetadataSnapshot
+                    {
+                        SeriesItemId = series.Id.ToString("D"), SeriesName = series.Name, InputFingerprint = fingerprint,
+                        ResolvedAtUtc = failedAt.ToString("O", CultureInfo.InvariantCulture),
+                        ExpiresAtUtc = failedAt.ToString("O", CultureInfo.InvariantCulture), LastError = RefreshError,
+                    });
+                    _logger.LogWarning("Season metadata refresh failed for {SeriesName}; preserving previous automation state.", series.Name);
                     return previous.BroadcastSeasons;
                 }
 
-                continue;
+                stale.LastError = RefreshError;
+                _seasonFinderStore.SaveSeasonMetadataSnapshot(stale);
+                _logger.LogWarning("Using stale season metadata for {SeriesName} after provider refresh failed.", series.Name);
+                snapshot = stale;
             }
-
-            var broadcastSeason = SeasonMetadataPlanner.CreateBroadcastSeason(
-                resolution.Anime.Year,
-                resolution.Anime.Season,
-                config.TagFormat,
-                config.TagSeasonSpring,
-                config.TagSeasonSummer,
-                config.TagSeasonFall,
-                config.TagSeasonWinter);
-            if (broadcastSeason != null)
+            else
             {
-                resolved.Add((season, broadcastSeason));
+                var now = DateTimeOffset.UtcNow;
+                snapshot = new SeasonMetadataSnapshot
+                {
+                    SeriesItemId = series.Id.ToString("D"),
+                    SeriesName = series.Name,
+                    InputFingerprint = BuildSeasonMetadataFingerprint(series, seasons),
+                    ResolvedAtUtc = now.ToString("O", CultureInfo.InvariantCulture),
+                    ExpiresAtUtc = now.Add(SeasonMetadataCacheTtl).ToString("O", CultureInfo.InvariantCulture),
+                    LastError = null,
+                    Seasons = rows,
+                };
+                _seasonFinderStore.SaveSeasonMetadataSnapshot(snapshot);
             }
         }
+
+        var resolved = BuildResolvedSeasonMetadata(seasons, snapshot!, config);
 
         var desiredTags = new Dictionary<Guid, HashSet<string>>();
         var generatedTags = new Dictionary<Guid, HashSet<string>>();
@@ -3025,7 +3085,7 @@ public sealed class ThemeDownloader : IScheduledTask
         var automationState = BuildSeasonAutomationState(
             series,
             resolved,
-            automaticSeasonAnime,
+            snapshot!.Seasons,
             managedTags,
             memberships,
             previousAutomation);
@@ -3050,10 +3110,125 @@ public sealed class ThemeDownloader : IScheduledTask
         }
     }
 
+    private static bool IsSeasonMetadataSnapshotFresh(SeasonMetadataSnapshot? snapshot, string fingerprint, IReadOnlyList<Season> seasons)
+    {
+        return snapshot != null &&
+            string.Equals(snapshot.InputFingerprint, fingerprint, StringComparison.Ordinal) &&
+            IsSeasonMetadataSnapshotComplete(snapshot, seasons) &&
+            DateTimeOffset.TryParse(
+                snapshot.ExpiresAtUtc,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var expires) &&
+            expires > DateTimeOffset.UtcNow;
+    }
+
+    private static bool IsSeasonMetadataSnapshotComplete(SeasonMetadataSnapshot snapshot, IReadOnlyList<Season> seasons)
+    {
+        return snapshot.Seasons.Count == seasons.Count &&
+            seasons.All(season => snapshot.Seasons.Any(row => string.Equals(row.SeasonItemId, season.Id.ToString("D"), StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private string BuildSeasonMetadataFingerprint(Series series, IReadOnlyList<Season> seasons)
+    {
+        var values = new List<string> { "v1", series.Id.ToString("D"), GetItemAnimeThemesSlug(series) ?? string.Empty };
+        var seriesIds = ExtractItemProviderIds(series);
+        values.Add(seriesIds.AniListId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
+        values.Add(seriesIds.MyAnimeListId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
+        var mappings = _seasonFinderStore.GetSeasonThemeMappings();
+        foreach (var season in seasons.OrderBy(i => i.Id))
+        {
+            var ids = ExtractItemProviderIds(season);
+            var mapping = FindSeasonThemeMapping(mappings, series, season);
+            values.Add(string.Join(
+                "|",
+                season.Id.ToString("D"),
+                season.IndexNumber?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+                GetItemAnimeThemesSlug(season) ?? string.Empty,
+                ids.AniListId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+                ids.MyAnimeListId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+                mapping?.Enabled == true ? "1" : "0",
+                mapping?.Locked == true ? "1" : "0",
+                mapping?.AnimeThemesSlug ?? string.Empty,
+                mapping?.AniListId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+                mapping?.MyAnimeListId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty));
+        }
+
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", values))));
+    }
+
+    private static SeasonMetadataSnapshot? CreateSnapshotFromAutomationState(
+        Series series,
+        List<Season> seasons,
+        SeasonAutomationState automation,
+        string fingerprint)
+    {
+        if (seasons.Count == 0 || automation.Rules.Count != seasons.Count ||
+            seasons.Any(season => automation.Rules.All(rule => !string.Equals(rule.SeasonItemId, season.Id.ToString("D"), StringComparison.OrdinalIgnoreCase))))
+        {
+            return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        return new SeasonMetadataSnapshot
+        {
+            SeriesItemId = series.Id.ToString("D"),
+            SeriesName = series.Name,
+            InputFingerprint = fingerprint,
+            ResolvedAtUtc = now.ToString("O", CultureInfo.InvariantCulture),
+            ExpiresAtUtc = now.Add(SeasonMetadataCacheTtl).ToString("O", CultureInfo.InvariantCulture),
+            Seasons = automation.Rules.Select(rule => new SeasonMetadataRow
+            {
+                SeasonItemId = rule.SeasonItemId,
+                SeasonName = rule.SeasonName,
+                SeasonNumber = rule.SeasonNumber,
+                Status = string.Equals(rule.Source, "SeasonThemeMappings", StringComparison.OrdinalIgnoreCase) ? "Manual" : "Auto",
+                Source = rule.Source,
+                SameAsSeries = string.Equals(rule.Source, "SeriesLevel", StringComparison.OrdinalIgnoreCase),
+                AnimeThemesSlug = rule.AnimeThemesSlug,
+                AniListId = rule.AniListId,
+                MyAnimeListId = rule.MyAnimeListId,
+                AnimeYear = rule.AnimeYear,
+                AnimeSeason = rule.AnimeSeason,
+            }).ToList(),
+        };
+    }
+
+    private static List<(Season Season, BroadcastSeasonValue BroadcastSeason)> BuildResolvedSeasonMetadata(
+        IReadOnlyList<Season> seasons,
+        SeasonMetadataSnapshot snapshot,
+        PluginConfiguration config)
+    {
+        var resolved = new List<(Season Season, BroadcastSeasonValue BroadcastSeason)>();
+        foreach (var season in seasons)
+        {
+            var row = snapshot.Seasons.FirstOrDefault(i => string.Equals(i.SeasonItemId, season.Id.ToString("D"), StringComparison.OrdinalIgnoreCase));
+            if (row?.AnimeYear is not int year || string.IsNullOrWhiteSpace(row.AnimeSeason))
+            {
+                continue;
+            }
+
+            var broadcastSeason = SeasonMetadataPlanner.CreateBroadcastSeason(
+                year,
+                row.AnimeSeason,
+                config.TagFormat,
+                config.TagSeasonSpring,
+                config.TagSeasonSummer,
+                config.TagSeasonFall,
+                config.TagSeasonWinter);
+            if (broadcastSeason != null)
+            {
+                resolved.Add((season, broadcastSeason));
+            }
+        }
+
+        return resolved;
+    }
+
     private SeasonAutomationState BuildSeasonAutomationState(
         Series series,
         IReadOnlyList<(Season Season, BroadcastSeasonValue BroadcastSeason)> resolved,
-        Dictionary<Guid, AnimeThemesAnime> automaticSeasonAnime,
+        IReadOnlyList<SeasonMetadataRow> metadataRows,
         IReadOnlyDictionary<string, List<string>> managedTags,
         IReadOnlyList<SeasonCollectionMembershipState> memberships,
         SeasonAutomationState previous)
@@ -3062,18 +3237,17 @@ public sealed class ThemeDownloader : IScheduledTask
         var state = new SeasonAutomationState { SeriesItemId = series.Id.ToString("D") };
         foreach (var entry in resolved)
         {
-            automaticSeasonAnime.TryGetValue(entry.Season.Id, out var automaticAnime);
-            var match = BuildSeasonThemeMatchState(series, entry.Season, automaticAnime);
+            var metadata = metadataRows.First(i => string.Equals(i.SeasonItemId, entry.Season.Id.ToString("D"), StringComparison.OrdinalIgnoreCase));
             var ruleKey = "id:" + entry.Season.Id.ToString("D");
             _seasonMetadataRuleErrors.TryGetValue(ruleKey, out var error);
             state.Rules.Add(new SeasonAutomationRuleRecord
             {
                 RuleKey = ruleKey, SeriesItemId = series.Id.ToString("D"), SeasonItemId = entry.Season.Id.ToString("D"),
                 SeasonName = entry.Season.Name ?? $"Season {entry.Season.IndexNumber}", SeasonNumber = entry.Season.IndexNumber,
-                AnimeThemesSlug = match.AnimeThemesSlug, AniListId = match.AniListId, MyAnimeListId = match.MyAnimeListId,
+                AnimeThemesSlug = metadata.AnimeThemesSlug, AniListId = metadata.AniListId, MyAnimeListId = metadata.MyAnimeListId,
                 AnimeYear = entry.BroadcastSeason.Year, AnimeSeason = entry.BroadcastSeason.Season,
                 BroadcastSeasonKey = entry.BroadcastSeason.Key, BroadcastSeasonLabel = entry.BroadcastSeason.Label,
-                Source = match.Source, ResolvedAtUtc = now, LastError = error, UpdatedAtUtc = now,
+                Source = metadata.Source, ResolvedAtUtc = now, LastError = error, UpdatedAtUtc = now,
             });
         }
 

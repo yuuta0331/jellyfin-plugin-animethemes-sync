@@ -153,6 +153,70 @@ public sealed record SeasonSummary(
     string Status);
 
 /// <summary>
+/// Provider-independent resolved metadata for one media-server season.
+/// </summary>
+public sealed class SeasonMetadataRow
+{
+    public string SeasonItemId { get; set; } = string.Empty;
+
+    public string SeasonName { get; set; } = string.Empty;
+
+    public int? SeasonNumber { get; set; }
+
+    public string Status { get; set; } = "Unmatched";
+
+    public string Source { get; set; } = "None";
+
+    public bool SameAsSeries { get; set; }
+
+    public string? AnimeThemesSlug { get; set; }
+
+    public int? AniListId { get; set; }
+
+    public int? MyAnimeListId { get; set; }
+
+    public int? AnimeYear { get; set; }
+
+    public string? AnimeSeason { get; set; }
+}
+
+/// <summary>
+/// Cached resolved season metadata for one series.
+/// </summary>
+public sealed class SeasonMetadataSnapshot
+{
+    public string SeriesItemId { get; set; } = string.Empty;
+
+    public string? SeriesName { get; set; }
+
+    public string InputFingerprint { get; set; } = string.Empty;
+
+    public string ResolvedAtUtc { get; set; } = string.Empty;
+
+    public string ExpiresAtUtc { get; set; } = string.Empty;
+
+    public string? LastError { get; set; }
+
+    public List<SeasonMetadataRow> Seasons { get; set; } = [];
+}
+
+/// <summary>
+/// One persistent provider response, including expired entries usable as stale fallback.
+/// </summary>
+public sealed class ApiFetchCacheEntry
+{
+    public string CacheKey { get; set; } = string.Empty;
+
+    public string Provider { get; set; } = string.Empty;
+
+    public string PayloadJson { get; set; } = string.Empty;
+
+    public string CreatedAtUtc { get; set; } = string.Empty;
+
+    public string ExpiresAtUtc { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// One resolved season automation rule stored in SQLite.
 /// </summary>
 public sealed class SeasonAutomationRuleRecord
