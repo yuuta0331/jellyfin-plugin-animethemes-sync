@@ -21,124 +21,98 @@
 </a>
 </p>
 
-## Platforms
-
 [![Jellyfin](https://img.shields.io/static/v1?color=%2300A4DC&style=for-the-badge&label=Jellyfin&logo=jellyfin&message=10.11.x)](https://jellyfin.org/)
-[![Emby](https://img.shields.io/static/v1?color=%2352B54B&style=for-the-badge&label=Emby&logo=emby&message=4.8.x)](https://emby.media/)
+[![Emby](https://img.shields.io/static/v1?color=%2352B54B&style=for-the-badge&label=Emby&logo=emby&message=4.8%2B)](https://emby.media/)
 
-AnimeThemes Sync は、AnimeThemes.moe 連携機能を Jellyfin / Emby に追加します。
+[AnimeThemes.moe](https://animethemes.moe/) のOP/EDテーマをアニメライブラリに統合するプラグインです。自動マッチング、テーマ動画/音声のダウンロード、管理UI、放送シーズンのタグ・コレクション自動化を提供します。
 
-- AniList / MyAnimeList ID を使ったメタデータマッチング
-- アイテム画面への AnimeThemes 外部リンク追加
-- OP/ED テーマの定期ダウンロード（動画/音声）
-- 進捗表示・キャンセル・分割ダウンロードに対応したダウンロードキュー
-- シリーズ・Season・映画の対応
-- 未一致Seasonを検索・保存できるSeason Finder UI
-- 動画/音声のプレビュー、リトライ、シーク再生
-- Season単位の出力を有効/無効にできる設定
-- 放送シーズンコレクションのメタデータロックとポスター/サムネイル/背景画像の自動生成
+[English README is here](README.md)
 
-## Installation
+## 主な機能
+
+- **自動マッチング** — AniList / MyAnimeList IDを使ってシリーズ・シーズン・映画をAnimeThemesの作品へ解決。外部IDによる手動指定にも対応
+- **テーマダウンロード** — OP/EDのテーマ動画（`backdrops`）とテーマ曲（`theme-music`）、任意でブラウズ可能なExtras。メディア種別ごとの上限設定、ffmpegによる音量調整
+- **ダウンロードエンジン** — 進捗表示・キャンセル・リトライ・履歴付きのジョブキュー、分割（マルチコネクション）ダウンロード、同時実行数の設定
+- **AnimeThemes Browser** — 検索、フィルタ（種別・リンク状態・保存状態・放送シーズン）、ソート、ページングを備えた管理ページ。OP/EDのプレビュー、テーマ単位のダウンロード（音声/動画/Extrasを選択可）、保存済みファイルの再生・削除
+- **Season Finder** — 未一致シーズンの確認、タイトル+年でのAnimeThemes検索、候補のプレビュー、シーズンマッピングの保存をJSON編集なしで実行。マッピングのエクスポート/インポートに対応
+- **放送シーズン自動化** — シーズンタグ（表記は`{Season} {Year}`形式でローカライズ・カスタマイズ可能）と、メタデータロック・ポスター/サムネイル/背景の自動生成に対応した放送シーズンコレクション
+- **メンテナンス機能** — プラグイン作成ファイルのクリーンアップスキャナ、Browser/プロバイダキャッシュの管理、TTL設定付きの永続キャッシュ
+
+## インストール
 
 ### Jellyfin（リポジトリ経由 - 推奨）
 
-1. Jellyfin Dashboard を開く
-2. `Plugins` -> `Repositories` へ移動
-3. 以下を追加
+1. Jellyfin Dashboard → `Plugins` → `Repositories` を開く
+2. リポジトリを追加
    - Name: `AnimeThemes Sync`
    - URL: `https://cassiscloud.github.io/jellyfin-plugin-animethemes-sync/manifest.json`
-4. `Catalog` で `AnimeThemes Sync` をインストール
-5. Jellyfin を再起動
+3. `Catalog` から `AnimeThemes Sync` をインストールし、Jellyfinを再起動
 
 ### Jellyfin（手動）
 
-1. [Releases](https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync/releases) からアセットをダウンロード
-2. Jellyfin のプラグインフォルダへ展開/配置
-3. Jellyfin を再起動
+1. [Releases](https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync/releases) からJellyfin用パッケージをダウンロード
+2. Jellyfinのプラグインフォルダへ展開し、再起動
 
 ### Emby（手動）
 
-1. [Releases](https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync/releases) から最新の Emby 用パッケージをダウンロード
-2. Emby の plugins フォルダへ配置（例: `.../embyserver/system/plugins/AnimeThemesSync/`）
-3. Emby Server を再起動
+1. [Releases](https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync/releases) からEmby用パッケージをダウンロード
+2. Embyのpluginsフォルダへ配置（例: `.../embyserver/system/plugins/AnimeThemesSync/`）し、Emby Serverを再起動
 
-## Usage
+## クイックスタート
 
-### メタデータプロバイダーを有効化
+1. アニメライブラリのMetadata Downloadersで `AnimeThemes Sync` を有効化し、メタデータを更新
+2. スケジュールタスク `Download Anime Themes` を実行 — メディアフォルダにテーマファイルが作成されます
+3. ダッシュボードメニューの `AnimeThemes Browser` で結果の確認、プレビュー、個別ダウンロードができます
 
-- ライブラリの Metadata Downloaders で `AnimeThemes Sync` を有効化
-- 対象ライブラリ/アイテムのメタデータを更新
+## スケジュールタスク
 
-### テーマダウンローダーを実行
+| タスク | 内容 |
+|---|---|
+| `Download Anime Themes` | 有効なライブラリ全体のOP/EDテーマを解決・ダウンロードし、シーズンメタデータとBrowserキャッシュを更新 |
+| `Refresh Anime Season Metadata` | 古い/欠落したシーズンメタデータ・タグ・コレクション・Browserデータを**ダウンロードなしで**更新（既定: 週1回） |
 
-- Scheduled Tasks を開く
-- `Download Anime Themes` を実行
-- メディアフォルダ内にテーマファイルが作成されます（`backdrops` / `theme-music`）
-- シリーズにはシリーズ直下、Seasonに別マッピングがある場合は各Seasonフォルダ直下へ作成されます
-- 設定画面の `Enable Season Theme Downloads` を無効にすると、Season単位の出力を止めてシリーズ/映画単位の出力だけにできます
-- `AnimeThemes Browser` -> `Season Finder` を開くと、未一致Seasonの確認、AnimeThemes検索、OP/EDプレビュー、Seasonマッピング保存をJSON編集なしで実行できます
+## 出力レイアウト
 
-### Seasonコレクションのメタデータロックと画像自動生成
+- シリーズのテーマはシリーズフォルダへ出力されます（`backdrops` / `theme-music`、Extras有効時は `extras`）
+- `Enable Season Theme Downloads` 有効時（既定）、Season 1（および番号なしの通常シーズン）は親シリーズフォルダへ、Season 2以降は各シーズンフォルダへ出力されます
+- Season 1がシリーズと異なるAnimeThemes作品へ明示的にマッピングされた場合、衝突回避のためファイル名に `Season 01 - ` プレフィックスが付きます
+- シーズンがシリーズと同じAnimeThemes作品に解決される場合、重複出力はスキップされます。既存ファイルの自動移動・自動削除は行いません
 
-`Create broadcast-season collections` を有効にすると、プラグインが作成したコレクション（プラグイン独自のprovider idで識別。同名のため再利用しただけのコレクションには適用されません）に対して次の2つのオプションが使えます。
+## Season Finder とマッピング
 
-- `Lock collection metadata`（既定: 有効）はサーバーのアイテムロックを設定し、TMDBなどのメタデータプロバイダーによるコレクション名・画像の上書きを防ぎます。ロック中は手動のメタデータ更新もブロックされます。解除するにはオプションを無効にしてSync（Browser設定のSyncボタン）を実行してください。ユーザー自身が設定したロックをプラグインが解除することはありません。
-- `Generate collection images`（既定: 有効）はメンバーのSeason/Seriesポスターを合成して、ポスター（最大4枚合成）、16:9のサムネイル、16:9の背景グリッドを生成します。メンバーやポスターが変わると自動的に再生成されます。生成画像を手動で差し替えた場合はそれを検知し、画像が削除されるまでそのスロットには触れません。背景のオーバーレイ（不透明度・色）は設定で調整・無効化できます。
+複数期が1つのシリーズにまとまっている場合、プラグインはAniListのrelationsを辿って各シーズンをAnimeThemesの別作品へ自動割り当てします。未一致・誤一致のシーズンは `AnimeThemes Browser` → `Season Finder` で修正できます。
 
-どちらのオプションも、次回の定期実行または手動Syncで既存の管理コレクションへ遡って適用されます。
+1. `Unmatched` / `Manual` / `Auto` / `All` タブからシーズンを選択（シーズン番号や検索語で絞り込み可能）
+2. タイトルと任意の年でAnimeThemesを検索し、候補のOP/EDをプレビュー
+3. `Save mapping` または `Save & Download` を実行
 
-### Browserからのダウンロードとプレビュー
+マッピングはプラグインのSQLiteデータベース（`animethemes-sync.db`）に保存され、MappingsコントロールからJSONでエクスポート/インポートできます。プラグイン設定内の旧 `SeasonThemeMappings` は初回に自動で取り込まれます。一覧はタブ移動後も読込件数・選択・スクロール位置を復元します。
 
-- `AnimeThemes Browser`ではダウンロード進捗の確認、キャンセル、終了履歴の削除ができます。
-- 分割ダウンロードと同時ダウンロード数はプラグイン設定から変更できます。
-- テーマカードから動画/音声のプレビューとダウンロード済みファイルの操作ができます。
+## 放送シーズンのタグとコレクション
 
-## Manual Linking
+- **タグ**: 放送シーズンタグ（例: `Spring 2024`）をシリーズまたはシーズンに付与します。季節の表記と `{Season} {Year}` 形式はカスタマイズ・ローカライズ可能です。タグ機能を無効化する際は、プラグインが付与したタグを削除するかどうかを選べるクリーンアップダイアログが表示されます。
+- **コレクション**: `Create broadcast-season collections` で放送シーズンごとのコレクションを作成します。管理対象はプラグインが作成したコレクションのみで、同名のため再利用しただけのコレクションには触れません。機能を無効化する際は、管理コレクションを維持するか整理するかを選択カードで選べます。
+  - `Lock collection metadata`（既定: 有効）は他のメタデータプロバイダーによる名前・画像の上書きを防ぎます。ユーザー自身が設定したロックは解除されません。解除するにはオプションを無効にしてSyncを実行してください。
+  - `Generate collection images`（既定: 有効）はメンバーのポスターを合成してポスター（最大4枚）、16:9サムネイル、16:9背景グリッドを生成し、メンバー変更時に再生成します。手動で差し替えた画像は検知され、以後そのスロットには触れません。オーバーレイ・キャンバスの色/不透明度は設定できます。
+- どちらも次回の定期実行または手動Syncで既存の管理コレクションへ遡って適用されます。Browser設定には全シリーズを強制更新する `Rebuild all season metadata` と、実行中Syncのキャンセルも用意されています。
 
-自動マッチングが失敗する場合は、外部 ID を手動で設定します。
+## メンテナンスとキャッシュ
 
-- `AnimeThemes Slug`（推奨）
+- **ローカルメディアクリーンアップ**（Browser → Manager）: ライブラリ内のテーマファイルをスキャンし、プラグインが作成したファイルと未追跡ファイルを区別して表示。選択したものだけを削除します（管理対象フォルダの外には触れません）
+- **キャッシュ**: Browserデータとプロバイダ（AniList / AnimeThemes）応答は永続化され、再起動やページ再読込後も高速に表示されます。TTLは設定可能です（`Season metadata TTL (days)` / `Provider response TTL (days)`、1〜365、既定30）。Browserキャッシュの再構築/クリアとプロバイダキャッシュのクリアはBrowser設定から実行できます
+- ライブラリ変更（追加・更新）は数秒以内にBrowserキャッシュへ差分反映されます。削除時は全再構築が走ります
+
+## 手動リンク
+
+自動マッチングが失敗する場合は、アイテムに外部IDを設定してください。
+
+- `AnimeThemes Slug`（推奨） — `https://animethemes.moe/anime/blackrock_shooter_tv` の場合、slugは `blackrock_shooter_tv`
 - `AnimeThemes ID`
 
-例: `https://animethemes.moe/anime/blackrock_shooter_tv` の slug は `blackrock_shooter_tv`
+## ライセンス
 
-### Season Finder とSeasonごとの手動マッピング
+GNU GPL v3.0 — 詳細は [LICENSE](LICENSE) を参照してください。
 
-複数期が1つのJellyfin/Embyシリーズにまとまっている場合、スケジュールタスクはシリーズのAniList IDからAniList relationsを辿り、通常SeasonをAnimeThemesの別作品へ自動割り当てします。
-未一致または誤一致のSeasonがある場合は、`AnimeThemes Browser` -> `Season Finder` を使用します。
+## 免責事項
 
-1. `Unmatched` / `Manual` / `Auto` / `All` からSeasonを選択
-2. タイトルと任意の年でAnimeThemesを検索
-3. 候補を選択してOP/EDをプレビューし、`Save mapping` または `Save & Download` を実行
-
-`Save & Download` はマッピングを正規化された `animethemes-sync.db` テーブルへ保存後、そのSeason itemのオンデマンドダウンロードを実行します。Season Finderは一覧末尾付近でSQLiteの次ページを自動取得し、タブ移動やキャッシュ更新後も読込件数、選択Season、スクロール位置を復元します。Season 1（および番号なしの通常Season）の `backdrops` / `theme-music` / `extras` は親Seriesフォルダへ、Season 2以降は各Seasonフォルダへ出力します。Season 1がSeriesとは異なるAnimeThemes entryへ明示的に割り当てられた場合は、衝突を避けるためファイル名に `Season 01 - ` prefixを付けます。既存のSeason 1フォルダ内のファイルは自動移動・自動削除しません。既存の `SeasonThemeMappings` 設定JSONは互換性のため初回にSQLiteへ移行され、それ以降の変更にはMappings import/exportを使用します。
-`Enable Season Theme Downloads` が無効の場合、Seasonマッピングは保存されたままですが、Season出力とSeason itemのオンデマンドダウンロードは再度有効化するまでスキップされます。
-
-```json
-{
-  "SeasonThemeMappings": [
-    {
-      "Enabled": true,
-      "SeriesPath": "D:\\Anime\\Example Series",
-      "SeasonNumber": 2,
-      "AnimeThemesSlug": "example_series_second_season",
-      "Locked": true
-    },
-    {
-      "SeasonPath": "D:\\Anime\\Example Series\\Season 03",
-      "AniListId": 12345
-    }
-  ]
-}
-```
-
-シリーズ直下の `theme-music` / `backdrops` は維持されます。Seasonがシリーズ直下と同じAnimeThemes作品へ解決される場合、そのSeasonへの重複出力はスキップされます。
-
-## License
-
-このプロジェクトは GNU GPL v3.0 ライセンスです。詳細は [LICENSE](LICENSE) を参照してください。
-
-## Disclaimer
-
-このプラグインは非公式であり、Jellyfin / Emby / AniList / MyAnimeList / AnimeThemes.moe とは提携していません。
-各サービスの利用規約およびレート制限を守ってご利用ください。
+このプラグインは非公式であり、Jellyfin / Emby / AniList / MyAnimeList / AnimeThemes.moe とは提携していません。各サービスの利用規約およびレート制限を守ってご利用ください。

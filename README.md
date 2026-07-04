@@ -21,124 +21,98 @@
 </a>
 </p>
 
-## Platforms
-
 [![Jellyfin](https://img.shields.io/static/v1?color=%2300A4DC&style=for-the-badge&label=Jellyfin&logo=jellyfin&message=10.11.x)](https://jellyfin.org/)
-[![Emby](https://img.shields.io/static/v1?color=%2352B54B&style=for-the-badge&label=Emby&logo=emby&message=4.8.x)](https://emby.media/)
+[![Emby](https://img.shields.io/static/v1?color=%2352B54B&style=for-the-badge&label=Emby&logo=emby&message=4.8%2B)](https://emby.media/)
 
-AnimeThemes Sync adds AnimeThemes.moe integration to your media server:
+Brings [AnimeThemes.moe](https://animethemes.moe/) OP/ED themes to your anime library: automatic matching, theme video/song downloads, a full management UI, and broadcast-season tags and collections.
 
-- Metadata matching via AniList / MyAnimeList IDs
-- AnimeThemes external links on items
-- Scheduled OP/ED theme downloading (video/audio)
-- Download queue, live progress, cancellation, and segmented downloads
-- Series, season, and movie support
-- Season Finder UI for unmatched season mappings
-- Video/audio previews, retry, and seekable local playback
-- Optional season-level downloads, so you can keep output at the series level when preferred
-- Broadcast-season collections with metadata lock and auto-generated poster/thumb/backdrop artwork
+[日本語版 README はこちら](README_ja.md)
+
+## Features
+
+- **Automatic matching** — resolves series, seasons, and movies to AnimeThemes entries via AniList / MyAnimeList IDs, with manual override through external IDs
+- **Theme downloads** — OP/ED theme videos (`backdrops`) and theme songs (`theme-music`), optional browsable extras, per media-type limits, volume normalization via ffmpeg
+- **Download engine** — job queue with live progress, cancel, retry, and history; segmented (multi-connection) downloads; configurable concurrency
+- **AnimeThemes Browser** — an admin page to browse your library with search, filters (type, link state, saved state, broadcast season), sorting, and paging; preview any OP/ED, download individual themes (audio/video/extras selectable), play or delete saved files
+- **Season Finder** — review unmatched seasons, search AnimeThemes by title and year, preview candidates, and save per-season mappings without editing JSON; mappings can be exported/imported
+- **Broadcast-season automation** — season tags (localizable labels and `{Season} {Year}` format) and auto-created broadcast-season collections with metadata lock and generated poster/thumb/backdrop artwork
+- **Maintenance tools** — local media cleanup scanner for plugin-created files, browser/provider cache controls, and persistent caches with configurable TTLs
 
 ## Installation
 
-### Jellyfin (Repository - Recommended)
+### Jellyfin (Repository — recommended)
 
-1. Open Jellyfin Dashboard.
-2. Go to `Plugins` -> `Repositories`.
-3. Add repository:
+1. Open Jellyfin Dashboard → `Plugins` → `Repositories`.
+2. Add a repository:
    - Name: `AnimeThemes Sync`
    - URL: `https://cassiscloud.github.io/jellyfin-plugin-animethemes-sync/manifest.json`
-4. Open `Catalog`, find `AnimeThemes Sync`, and install.
-5. Restart Jellyfin.
+3. Install `AnimeThemes Sync` from `Catalog` and restart Jellyfin.
 
 ### Jellyfin (Manual)
 
-1. Download assets from [Releases](https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync/releases).
-2. Extract/copy plugin files into your Jellyfin plugin directory.
-3. Restart Jellyfin.
+1. Download the Jellyfin package from [Releases](https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync/releases).
+2. Extract it into your Jellyfin plugin directory and restart Jellyfin.
 
 ### Emby (Manual)
 
-1. Download the latest Emby package from [Releases](https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync/releases).
-2. Place the Emby plugin files in your Emby plugins folder (for example: `.../embyserver/system/plugins/AnimeThemesSync/`).
-3. Restart Emby Server.
+1. Download the Emby package from [Releases](https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync/releases).
+2. Place the files in your Emby plugins folder (for example `.../embyserver/system/plugins/AnimeThemesSync/`) and restart Emby Server.
 
-## Usage
+## Quick Start
 
-### Enable metadata provider
+1. Enable `AnimeThemes Sync` in your anime library's metadata downloaders and refresh metadata.
+2. Run the `Download Anime Themes` scheduled task — theme files appear in your media folders.
+3. Open `AnimeThemes Browser` (dashboard menu) to check results, preview themes, and download individual entries on demand.
 
-- Enable `AnimeThemes Sync` in your library metadata downloaders.
-- Refresh metadata for your anime library/items.
+## Scheduled Tasks
 
-### Run theme downloader
+| Task | What it does |
+|---|---|
+| `Download Anime Themes` | Resolves and downloads OP/ED themes for all enabled libraries, then updates season metadata and the Browser cache |
+| `Refresh Anime Season Metadata` | Refreshes stale or missing season metadata, tags, collections, and Browser data **without downloading themes** (weekly by default) |
 
-- Open Scheduled Tasks.
-- Run `Download Anime Themes`.
-- Theme files will be created in media folders (`backdrops` / `theme-music`).
-- Series output remains under the series folder; season-specific mappings write to each season folder.
-- Disable `Enable Season Theme Downloads` in the plugin configuration to keep scheduled and on-demand output at the series/movie level.
-- Open `AnimeThemes Browser` -> `Season Finder` to review unmatched seasons, search AnimeThemes, preview OP/ED entries, and save season mappings without editing JSON.
+## Output Layout
 
-### Season collections: metadata lock and generated artwork
+- Series themes go to the series folder (`backdrops` / `theme-music`, plus `extras` when enabled).
+- With `Enable Season Theme Downloads` on (default), Season 1 (and an unnumbered normal season) writes to the parent series folder; Season 2 and later write to their own season folders.
+- When Season 1 is explicitly mapped to a different AnimeThemes entry than the series, its filenames get a `Season 01 - ` prefix to avoid collisions.
+- Seasons that resolve to the same AnimeThemes entry as the series are skipped (no duplicate output). Existing files are never moved or deleted automatically.
 
-When `Create broadcast-season collections` is enabled, two related options apply to plugin-created collections (identified by the plugin's own provider id; collections that were merely reused by name are never touched):
+## Season Finder and Mappings
 
-- `Lock collection metadata` (default: on) sets the server's item lock so TMDB and other metadata providers cannot overwrite the collection name or images. The lock also blocks manual metadata refresh for those collections; turn the option off and run Sync (in the Browser settings) to unlock them again. Locks that you set yourself are never removed by the plugin.
-- `Generate collection images` (default: on) composites member Season/Series posters into a Primary poster (up to 4 posters), a 16:9 thumb, and a 16:9 backdrop grid. Images are regenerated automatically when members or their posters change. If you replace a generated image manually, the plugin detects that and stops touching that slot until the image is deleted. The backdrop overlay (opacity and color) can be tuned or disabled in the settings.
+When several anime seasons are grouped into one series, the plugin follows AniList relations to assign seasons to their own AnimeThemes entries automatically. For unmatched or mis-matched seasons, open `AnimeThemes Browser` → `Season Finder`:
 
-Both options are applied retroactively to previously created collections on the next scheduled run or manual sync.
+1. Pick a season from the `Unmatched`, `Manual`, `Auto`, or `All` tabs (filter by season number or search text).
+2. Search AnimeThemes by title and optional year, then preview the candidate's OP/ED rows.
+3. Choose `Save mapping` or `Save & Download`.
 
-### Browser downloads and previews
+Mappings are stored in the plugin's SQLite database (`animethemes-sync.db`) and can be exported/imported as JSON from the Mappings controls. A legacy `SeasonThemeMappings` section in the plugin configuration is imported automatically once. The list restores its loaded count, selection, and scroll position across tab switches.
 
-- `AnimeThemes Browser` shows download progress and lets you cancel active downloads or remove finished history.
-- Segmented download and concurrency settings are available from the plugin settings.
-- Theme cards provide video/audio previews and controls for downloaded files.
+## Broadcast-Season Tags and Collections
+
+- **Tags**: adds broadcast-season tags (for example `Spring 2024`) to series or seasons. The season words and the `{Season} {Year}` format are customizable and localizable. Disabling tags offers a cleanup dialog that can remove plugin-added tags.
+- **Collections**: `Create broadcast-season collections` groups items into per-season collections. Only collections created by the plugin are managed; same-named collections that were merely reused are never touched. When you disable the feature, a choice dialog lets you keep or clean up the managed collections.
+  - `Lock collection metadata` (default: on) prevents other metadata providers from overwriting collection names/images. Locks you set yourself are never removed. Turn the option off and run Sync to unlock.
+  - `Generate collection images` (default: on) composites member posters into a Primary poster (up to 4), a 16:9 thumb, and a 16:9 backdrop grid, and regenerates them when members change. Manually replaced images are detected and left alone. Overlay and canvas colors/opacity are configurable.
+- Both options apply retroactively to existing managed collections on the next scheduled run or manual Sync. The Browser settings also offer `Rebuild all season metadata` (a forced full refresh) and cancelling a running sync.
+
+## Maintenance and Caching
+
+- **Local media cleanup** (Browser → Manager): scans theme files in your library, shows what the plugin created versus untracked files, and deletes only the entries you select — never outside managed folders.
+- **Caches**: Browser data and provider (AniList / AnimeThemes) responses are persisted so restarts and page reloads stay fast. TTLs are configurable (`Season metadata TTL (days)` and `Provider response TTL (days)`, 1–365, default 30). Rebuild/clear controls for the Browser cache and the provider cache are in the Browser settings.
+- Library changes (added/updated items) are applied to the Browser cache differentially within a few seconds; removals trigger a full rebuild.
 
 ## Manual Linking
 
-If automatic matching fails, set external IDs manually:
+If automatic matching fails, set an external ID on the item:
 
-- `AnimeThemes Slug` (recommended)
+- `AnimeThemes Slug` (recommended) — for `https://animethemes.moe/anime/blackrock_shooter_tv` the slug is `blackrock_shooter_tv`
 - `AnimeThemes ID`
-
-Example: `https://animethemes.moe/anime/blackrock_shooter_tv` -> slug is `blackrock_shooter_tv`.
-
-### Season Finder and season mappings
-
-When multiple anime seasons are grouped into one Jellyfin/Emby series, the scheduled task follows AniList relations from the series AniList ID and tries to assign normal seasons to separate AnimeThemes anime automatically.
-If a season is unmatched or mapped incorrectly, open `AnimeThemes Browser` -> `Season Finder`:
-
-1. Select a season from `Unmatched`, `Manual`, `Auto`, or `All`.
-2. Search AnimeThemes by title and optional year.
-3. Select a candidate, preview the OP/ED rows, then choose `Save mapping` or `Save & Download`.
-
-`Save & Download` stores the mapping in the normalized `animethemes-sync.db` tables and runs an on-demand download for that season item. Season Finder reads SQLite pages automatically near the end of the list and restores the loaded count, selection, and scroll position after tab changes or cache refreshes. Season 1 (and an unnumbered normal season) writes `backdrops`, `theme-music`, and `extras` to the parent Series folder; Season 2 and later write to their Season folder. When Season 1 is explicitly mapped to an AnimeThemes entry different from the Series entry, its filenames use a `Season 01 - ` prefix to avoid collisions. Existing files under a Season 1 folder are not moved or deleted automatically. Existing `SeasonThemeMappings` configuration JSON is imported into SQLite once for compatibility; use the Mappings import/export controls for subsequent changes.
-If `Enable Season Theme Downloads` is disabled, mappings remain saved but season output and season on-demand downloads are skipped until the option is enabled again.
-
-```json
-{
-  "SeasonThemeMappings": [
-    {
-      "Enabled": true,
-      "SeriesPath": "D:\\Anime\\Example Series",
-      "SeasonNumber": 2,
-      "AnimeThemesSlug": "example_series_second_season",
-      "Locked": true
-    },
-    {
-      "SeasonPath": "D:\\Anime\\Example Series\\Season 03",
-      "AniListId": 12345
-    }
-  ]
-}
-```
-
-The series-level `theme-music` / `backdrops` folders are kept. If a season resolves to the same AnimeThemes anime as the series, duplicate season output is skipped.
 
 ## License
 
-This project is licensed under the GNU GPL v3.0. See [LICENSE](LICENSE).
+GNU GPL v3.0 — see [LICENSE](LICENSE).
 
 ## Disclaimer
 
-This plugin is unofficial and is not affiliated with Jellyfin, Emby, AniList, MyAnimeList, or AnimeThemes.moe.
-Please follow each service's terms and rate limits.
+This plugin is unofficial and is not affiliated with Jellyfin, Emby, AniList, MyAnimeList, or AnimeThemes.moe. Please follow each service's terms and rate limits.
