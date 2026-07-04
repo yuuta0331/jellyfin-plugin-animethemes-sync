@@ -57,7 +57,6 @@
     <Compile Include="..\AnimeThemesSync.Shared\**\*.cs" LinkBase="AnimeThemesSync.Shared">
       <NoWarn>$(NoWarn);SA1210;SA1402;SA1502;SA1517;SA1649;CA1002;CA2016;CA2227</NoWarn>
     </Compile>
-    <Compile Remove="..\AnimeThemesSync.Shared\Class1.cs" />
     <Compile Remove="..\AnimeThemesSync.Shared\bin\**\*.cs" />
     <Compile Remove="..\AnimeThemesSync.Shared\obj\**\*.cs" />
   </ItemGroup>

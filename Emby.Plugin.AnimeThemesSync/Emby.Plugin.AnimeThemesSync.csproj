@@ -21,7 +21,6 @@
 
   <ItemGroup>
     <Compile Include="..\AnimeThemesSync.Shared\**\*.cs" LinkBase="AnimeThemesSync.Shared" />
-    <Compile Remove="..\AnimeThemesSync.Shared\Class1.cs" />
     <Compile Remove="..\AnimeThemesSync.Shared\Services\SeasonFinderDataStore.cs" />
     <Compile Remove="..\AnimeThemesSync.Shared\bin\**\*.cs" />
     <Compile Remove="..\AnimeThemesSync.Shared\obj\**\*.cs" />
