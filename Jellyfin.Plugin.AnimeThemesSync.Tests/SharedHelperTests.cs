@@ -81,6 +81,84 @@ public sealed class SharedHelperTests
     }
 
     [Fact]
+    public void ThemeBrowserRowBuilder_BuildsRowsWithSavedFlagsFromFileSystem()
+    {
+        var anime = new AnimeThemesAnime
+        {
+            Name = "Example Show",
+            Slug = "example_show",
+            AnimeThemes =
+            [
+                new AnimeThemesTheme
+                {
+                    Type = "OP",
+                    Sequence = 1,
+                    Slug = "OP1",
+                    Song = new AnimeThemesSong { Title = "Opening Song" },
+                    Entries =
+                    [
+                        new AnimeThemesEntry
+                        {
+                            Version = 1,
+                            Videos =
+                            [
+                                new AnimeThemesVideo
+                                {
+                                    Link = "https://v.animethemes.moe/op1.webm",
+                                    Resolution = 1080,
+                                    Audio = new AnimeThemesAudio { Link = "https://a.animethemes.moe/op1.ogg" },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        };
+        var outputTarget = new ThemeOutputTarget(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Path.Combine(Path.GetTempPath(), "ats-series"),
+            ThemeOutputScope.SeriesRoot,
+            false);
+        var fileSystem = new FakeThemeMediaFileSystem
+        {
+            ExistingFiles = { Path.Combine(outputTarget.OutputRootPath, "backdrops", "theme.webm") },
+        };
+
+        var rows = ThemeBrowserRowBuilder.BuildRowsForPath(
+            outputTarget,
+            anime,
+            includeExtras: false,
+            extrasFileNameFormat: ThemeFilePlanner.DefaultExtrasFileNameFormat,
+            extrasFileSuffix: ExtrasFileSuffix.Other,
+            fileNamePrefix: null,
+            fileSystem);
+
+        var row = Assert.Single(rows);
+        Assert.Equal(1, row.Order);
+        Assert.Equal("OP", row.Type);
+        Assert.Equal("Opening Song", row.SongTitle);
+        Assert.Equal("https://animethemes.moe/anime/example_show", row.AnimeThemesUrl);
+        Assert.NotNull(row.BackdropPath);
+        Assert.Equal(fileSystem.ExistingFiles.Contains(row.BackdropPath), row.BackdropExists);
+        Assert.False(row.ThemeMusicExists);
+        Assert.Null(row.ExtraPath);
+    }
+
+    private sealed class FakeThemeMediaFileSystem : global::AnimeThemesSync.Shared.Interfaces.IThemeMediaFileSystem
+    {
+        public HashSet<string> ExistingFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public bool FileExists(string path) => ExistingFiles.Contains(path);
+
+        public bool DirectoryExists(string path) => false;
+
+        public IEnumerable<string> GetFilePaths(string path) => Array.Empty<string>();
+
+        public void DeleteFile(string path) => ExistingFiles.Remove(path);
+    }
+
+    [Fact]
     public void BuildLegacySeasonMetadataState_ProjectsTagsCollectionsAndBroadcastSeasons()
     {
         var automation = new SeasonAutomationState

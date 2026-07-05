@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AnimeThemesSync.Shared.Interfaces;
+using AnimeThemesSync.Shared.Models;
 
 namespace AnimeThemesSync.Shared.Services;
 
@@ -87,6 +89,58 @@ public static class LocalMediaPathHelper
             !string.Equals(firstSegment, "extras", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("The requested local media path is not managed by AnimeThemes Sync.");
+        }
+    }
+
+    /// <summary>
+    /// Counts supported theme files and their total size in one managed directory.
+    /// </summary>
+    public static void AccumulateLocalThemeDirectory(string directory, ref int count, ref long bytes, IThemeMediaFileSystem fileSystem)
+    {
+        if (!fileSystem.DirectoryExists(directory))
+        {
+            return;
+        }
+
+        foreach (var file in fileSystem.GetFilePaths(directory))
+        {
+            if (!IsSupportedThemeFile(file))
+            {
+                continue;
+            }
+
+            count++;
+            bytes += new FileInfo(file).Length;
+        }
+    }
+
+    /// <summary>
+    /// Deletes plugin-owned theme files in one managed directory and accumulates
+    /// what was removed. Files not owned by the plugin are left alone.
+    /// </summary>
+    public static void DeleteLocalThemeDirectory(
+        string directory,
+        List<AnimeThemesTheme> themes,
+        ref int filesDeleted,
+        ref long bytesDeleted,
+        IThemeMediaFileSystem fileSystem)
+    {
+        if (!fileSystem.DirectoryExists(directory))
+        {
+            return;
+        }
+
+        foreach (var file in fileSystem.GetFilePaths(directory))
+        {
+            if (!IsSupportedThemeFile(file) || !ThemeFilePlanner.IsPluginOwnedFile(file, themes))
+            {
+                continue;
+            }
+
+            var length = new FileInfo(file).Length;
+            fileSystem.DeleteFile(file);
+            filesDeleted++;
+            bytesDeleted += length;
         }
     }
 
