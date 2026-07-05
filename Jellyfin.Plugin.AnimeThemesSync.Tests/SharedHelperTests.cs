@@ -159,6 +159,45 @@ public sealed class SharedHelperTests
     }
 
     [Fact]
+    public void DownloadFailureHelper_ClassifiesPermanentTransientAndUnknownFailures()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ats-failures-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var store = new AnimeThemesDataStore(new TestDataPathProvider(directory), new TestServerIdentityProvider());
+
+            DownloadFailureHelper.RecordScheduledFailure(store, "https://v/1", "D:\\a\\1.webm", new MediaDownloadException("gone", System.Net.HttpStatusCode.Gone, isTransient: false));
+            var permanent = store.GetDownloadFailure("https://v/1", "D:\\a\\1.webm");
+            Assert.Equal(DownloadFailureStatuses.PermanentFailed, permanent!.Status);
+            Assert.True(permanent.NextRetryUtc > DateTimeOffset.UtcNow.AddDays(29));
+
+            DownloadFailureHelper.RecordScheduledFailure(store, "https://v/2", "D:\\a\\2.webm", new MediaDownloadException("busy", System.Net.HttpStatusCode.TooManyRequests, isTransient: true, retryAfter: TimeSpan.FromMinutes(42)));
+            var transientWithHint = store.GetDownloadFailure("https://v/2", "D:\\a\\2.webm");
+            Assert.Equal(DownloadFailureStatuses.TransientFailed, transientWithHint!.Status);
+            Assert.True(transientWithHint.NextRetryUtc > DateTimeOffset.UtcNow.AddMinutes(41));
+
+            DownloadFailureHelper.RecordScheduledFailure(store, "https://v/3", "D:\\a\\3.webm", new IOException("disk hiccup"));
+            var transientIo = store.GetDownloadFailure("https://v/3", "D:\\a\\3.webm");
+            Assert.Equal(DownloadFailureStatuses.TransientFailed, transientIo!.Status);
+
+            // Non-transient provider errors without a permanent status and unrelated
+            // exceptions are not recorded, so the next run retries immediately.
+            DownloadFailureHelper.RecordScheduledFailure(store, "https://v/4", "D:\\a\\4.webm", new MediaDownloadException("forbidden", System.Net.HttpStatusCode.Forbidden, isTransient: false));
+            Assert.Null(store.GetDownloadFailure("https://v/4", "D:\\a\\4.webm"));
+            DownloadFailureHelper.RecordScheduledFailure(store, "https://v/5", "D:\\a\\5.webm", new InvalidOperationException("bug"));
+            Assert.Null(store.GetDownloadFailure("https://v/5", "D:\\a\\5.webm"));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void BuildLegacySeasonMetadataState_ProjectsTagsCollectionsAndBroadcastSeasons()
     {
         var automation = new SeasonAutomationState

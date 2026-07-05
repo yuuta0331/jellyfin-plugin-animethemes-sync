@@ -58,6 +58,7 @@ public sealed class ThemeDownloader : IScheduledTask
     private int _browserCacheRebuildRunning;
     private int _seasonMetadataSyncRunning;
     private int _scheduledDeferredDownloads;
+    private string? _lastStagingWarning;
     private static CancellationTokenSource? _seasonMetadataSyncCancellation;
     private SeasonMetadataSyncStatus _seasonMetadataSyncStatus = new("Idle", 0, 0, null, null, null);
     private readonly Dictionary<string, string> _seasonMetadataRuleErrors = new(StringComparer.OrdinalIgnoreCase);
@@ -4405,10 +4406,7 @@ public sealed class ThemeDownloader : IScheduledTask
         using var workspace = MediaDownloadStagingService.CreateWorkspace(
             config?.DownloadStagingDirectory,
             _tempPathProvider.GetTempDirectory());
-        if (!string.IsNullOrWhiteSpace(workspace.Resolution.Warning))
-        {
-            _logger.LogWarning("{Warning}", workspace.Resolution.Warning);
-        }
+        LogStagingWarningOnce(workspace.Resolution.Warning);
 
         var extension = Path.GetExtension(path);
         var downloadedPath = Path.Combine(workspace.WorkingDirectory, "download" + extension);
@@ -4480,45 +4478,24 @@ public sealed class ThemeDownloader : IScheduledTask
 
     private void RecordScheduledDownloadFailure(string url, string path, Exception exception)
     {
-        var now = DateTimeOffset.UtcNow;
-        if (exception is MediaDownloadException mediaException)
-        {
-            var statusCode = mediaException.StatusCode.HasValue ? (int)mediaException.StatusCode.Value : (int?)null;
-            if (mediaException.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
-            {
-                _dataStore.RecordDownloadFailure(
-                    url,
-                    path,
-                    DownloadFailureStatuses.PermanentFailed,
-                    mediaException.Message,
-                    statusCode,
-                    now.AddDays(30));
-            }
-            else if (mediaException.IsTransient)
-            {
-                var delay = mediaException.RetryAfter ?? TimeSpan.FromMinutes(10);
-                _dataStore.RecordDownloadFailure(
-                    url,
-                    path,
-                    DownloadFailureStatuses.TransientFailed,
-                    mediaException.Message,
-                    statusCode,
-                    now.Add(delay));
-            }
+        DownloadFailureHelper.RecordScheduledFailure(_dataStore, url, path, exception);
+    }
 
+    private void LogStagingWarningOnce(string? warning)
+    {
+        if (string.IsNullOrWhiteSpace(warning))
+        {
+            Volatile.Write(ref _lastStagingWarning, null);
             return;
         }
 
-        if (exception is IOException or HttpRequestException or TimeoutException)
+        if (string.Equals(Volatile.Read(ref _lastStagingWarning), warning, StringComparison.Ordinal))
         {
-            _dataStore.RecordDownloadFailure(
-                url,
-                path,
-                DownloadFailureStatuses.TransientFailed,
-                exception.Message,
-                null,
-                now.AddMinutes(10));
+            return;
         }
+
+        Volatile.Write(ref _lastStagingWarning, warning);
+        _logger.LogWarning("{Warning}", warning);
     }
 
     private static InlineProgress? CreateStepProgress(IProgress<double>? progress, double start, double span, int completedSteps, int totalSteps)
