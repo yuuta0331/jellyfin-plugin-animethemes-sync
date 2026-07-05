@@ -99,7 +99,10 @@ public class ThemeDownloader : IScheduledTask
         _providerManager = providerManager;
         var pathProvider = new EmbyAnimeThemesDataPathProvider(applicationPaths);
         var serverIdentity = new EmbyAnimeThemesServerIdentityProvider();
-        _dataStore = new AnimeThemesDataStore(pathProvider, serverIdentity);
+        _dataStore = new AnimeThemesDataStore(
+            pathProvider,
+            serverIdentity,
+            new EmbyLoggerAdapter(logManager.GetLogger(nameof(AnimeThemesDataStore))));
         _dataStore.EnsureInitialized();
         _seasonFinderStore = new EmbySeasonFinderDataStore(pathProvider, serverIdentity);
         _seasonFinderStore.EnsureInitialized();

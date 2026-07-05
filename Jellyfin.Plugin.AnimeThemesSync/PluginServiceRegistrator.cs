@@ -36,7 +36,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         {
             var store = new AnimeThemesDataStore(
                 provider.GetRequiredService<IAnimeThemesDataPathProvider>(),
-                provider.GetRequiredService<IAnimeThemesServerIdentityProvider>());
+                provider.GetRequiredService<IAnimeThemesServerIdentityProvider>(),
+                provider.GetRequiredService<ILoggerFactory>().CreateLogger<AnimeThemesDataStore>());
             store.EnsureInitialized();
             ThemeExtrasManifestService.ConfigureStore(store);
             return store;

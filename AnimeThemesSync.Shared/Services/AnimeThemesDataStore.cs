@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text.Json;
 using AnimeThemesSync.Shared.Interfaces;
 using AnimeThemesSync.Shared.Models;
+using Microsoft.Extensions.Logging;
 
 namespace AnimeThemesSync.Shared.Services;
 
@@ -26,16 +27,21 @@ public sealed class AnimeThemesDataStore
     private static readonly ConcurrentDictionary<string, SharedState> SharedStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly IAnimeThemesDataPathProvider _pathProvider;
     private readonly IAnimeThemesServerIdentityProvider _serverIdentity;
+    private readonly ILogger? _logger;
     private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = false };
     private SharedState? _state;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AnimeThemesDataStore"/> class.
     /// </summary>
-    public AnimeThemesDataStore(IAnimeThemesDataPathProvider pathProvider, IAnimeThemesServerIdentityProvider serverIdentity)
+    public AnimeThemesDataStore(
+        IAnimeThemesDataPathProvider pathProvider,
+        IAnimeThemesServerIdentityProvider serverIdentity,
+        ILogger? logger = null)
     {
         _pathProvider = pathProvider;
         _serverIdentity = serverIdentity;
+        _logger = logger;
     }
 
     /// <summary>
@@ -560,14 +566,24 @@ public sealed class AnimeThemesDataStore
                 }
             }
 
+            var invalidBrowserRows = State.Cache.BrowserItems.Count(i => !Guid.TryParse(i.ItemId, out _));
+            if (invalidBrowserRows > 0)
+            {
+                _logger?.LogWarning(
+                    "The AnimeThemes cache contains {Count} browser rows with invalid item ids; they are ignored until the next cache rebuild.",
+                    invalidBrowserRows);
+            }
+
             return State.Cache;
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            _logger?.LogWarning(ex, "The AnimeThemes cache file {Path} could not be parsed; quarantining it and starting a new cache.", DatabasePath);
             QuarantineCacheFile();
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            _logger?.LogWarning(ex, "The AnimeThemes cache file {Path} could not be read; quarantining it and starting a new cache.", DatabasePath);
             QuarantineCacheFile();
         }
 
@@ -620,26 +636,31 @@ public sealed class AnimeThemesDataStore
             {
                 // The destination survived, so the temp file is a leftover partial write.
                 QuarantineFile(tempPath);
+                _logger?.LogWarning("Quarantined a leftover AnimeThemes cache temp file next to {Path}.", DatabasePath);
                 return;
             }
 
             _ = JsonSerializer.Deserialize<CacheDocument>(File.ReadAllText(tempPath), _jsonOptions);
             File.Move(tempPath, DatabasePath);
+            _logger?.LogWarning("Recovered the AnimeThemes cache at {Path} from an interrupted save.", DatabasePath);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
             try
             {
                 QuarantineFile(tempPath);
+                _logger?.LogWarning(ex, "Quarantined an unreadable AnimeThemes cache temp file next to {Path}.", DatabasePath);
             }
             catch (IOException)
             {
                 // Locked unreadable temp file: leave it for the next cold load.
+                _logger?.LogWarning("The AnimeThemes cache temp file next to {Path} is locked; recovery skipped until the next load.", DatabasePath);
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
             // Locked temp file: skip recovery for now; the main document load proceeds.
+            _logger?.LogWarning(ex, "The AnimeThemes cache temp file next to {Path} is locked; recovery skipped until the next load.", DatabasePath);
         }
     }
 
