@@ -196,4 +196,21 @@ public static class AnimeMatchHelper
             ? Constants.AnimeThemesWebUrl + "/anime/" + anime.Slug
             : null;
     }
+
+    /// <summary>
+    /// Gets whether an AniList relation candidate can represent a season of a
+    /// series (movies, OVAs, specials, and music entries cannot).
+    /// </summary>
+    public static bool IsSeriesFormatCandidate(AniListRelatedAnime candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate.Format))
+        {
+            return true;
+        }
+
+        return !string.Equals(candidate.Format, "MOVIE", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(candidate.Format, "OVA", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(candidate.Format, "SPECIAL", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(candidate.Format, "MUSIC", StringComparison.OrdinalIgnoreCase);
+    }
 }

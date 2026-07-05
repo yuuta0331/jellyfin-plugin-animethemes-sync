@@ -931,12 +931,12 @@ public sealed class ThemeDownloader : IScheduledTask
                 }
             }
 
-            AddCleanupDirectories(ResolveThemeOutputTarget(entry.Item)?.OutputRootPath, directories);
+            LocalMediaPathHelper.AddCleanupDirectories(ResolveThemeOutputTarget(entry.Item)?.OutputRootPath, directories);
             if (entry.Item is Series cleanupSeries)
             {
                 foreach (var season in GetSeasonItems(cleanupSeries))
                 {
-                    AddCleanupDirectories(ResolveThemeOutputTarget(season, cleanupSeries)?.OutputRootPath, directories);
+                    LocalMediaPathHelper.AddCleanupDirectories(ResolveThemeOutputTarget(season, cleanupSeries)?.OutputRootPath, directories);
                 }
             }
 
@@ -949,7 +949,7 @@ public sealed class ThemeDownloader : IScheduledTask
 
                 foreach (var path in _fileSystem.GetFilePaths(directory.Key))
                 {
-                    if (!IsSupportedThemeFile(path))
+                    if (!LocalMediaPathHelper.IsSupportedThemeFile(path))
                     {
                         continue;
                     }
@@ -967,7 +967,7 @@ public sealed class ThemeDownloader : IScheduledTask
                         entry.LibraryName,
                         fullPath,
                         Path.GetFileName(fullPath),
-                        CleanupFileKind(directory.Key),
+                        LocalMediaPathHelper.CleanupFileKind(directory.Key),
                         status,
                         tracked?.Source ?? "Untracked",
                         info.Exists ? info.Length : 0,
@@ -999,7 +999,7 @@ public sealed class ThemeDownloader : IScheduledTask
             try
             {
                 var path = Path.GetFullPath(file.Path);
-                if (!IsWithinCleanupRoots(path, roots) || !_fileSystem.FileExists(path))
+                if (!LocalMediaPathHelper.IsWithinCleanupRoots(path, roots) || !_fileSystem.FileExists(path))
                 {
                     skipped++;
                     continue;
@@ -1038,33 +1038,6 @@ public sealed class ThemeDownloader : IScheduledTask
         return new LocalMediaCleanupDeleteResult(deleted, bytes, skipped, failed);
     }
 
-    private static void AddCleanupDirectories(string? root, Dictionary<string, HashSet<string>> directories)
-    {
-        if (string.IsNullOrWhiteSpace(root))
-        {
-            return;
-        }
-
-        Add(Path.Combine(root, "theme-music"));
-        Add(Path.Combine(root, "backdrops"));
-        Add(Path.Combine(root, "extras"));
-
-        void Add(string directory)
-        {
-            if (!directories.ContainsKey(directory))
-            {
-                directories[directory] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            }
-        }
-    }
-
-    private static string CleanupFileKind(string directory)
-    {
-        var name = Path.GetFileName(directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        return string.Equals(name, "theme-music", StringComparison.OrdinalIgnoreCase) ? "Audio" :
-            string.Equals(name, "extras", StringComparison.OrdinalIgnoreCase) ? "Extra" : "Video";
-    }
-
     private List<string> GetCleanupOutputRoots()
     {
         var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1090,11 +1063,6 @@ public sealed class ThemeDownloader : IScheduledTask
         }
 
         return roots.ToList();
-    }
-
-    private static bool IsWithinCleanupRoots(string path, IEnumerable<string> roots)
-    {
-        return roots.Any(root => path.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
     }
 
     public Task<IReadOnlyList<SeasonThemeMappingRow>> GetSeasonThemeMappingsAsync(CancellationToken cancellationToken)
@@ -1407,7 +1375,7 @@ public sealed class ThemeDownloader : IScheduledTask
 
         var outputTarget = ResolveThemeOutputTarget(item)
             ?? throw new InvalidOperationException("The theme output root could not be resolved for this item.");
-        ValidateLocalMediaPath(outputTarget.OutputRootPath, path);
+        LocalMediaPathHelper.ValidateLocalMediaPath(outputTarget.OutputRootPath, path);
 
         var fileExists = _fileSystem.FileExists(path);
         if (!fileExists)
@@ -1653,7 +1621,7 @@ public sealed class ThemeDownloader : IScheduledTask
 
         var outputTarget = ResolveThemeOutputTarget(item)
             ?? throw new InvalidOperationException("The theme output root could not be resolved for this item.");
-        ValidateLocalMediaPath(outputTarget.OutputRootPath, path);
+        LocalMediaPathHelper.ValidateLocalMediaPath(outputTarget.OutputRootPath, path);
         var contentType = ThemeFilePlanner.GetMediaContentType(path);
         return new ThemeLocalMediaResult(path, contentType, Path.GetFileName(path));
     }
@@ -1685,7 +1653,7 @@ public sealed class ThemeDownloader : IScheduledTask
 
         foreach (var file in _fileSystem.GetFilePaths(directory))
         {
-            if (!IsSupportedThemeFile(file))
+            if (!LocalMediaPathHelper.IsSupportedThemeFile(file))
             {
                 continue;
             }
@@ -1708,7 +1676,7 @@ public sealed class ThemeDownloader : IScheduledTask
 
         foreach (var file in _fileSystem.GetFilePaths(directory))
         {
-            if (!IsSupportedThemeFile(file) || !ThemeFilePlanner.IsPluginOwnedFile(file, themes))
+            if (!LocalMediaPathHelper.IsSupportedThemeFile(file) || !ThemeFilePlanner.IsPluginOwnedFile(file, themes))
             {
                 continue;
             }
@@ -1718,11 +1686,6 @@ public sealed class ThemeDownloader : IScheduledTask
             filesDeleted++;
             bytesDeleted += length;
         }
-    }
-
-    private static bool IsSupportedThemeFile(string path)
-    {
-        return ThemeFilePlanner.IsSupportedMediaExtension(Path.GetExtension(path));
     }
 
     private BaseItem GetSupportedItem(Guid itemId)
@@ -1764,30 +1727,6 @@ public sealed class ThemeDownloader : IScheduledTask
         }
 
         throw new KeyNotFoundException("The requested theme row was not found.");
-    }
-
-    private static void ValidateLocalMediaPath(string itemPath, string mediaPath)
-    {
-        var root = Path.GetFullPath(itemPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var fullPath = Path.GetFullPath(mediaPath);
-        if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException("The requested local media path is outside the library item.");
-        }
-
-        if (!ThemeFilePlanner.IsSupportedMediaExtension(Path.GetExtension(fullPath)))
-        {
-            throw new InvalidOperationException("The requested local media type is not supported.");
-        }
-
-        var relative = fullPath[root.Length..];
-        var firstSegment = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).FirstOrDefault();
-        if (!string.Equals(firstSegment, "backdrops", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(firstSegment, "theme-music", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(firstSegment, "extras", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException("The requested local media path is not managed by AnimeThemes Sync.");
-        }
     }
 
     /// <summary>
@@ -2829,7 +2768,7 @@ public sealed class ThemeDownloader : IScheduledTask
     private static List<CollectionImageSlotEntry> GetCollectionImageSlotEntries(BaseItem collection, ImageType imageType)
     {
         return collection.GetImages(imageType)
-            .Select((image, index) => new CollectionImageSlotEntry(index, image.Path, GetImageFileIdentity(image.Path)))
+            .Select((image, index) => new CollectionImageSlotEntry(index, image.Path, CollectionImageFingerprint.GetImageFileIdentity(image.Path)))
             .ToList();
     }
 
@@ -2877,26 +2816,6 @@ public sealed class ThemeDownloader : IScheduledTask
                 state.BackdropFingerprint = fingerprint;
                 state.BackdropWrittenFileIdentity = writtenFileIdentity;
                 break;
-        }
-    }
-
-    private static string? GetImageFileIdentity(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return null;
-        }
-
-        try
-        {
-            var file = new FileInfo(path);
-            return file.Exists
-                ? FormattableString.Invariant($"{file.Length}:{file.LastWriteTimeUtc.Ticks}")
-                : null;
-        }
-        catch (Exception)
-        {
-            return null;
         }
     }
 
@@ -3005,7 +2924,7 @@ public sealed class ThemeDownloader : IScheduledTask
             ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
         _seasonMetadataRuleErrors.Clear();
         var previousAutomation = _seasonFinderStore.GetSeasonAutomationState(series.Id.ToString("D"));
-        var previous = BuildLegacySeasonMetadataState(
+        var previous = SeasonAutomationStateHelper.BuildLegacySeasonMetadataState(
             previousAutomation,
             _dataStore.GetSeasonMetadataState(series.Id.ToString("D")));
         var seasons = GetSeasonItems(series).Where(IsSeasonEligibleForThemeMatching).ToList();
@@ -3186,7 +3105,7 @@ public sealed class ThemeDownloader : IScheduledTask
             managedTags,
             memberships,
             previousAutomation);
-        PreserveDisabledAutomationState(
+        SeasonAutomationStateHelper.PreserveDisabledAutomationState(
             automationState,
             previousAutomation,
             preserveTags: !config.TagsEnabled && !removeManagedTags,
@@ -3438,62 +3357,6 @@ public sealed class ThemeDownloader : IScheduledTask
                 Recursive = true,
             }).OfType<BoxSet>().Any(i => i.Id == id && i.ProviderIds != null &&
                 i.ProviderIds.TryGetValue(BroadcastSeasonProviderKey, out var key) && string.Equals(key, collectionKey, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static SeasonMetadataState BuildLegacySeasonMetadataState(SeasonAutomationState automation, SeasonMetadataState? legacy)
-    {
-        if (automation.Rules.Count == 0)
-        {
-            return legacy ?? new SeasonMetadataState { SeriesItemId = automation.SeriesItemId };
-        }
-
-        var collections = automation.Collections.ToDictionary(i => i.CollectionKey, StringComparer.OrdinalIgnoreCase);
-        return new SeasonMetadataState
-        {
-            SeriesItemId = automation.SeriesItemId,
-            ManagedTags = automation.Tags.Where(i => i.AddedByPlugin).GroupBy(i => i.TargetItemId, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(i => i.Key, i => i.Select(t => t.TagName).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase),
-            CollectionMemberships = automation.CollectionMembers.Select(member =>
-            {
-                collections.TryGetValue(member.CollectionKey, out var collection);
-                return new SeasonCollectionMembershipState
-                {
-                    BroadcastSeasonKey = member.CollectionKey, CollectionId = collection?.CollectionItemId ?? string.Empty,
-                    CollectionName = collection?.CollectionName ?? member.CollectionKey, ItemId = member.TargetItemId,
-                    AddedByPlugin = member.AddedByPlugin,
-                };
-            }).ToList(),
-            BroadcastSeasons = automation.Rules.Where(i => i.AnimeYear.HasValue && !string.IsNullOrWhiteSpace(i.AnimeSeason))
-                .Select(i => new BroadcastSeasonValue(i.BroadcastSeasonKey ?? string.Empty, i.BroadcastSeasonLabel ?? string.Empty, i.AnimeYear!.Value, i.AnimeSeason!))
-                .GroupBy(i => i.Key, StringComparer.OrdinalIgnoreCase).Select(i => i.First()).ToList(),
-        };
-    }
-
-    private static void PreserveDisabledAutomationState(
-        SeasonAutomationState current,
-        SeasonAutomationState previous,
-        bool preserveTags,
-        bool preserveCollections)
-    {
-        if (preserveTags)
-        {
-            current.Tags.AddRange(previous.Tags);
-        }
-
-        if (preserveCollections)
-        {
-            current.Collections.AddRange(previous.Collections);
-            current.CollectionMembers.AddRange(previous.CollectionMembers);
-        }
-
-        var referencedRuleKeys = current.Tags.Select(i => i.RuleKey)
-            .Concat(current.CollectionMembers.Select(i => i.RuleKey))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        current.Rules.AddRange(previous.Rules.Where(i => referencedRuleKeys.Contains(i.RuleKey)));
-        current.Rules = current.Rules.GroupBy(i => i.RuleKey, StringComparer.OrdinalIgnoreCase).Select(i => i.First()).ToList();
-        current.Tags = current.Tags.GroupBy(i => i.RuleKey + "|" + i.TargetItemId + "|" + i.TagName, StringComparer.OrdinalIgnoreCase).Select(i => i.First()).ToList();
-        current.Collections = current.Collections.GroupBy(i => i.CollectionKey, StringComparer.OrdinalIgnoreCase).Select(i => i.First()).ToList();
-        current.CollectionMembers = current.CollectionMembers.GroupBy(i => i.CollectionKey + "|" + i.TargetItemId, StringComparer.OrdinalIgnoreCase).Select(i => i.First()).ToList();
     }
 
     private async Task<List<string>> ReconcileTagsAsync(
@@ -4128,7 +3991,7 @@ public sealed class ThemeDownloader : IScheduledTask
             cancellationToken).ConfigureAwait(false);
 
         var resolved = new List<(AniListRelatedAnime Related, AnimeThemesAnime Anime)>();
-        foreach (var candidate in related.Where(IsSeriesFormatCandidate))
+        foreach (var candidate in related.Where(AnimeMatchHelper.IsSeriesFormatCandidate))
         {
             var anime = await ResolveAnimeByExternalIds(candidate.AniListId, candidate.MyAnimeListId, cancellationToken).ConfigureAwait(false);
             if (anime?.AnimeThemes == null || resolved.Any(r => AnimeMatchHelper.IsSameAnime(r.Anime, anime)))
@@ -4383,19 +4246,6 @@ public sealed class ThemeDownloader : IScheduledTask
                int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
     }
 
-    private static bool IsSeriesFormatCandidate(AniListRelatedAnime candidate)
-    {
-        if (string.IsNullOrWhiteSpace(candidate.Format))
-        {
-            return true;
-        }
-
-        return !string.Equals(candidate.Format, "MOVIE", StringComparison.OrdinalIgnoreCase) &&
-               !string.Equals(candidate.Format, "OVA", StringComparison.OrdinalIgnoreCase) &&
-               !string.Equals(candidate.Format, "SPECIAL", StringComparison.OrdinalIgnoreCase) &&
-               !string.Equals(candidate.Format, "MUSIC", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static bool IsSeasonEligibleForThemeMatching(Season season)
     {
         if (season.IndexNumber == 0)
@@ -4427,19 +4277,19 @@ public sealed class ThemeDownloader : IScheduledTask
     {
         var seasonItemId = season.Id.ToString("D");
         var compactSeasonItemId = season.Id.ToString("N");
-        var seasonPath = NormalizeMappingPath(season.Path);
+        var seasonPath = SeasonMappingMatchHelper.NormalizeMappingPath(season.Path);
         var seriesItemId = series?.Id.ToString("D") ?? string.Empty;
         var compactSeriesItemId = series?.Id.ToString("N") ?? string.Empty;
-        var seriesPath = NormalizeMappingPath(series?.Path);
-        var seasonParentPath = NormalizeMappingPath(Path.GetDirectoryName(season.Path));
+        var seriesPath = SeasonMappingMatchHelper.NormalizeMappingPath(series?.Path);
+        var seasonParentPath = SeasonMappingMatchHelper.NormalizeMappingPath(Path.GetDirectoryName(season.Path));
         var seasonNumber = season.IndexNumber;
 
         return mappings
-            .Where(mapping => mapping.Enabled && HasThemeIdentity(mapping))
+            .Where(mapping => mapping.Enabled && SeasonMappingMatchHelper.HasThemeIdentity(mapping))
             .Select(mapping => new
             {
                 Mapping = mapping,
-                Rank = GetSeasonMappingMatchRank(
+                Rank = SeasonMappingMatchHelper.GetSeasonMappingMatchRank(
                     mapping,
                     seasonItemId,
                     compactSeasonItemId,
@@ -4455,40 +4305,6 @@ public sealed class ThemeDownloader : IScheduledTask
             .ThenByDescending(candidate => candidate.Rank)
             .Select(candidate => candidate.Mapping)
             .FirstOrDefault();
-    }
-
-    private static int GetSeasonMappingMatchRank(
-        SeasonThemeMapping mapping,
-        string seasonItemId,
-        string compactSeasonItemId,
-        string seasonPath,
-        string seriesItemId,
-        string compactSeriesItemId,
-        string seriesPath,
-        string seasonParentPath,
-        int? seasonNumber)
-    {
-        if (MatchesId(mapping.SeasonItemId, seasonItemId, compactSeasonItemId))
-        {
-            return 4;
-        }
-
-        if (MatchesPath(mapping.SeasonPath, seasonPath))
-        {
-            return 3;
-        }
-
-        if (!mapping.SeasonNumber.HasValue || seasonNumber != mapping.SeasonNumber.Value)
-        {
-            return 0;
-        }
-
-        if (MatchesId(mapping.SeriesItemId, seriesItemId, compactSeriesItemId))
-        {
-            return 2;
-        }
-
-        return MatchesPath(mapping.SeriesPath, seriesPath) || MatchesPath(mapping.SeriesPath, seasonParentPath) ? 1 : 0;
     }
 
     private static bool IsSeasonThemeDownloadsEnabled()
@@ -4507,33 +4323,6 @@ public sealed class ThemeDownloader : IScheduledTask
         {
             throw new InvalidOperationException("Season theme downloads are disabled in plugin configuration.");
         }
-    }
-
-    private static bool HasThemeIdentity(SeasonThemeMapping mapping)
-    {
-        return !string.IsNullOrWhiteSpace(mapping.AnimeThemesSlug) ||
-               mapping.AniListId.HasValue ||
-               mapping.MyAnimeListId.HasValue;
-    }
-
-    private static bool MatchesId(string? configuredId, string itemId, string compactItemId)
-    {
-        return !string.IsNullOrWhiteSpace(configuredId) &&
-               (string.Equals(configuredId.Trim(), itemId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(configuredId.Trim(), compactItemId, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static bool MatchesPath(string? configuredPath, string itemPath)
-    {
-        return !string.IsNullOrWhiteSpace(configuredPath) &&
-               string.Equals(NormalizeMappingPath(configuredPath), itemPath, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string NormalizeMappingPath(string? path)
-    {
-        return string.IsNullOrWhiteSpace(path)
-            ? string.Empty
-            : path.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 
     private List<Season> GetSeasonItems(Series series)
@@ -4717,12 +4506,12 @@ public sealed class ThemeDownloader : IScheduledTask
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && transferCancellation.IsCancellationRequested)
         {
-            CleanupTempFile(tempPath);
+            LocalMediaPathHelper.CleanupTempFile(tempPath);
             throw new TimeoutException($"Download did not complete within {timeoutSeconds} seconds.", ex);
         }
         catch (Exception)
         {
-            CleanupTempFile(tempPath);
+            LocalMediaPathHelper.CleanupTempFile(tempPath);
             throw;
         }
 
@@ -4738,7 +4527,7 @@ public sealed class ThemeDownloader : IScheduledTask
             }
             finally
             {
-                CleanupTempFile(tempPath);
+                LocalMediaPathHelper.CleanupTempFile(tempPath);
             }
         }
         else
@@ -4751,23 +4540,8 @@ public sealed class ThemeDownloader : IScheduledTask
             catch (IOException ex)
             {
                 _logger.LogError(ex, "Failed to move temp file {TempPath} to {FinalPath}", tempPath, path);
-                CleanupTempFile(tempPath);
+                LocalMediaPathHelper.CleanupTempFile(tempPath);
                 throw;
-            }
-        }
-    }
-
-    private static void CleanupTempFile(string tempPath)
-    {
-        if (File.Exists(tempPath))
-        {
-            try
-            {
-                File.Delete(tempPath);
-            }
-            catch
-            {
-                // Ignore delete errors
             }
         }
     }

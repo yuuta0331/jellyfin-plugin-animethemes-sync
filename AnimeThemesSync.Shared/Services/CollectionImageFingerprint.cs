@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Security.Cryptography;
@@ -53,5 +54,29 @@ public static class CollectionImageFingerprint
         }
 
         return result.ToString();
+    }
+
+    /// <summary>
+    /// Builds a cheap change-detection identity (size + last write ticks) for a
+    /// written image file, or null when the file is missing or unreadable.
+    /// </summary>
+    public static string? GetImageFileIdentity(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            var file = new System.IO.FileInfo(path);
+            return file.Exists
+                ? FormattableString.Invariant($"{file.Length}:{file.LastWriteTimeUtc.Ticks}")
+                : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 }

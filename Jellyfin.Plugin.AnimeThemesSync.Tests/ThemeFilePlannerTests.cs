@@ -1107,13 +1107,17 @@ public class ThemeFilePlannerTests
             Assert.Contains("var status = mapping.Locked ? \"Manual\" : \"Auto\"", content, StringComparison.Ordinal);
             Assert.Contains("ResolveSeasonBrowserAnimeAsync(series, season", content, StringComparison.Ordinal);
             Assert.Contains("ResolveAnimeByIdentityAsync", content, StringComparison.Ordinal);
-            Assert.Contains("GetSeasonMappingMatchRank", content, StringComparison.Ordinal);
+            Assert.Contains("SeasonMappingMatchHelper.GetSeasonMappingMatchRank", content, StringComparison.Ordinal);
             Assert.Contains("OrderByDescending(candidate => candidate.Mapping.Locked)", content, StringComparison.Ordinal);
-            Assert.Contains("MatchesId(mapping.SeriesItemId", content, StringComparison.Ordinal);
             Assert.Contains("season.IndexNumber == 0", content, StringComparison.Ordinal);
             Assert.Contains("IndexOf(\"special\", StringComparison.OrdinalIgnoreCase)", content, StringComparison.Ordinal);
             Assert.Contains(".Where(s => IsSeasonEligibleForThemeMatching(s) && s.IndexNumber.HasValue && s.IndexNumber.Value > 1)", content, StringComparison.Ordinal);
         }
+
+        // The mapping-match logic itself now lives in the shared helper.
+        var mappingHelper = File.ReadAllText(Path.Combine(root, "AnimeThemesSync.Shared", "Services", "SeasonMappingMatchHelper.cs"));
+        Assert.Contains("MatchesId(mapping.SeriesItemId", mappingHelper, StringComparison.Ordinal);
+        Assert.Contains("MatchesPath(mapping.SeasonPath", mappingHelper, StringComparison.Ordinal);
 
         var browserFiles = new[]
         {
