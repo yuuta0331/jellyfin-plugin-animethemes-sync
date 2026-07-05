@@ -4080,7 +4080,7 @@ public class ThemeDownloader : IScheduledTask
         {
             if (season.IndexNumber == 0 || !IsSeasonEligibleForThemeMatching(season))
             {
-                _logger.LogInformation("Theme output was skipped for ineligible season {0}.", season.Name);
+                _logger.LogDebug("Theme output was skipped for ineligible season {0}.", season.Name);
                 return null;
             }
 

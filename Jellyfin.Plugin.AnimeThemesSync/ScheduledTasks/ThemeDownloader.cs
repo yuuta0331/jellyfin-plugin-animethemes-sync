@@ -3817,7 +3817,7 @@ public sealed class ThemeDownloader : IScheduledTask
         {
             if (season.IndexNumber == 0 || !IsSeasonEligibleForThemeMatching(season))
             {
-                _logger.LogInformation("Theme output was skipped for ineligible season {SeasonName}.", season.Name);
+                _logger.LogDebug("Theme output was skipped for ineligible season {SeasonName}.", season.Name);
                 return null;
             }
 
