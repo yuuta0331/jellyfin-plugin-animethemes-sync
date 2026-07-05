@@ -389,7 +389,11 @@ public class AnimeThemesSyncService : IService, IRequiresRequest
         IProviderManager providerManager,
         IHttpResultFactory httpResultFactory)
     {
-        _themeDownloader = new ThemeDownloader(libraryManager, fileSystem, logManager, mediaEncoder, applicationPaths, collectionManager, providerManager);
+        // Emby constructs this service per request. Reuse the first ThemeDownloader
+        // (usually the scheduled-task instance) so HTTP clients, rate limiter state,
+        // and the data stores are not rebuilt on every API call.
+        _themeDownloader = ThemeDownloader.Current
+            ?? new ThemeDownloader(libraryManager, fileSystem, logManager, mediaEncoder, applicationPaths, collectionManager, providerManager);
         _httpResultFactory = httpResultFactory;
     }
 
