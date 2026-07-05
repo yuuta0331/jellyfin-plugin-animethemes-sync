@@ -235,10 +235,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             ThemeDownloadingEnabled: page.querySelector('#AtsThemeDownloadingEnabled'),
             MaxConcurrentDownloads: page.querySelector('#AtsMaxConcurrentDownloads'),
             DownloadTimeoutSeconds: page.querySelector('#AtsDownloadTimeoutSeconds'),
+            DownloadStagingDirectory: page.querySelector('#AtsDownloadStagingDirectory'),
             SeasonMetadataCacheTtlDays: page.querySelector('#AtsSeasonMetadataCacheTtlDays'),
             ProviderResponseCacheTtlDays: page.querySelector('#AtsProviderResponseCacheTtlDays'),
             SegmentedDownloadEnabled: page.querySelector('#AtsSegmentedDownloadEnabled'),
             SegmentedDownloadSegments: page.querySelector('#AtsSegmentedDownloadSegments'),
+            MinimumSegmentedDownloadSizeMiB: page.querySelector('#AtsMinimumSegmentedDownloadSizeMiB'),
+            MaximumConcurrentRangeRequests: page.querySelector('#AtsMaximumConcurrentRangeRequests'),
             SegmentedDownloadOptions: page.querySelector('#AtsSegmentedDownloadOptions'),
             AllowAdd: page.querySelector('#AtsAllowAdd'),
             ForceRedownload: page.querySelector('#AtsForceRedownload'),
@@ -2940,7 +2943,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function ensureSettingsConfig(config) {
             config = config || {};
-            config.ConfigurationVersion = 9;
+            config.ConfigurationVersion = 11;
             config.Series = ensureMediaConfig(getConfigValue(config, 'Series', null));
             config.Movie = ensureMediaConfig(getConfigValue(config, 'Movie', null));
             if (!Array.isArray(getConfigValue(config, 'SeasonThemeMappings', []))) {
@@ -2979,14 +2982,17 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function defaultSettingsConfig(existingConfig) {
             return ensureSettingsConfig({
-                ConfigurationVersion: 9,
+                ConfigurationVersion: 11,
                 ThemeDownloadingEnabled: true,
                 MaxConcurrentDownloads: 1,
                 DownloadTimeoutSeconds: 600,
+                DownloadStagingDirectory: '',
                 SeasonMetadataCacheTtlDays: 30,
                 ProviderResponseCacheTtlDays: 30,
-                SegmentedDownloadEnabled: true,
-                SegmentedDownloadSegments: 4,
+                SegmentedDownloadEnabled: false,
+                SegmentedDownloadSegments: 2,
+                MinimumSegmentedDownloadSizeMiB: 25,
+                MaximumConcurrentRangeRequests: 2,
                 AllowAdd: true,
                 ForceRedownload: false,
                 SeasonThemeDownloadsEnabled: true,
@@ -3060,14 +3066,17 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         function canonicalizeSettings(config) {
             config = ensureSettingsConfig(cloneSettings(config || {}));
             return {
-                ConfigurationVersion: 9,
+                ConfigurationVersion: 11,
                 ThemeDownloadingEnabled: !!getConfigValue(config, 'ThemeDownloadingEnabled', true),
-                MaxConcurrentDownloads: Math.max(1, parseInt(getConfigValue(config, 'MaxConcurrentDownloads', 1), 10) || 1),
+                MaxConcurrentDownloads: Math.max(1, Math.min(10, parseInt(getConfigValue(config, 'MaxConcurrentDownloads', 1), 10) || 1)),
                 DownloadTimeoutSeconds: Math.max(1, parseInt(getConfigValue(config, 'DownloadTimeoutSeconds', 600), 10) || 600),
+                DownloadStagingDirectory: String(getConfigValue(config, 'DownloadStagingDirectory', '') || '').trim(),
                 SeasonMetadataCacheTtlDays: Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'SeasonMetadataCacheTtlDays', 30), 10) || 30)),
                 ProviderResponseCacheTtlDays: Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'ProviderResponseCacheTtlDays', 30), 10) || 30)),
-                SegmentedDownloadEnabled: !!getConfigValue(config, 'SegmentedDownloadEnabled', true),
-                SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 4), 10) || 4)),
+                SegmentedDownloadEnabled: !!getConfigValue(config, 'SegmentedDownloadEnabled', false),
+                SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 2), 10) || 2)),
+                MinimumSegmentedDownloadSizeMiB: Math.max(1, Math.min(1024, parseInt(getConfigValue(config, 'MinimumSegmentedDownloadSizeMiB', 25), 10) || 25)),
+                MaximumConcurrentRangeRequests: Math.max(1, Math.min(16, parseInt(getConfigValue(config, 'MaximumConcurrentRangeRequests', 2), 10) || 2)),
                 AllowAdd: !!getConfigValue(config, 'AllowAdd', true),
                 ForceRedownload: !!getConfigValue(config, 'ForceRedownload', false),
                 SeasonThemeDownloadsEnabled: !!getConfigValue(config, 'SeasonThemeDownloadsEnabled', true),
@@ -3420,10 +3429,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             settingsFields.ThemeDownloadingEnabled.checked = !!getConfigValue(config, 'ThemeDownloadingEnabled', true);
             settingsFields.MaxConcurrentDownloads.value = getConfigValue(config, 'MaxConcurrentDownloads', 1);
             settingsFields.DownloadTimeoutSeconds.value = getConfigValue(config, 'DownloadTimeoutSeconds', 600);
+            settingsFields.DownloadStagingDirectory.value = getConfigValue(config, 'DownloadStagingDirectory', '') || '';
             settingsFields.SeasonMetadataCacheTtlDays.value = Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'SeasonMetadataCacheTtlDays', 30), 10) || 30));
             settingsFields.ProviderResponseCacheTtlDays.value = Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'ProviderResponseCacheTtlDays', 30), 10) || 30));
-            settingsFields.SegmentedDownloadEnabled.checked = !!getConfigValue(config, 'SegmentedDownloadEnabled', true);
-            settingsFields.SegmentedDownloadSegments.value = Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 4), 10) || 4));
+            settingsFields.SegmentedDownloadEnabled.checked = !!getConfigValue(config, 'SegmentedDownloadEnabled', false);
+            settingsFields.SegmentedDownloadSegments.value = Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 2), 10) || 2));
+            settingsFields.MinimumSegmentedDownloadSizeMiB.value = Math.max(1, Math.min(1024, parseInt(getConfigValue(config, 'MinimumSegmentedDownloadSizeMiB', 25), 10) || 25));
+            settingsFields.MaximumConcurrentRangeRequests.value = Math.max(1, Math.min(16, parseInt(getConfigValue(config, 'MaximumConcurrentRangeRequests', 2), 10) || 2));
             settingsFields.AllowAdd.checked = !!getConfigValue(config, 'AllowAdd', true);
             settingsFields.ForceRedownload.checked = !!getConfigValue(config, 'ForceRedownload', false);
             settingsFields.SeasonThemeDownloadsEnabled.checked = !!getConfigValue(config, 'SeasonThemeDownloadsEnabled', true);
@@ -3476,14 +3488,17 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function readSettingsForm() {
             return {
-                ConfigurationVersion: 9,
+                ConfigurationVersion: 11,
                 ThemeDownloadingEnabled: settingsFields.ThemeDownloadingEnabled.checked,
-                MaxConcurrentDownloads: parseInt(settingsFields.MaxConcurrentDownloads.value, 10) || 1,
+                MaxConcurrentDownloads: Math.max(1, Math.min(10, parseInt(settingsFields.MaxConcurrentDownloads.value, 10) || 1)),
                 DownloadTimeoutSeconds: parseInt(settingsFields.DownloadTimeoutSeconds.value, 10) || 600,
+                DownloadStagingDirectory: String(settingsFields.DownloadStagingDirectory.value || '').trim(),
                 SeasonMetadataCacheTtlDays: Math.max(1, Math.min(365, parseInt(settingsFields.SeasonMetadataCacheTtlDays.value, 10) || 30)),
                 ProviderResponseCacheTtlDays: Math.max(1, Math.min(365, parseInt(settingsFields.ProviderResponseCacheTtlDays.value, 10) || 30)),
                 SegmentedDownloadEnabled: settingsFields.SegmentedDownloadEnabled.checked,
-                SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(settingsFields.SegmentedDownloadSegments.value, 10) || 4)),
+                SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(settingsFields.SegmentedDownloadSegments.value, 10) || 2)),
+                MinimumSegmentedDownloadSizeMiB: Math.max(1, Math.min(1024, parseInt(settingsFields.MinimumSegmentedDownloadSizeMiB.value, 10) || 25)),
+                MaximumConcurrentRangeRequests: Math.max(1, Math.min(16, parseInt(settingsFields.MaximumConcurrentRangeRequests.value, 10) || 2)),
                 AllowAdd: settingsFields.AllowAdd.checked,
                 ForceRedownload: settingsFields.ForceRedownload.checked,
                 SeasonThemeDownloadsEnabled: settingsFields.SeasonThemeDownloadsEnabled.checked,
@@ -3779,24 +3794,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             var itemId = activeGroupItemId();
             var rowId = value(row, 'RowId', 'rowId');
             if (!itemId || !rowId) return;
-
-            var settingsPromise = state.settingsConfig
-                ? Promise.resolve(ensureSettingsConfig(state.settingsConfig))
-                : ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
-                    state.settingsConfig = ensureSettingsConfig(config || {});
-                    return state.settingsConfig;
-                });
-
-            settingsPromise.then(function (config) {
-                var groupType = String(value(activeGroup(), 'Type', 'type') || value(state.currentResult, 'Type', 'type') || 'Series');
-                var profile = groupType === 'Movie' ? config.Movie : config.Series;
-                var audioDefault = profile.Audio.UseAsTheme && profile.Audio.MaxThemes > 0;
-                var videoDefault = profile.Video.UseAsTheme && profile.Video.MaxThemes > 0;
-                var extrasDefault = !!getConfigValue(config, 'ExtrasEnabled', false) && profile.Video.MaxThemes > 0;
-                openDownloadDialog(row, itemId, rowId, videoDefault, audioDefault, extrasDefault);
-            }).catch(function (err) {
-                Dashboard.alert({ title: 'Settings Error', message: 'Failed to load download defaults: ' + getErrorMessage(err) });
-            });
+            openDownloadDialog(
+                row,
+                itemId,
+                rowId,
+                !!value(row, 'BackdropExists', 'backdropExists'),
+                !!value(row, 'ThemeMusicExists', 'themeMusicExists'),
+                !!value(row, 'ExtraExists', 'extraExists'));
         }
 
         function syncDownloadOptionStyles() {
@@ -3806,15 +3810,22 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                     if (option) option.classList.toggle('selected', control.checked);
                 }
             });
+            downloadDialogConfirm.disabled = !downloadIncludeVideo.checked && !downloadIncludeAudio.checked && !downloadIncludeExtras.checked;
         }
 
-        function openDownloadDialog(row, itemId, rowId, includeVideo, includeAudio, includeExtras) {
+        function openDownloadDialog(row, itemId, rowId, videoExists, audioExists, extrasExists) {
             state.lastFocus = document.activeElement;
-            state.pendingDownload = { itemId: itemId, rowId: rowId };
+            state.pendingDownload = {
+                itemId: itemId,
+                rowId: rowId,
+                videoExists: videoExists,
+                audioExists: audioExists,
+                extrasExists: extrasExists
+            };
             downloadDialogTheme.textContent = text(value(row, 'ThemeKey', 'themeKey')) + (value(row, 'SongTitle', 'songTitle') ? ' · ' + value(row, 'SongTitle', 'songTitle') : '');
-            downloadIncludeVideo.checked = includeVideo;
-            downloadIncludeAudio.checked = includeAudio;
-            downloadIncludeExtras.checked = includeExtras;
+            downloadIncludeVideo.checked = !videoExists;
+            downloadIncludeAudio.checked = !audioExists;
+            downloadIncludeExtras.checked = !extrasExists;
             downloadDialogError.hidden = true;
             syncDownloadOptionStyles();
             downloadDialog.classList.add('open');
@@ -3843,10 +3854,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 downloadDialogError.hidden = false;
                 return;
             }
+            var force = (downloadIncludeVideo.checked && pending.videoExists) ||
+                (downloadIncludeAudio.checked && pending.audioExists) ||
+                (downloadIncludeExtras.checked && pending.extrasExists);
 
             var path = 'AnimeThemesSync/Jobs/ThemeDownload?ItemId=' + encodeURIComponent(pending.itemId) +
                 '&RowId=' + encodeURIComponent(pending.rowId) +
-                '&Force=false&IncludeAudio=' + encodeURIComponent(downloadIncludeAudio.checked) +
+                '&Force=' + encodeURIComponent(force) + '&IncludeAudio=' + encodeURIComponent(downloadIncludeAudio.checked) +
                 '&IncludeVideo=' + encodeURIComponent(downloadIncludeVideo.checked) +
                 '&IncludeExtras=' + encodeURIComponent(downloadIncludeExtras.checked) +
                 '&DisplayTitle=' + encodeURIComponent(downloadDialogTheme.textContent || pending.rowId);

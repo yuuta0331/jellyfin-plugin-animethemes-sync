@@ -1,8 +1,8 @@
-<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260704c" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260705d" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.07.04-c.</div>
+                <div class="fieldDescription">UI version: 2026.07.05-b.</div>
 
                 <div class="verticalSection ats-tabs" id="AnimeThemesBrowserTabs">
                     <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-tab active" id="AnimeThemesBrowserLibraryTab" data-ats-tab="library">
@@ -223,19 +223,28 @@
                     <div class="ats-settings-grid">
                         <div class="ats-settings-column">
                             <div class="ats-finder-panel">
-                                <h3>Download</h3>
+                                <h3>Automatic downloads</h3>
                                 <div class="checkboxContainer checkboxContainer-withDescription">
                                     <label class="emby-checkbox-label">
                                         <input id="AtsThemeDownloadingEnabled" type="checkbox" is="emby-checkbox" />
-                                        <span>Enable downloads</span>
+                                        <span>Enable scheduled downloads</span>
                                     </label>
-                                    <div class="fieldDescription">Downloads themes for libraries where AnimeThemesSync is enabled as a metadata fetcher.</div>
+                                    <div class="fieldDescription">Allows the Download Anime Themes scheduled task to download media. Theme downloads selected in Library Browser are handled separately.</div>
                                 </div>
+                                <div class="ats-toggle-list">
+                                    <div><label class="emby-checkbox-label"><input id="AtsAllowAdd" type="checkbox" is="emby-checkbox" /><span>Add missing files</span></label><div class="fieldDescription">Download new theme files during automatic synchronization.</div></div>
+                                    <div><label class="emby-checkbox-label"><input id="AtsForceRedownload" type="checkbox" is="emby-checkbox" /><span>Overwrite existing files</span></label><div class="fieldDescription warning-text">Re-downloads and replaces existing AnimeThemes files during automatic synchronization. Disable after applying volume or version changes.</div></div>
+                                    <div><label class="emby-checkbox-label"><input id="AtsSeasonThemeDownloadsEnabled" type="checkbox" is="emby-checkbox" /><span>Download season themes</span></label><div class="fieldDescription">Creates separate OP/ED output for Season items during automatic synchronization. Season Finder mappings remain saved when disabled.</div></div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel">
+                                <h3>Download settings</h3>
                                 <div class="ats-two-column">
                                     <div class="inputContainer">
                                         <label class="inputLabel inputLabelUnfocused" for="AtsMaxConcurrentDownloads">Concurrency</label>
                                         <input id="AtsMaxConcurrentDownloads" type="number" is="emby-input" min="1" max="10" />
-                                        <div class="fieldDescription">Number of simultaneous downloads. Recommended: 1-3.</div>
+                                        <div class="fieldDescription">Number of simultaneous downloads. Recommended: 1.</div>
                                     </div>
                                     <div class="inputContainer">
                                         <label class="inputLabel inputLabelUnfocused" for="AtsDownloadTimeoutSeconds">Timeout seconds</label>
@@ -243,7 +252,39 @@
                                         <div class="fieldDescription">Increase this if large video downloads time out. Default: 600.</div>
                                     </div>
                                 </div>
-                                <h3 class="ats-settings-subtitle">Cache policy</h3>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="AtsDownloadStagingDirectory">Local staging directory</label>
+                                    <input id="AtsDownloadStagingDirectory" type="text" is="emby-input" />
+                                    <div class="fieldDescription">Optional absolute local path. Leave blank to use Emby's configured temporary directory. Downloads and conversions may require space for both input and output files. Do not use network storage such as SMB, NFS, or UNC paths.</div>
+                                </div>
+                                <div class="checkboxContainer checkboxContainer-withDescription">
+                                    <label class="emby-checkbox-label">
+                                        <input id="AtsSegmentedDownloadEnabled" type="checkbox" is="emby-checkbox" />
+                                        <span>Use segmented downloads</span>
+                                    </label>
+                                    <div class="fieldDescription">Uses validated HTTP range requests above the configured minimum size and falls back immediately to a standard transfer when unavailable.</div>
+                                </div>
+                                <div id="AtsSegmentedDownloadOptions" class="ats-conditional-options ats-two-column">
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsSegmentedDownloadSegments">Segments per file</label>
+                                        <input id="AtsSegmentedDownloadSegments" type="number" is="emby-input" min="2" max="8" />
+                                        <div class="fieldDescription">Allowed range: 2-8. Recommended: 2. Each segment uses a separate HTTP request.</div>
+                                    </div>
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsMinimumSegmentedDownloadSizeMiB">Minimum segmented size (MiB)</label>
+                                        <input id="AtsMinimumSegmentedDownloadSizeMiB" type="number" is="emby-input" min="1" max="1024" />
+                                        <div class="fieldDescription">Files below this size use one standard request. Recommended: 25 MiB.</div>
+                                    </div>
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsMaximumConcurrentRangeRequests">Maximum concurrent Range requests</label>
+                                        <input id="AtsMaximumConcurrentRangeRequests" type="number" is="emby-input" min="1" max="16" />
+                                        <div class="fieldDescription">Shared across all downloads. Higher values increase CDN load. Recommended: 2.</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel">
+                                <h3>Cache policy</h3>
                                 <div class="ats-two-column">
                                     <div class="inputContainer">
                                         <label class="inputLabel inputLabelUnfocused" for="AtsSeasonMetadataCacheTtlDays">Season metadata TTL (days)</label>
@@ -255,23 +296,6 @@
                                         <input id="AtsProviderResponseCacheTtlDays" type="number" is="emby-input" min="1" max="365" />
                                         <div class="fieldDescription">Applies to AnimeThemes search, slug/external ID, and AniList relation responses. Default: 30.</div>
                                     </div>
-                                </div>
-                                <div class="checkboxContainer checkboxContainer-withDescription">
-                                    <label class="emby-checkbox-label">
-                                        <input id="AtsSegmentedDownloadEnabled" type="checkbox" is="emby-checkbox" />
-                                        <span>Use segmented downloads</span>
-                                    </label>
-                                    <div class="fieldDescription">Uses validated HTTP range requests for files larger than 2 MiB and falls back to a standard transfer when unsupported.</div>
-                                </div>
-                                <div id="AtsSegmentedDownloadOptions" class="ats-conditional-options inputContainer">
-                                    <label class="inputLabel inputLabelUnfocused" for="AtsSegmentedDownloadSegments">Segments per file</label>
-                                    <input id="AtsSegmentedDownloadSegments" type="number" is="emby-input" min="2" max="8" />
-                                    <div class="fieldDescription">Allowed range: 2-8. Default: 4. Each segment uses a separate HTTP request.</div>
-                                </div>
-                                <div class="ats-toggle-list">
-                                    <div><label class="emby-checkbox-label"><input id="AtsAllowAdd" type="checkbox" is="emby-checkbox" /><span>Add missing files</span></label><div class="fieldDescription">Download new theme files when planned files are missing.</div></div>
-                                    <div><label class="emby-checkbox-label"><input id="AtsForceRedownload" type="checkbox" is="emby-checkbox" /><span>Overwrite existing files</span></label><div class="fieldDescription warning-text">Re-downloads and replaces existing AnimeThemes files. Disable after applying volume or version changes.</div></div>
-                                    <div><label class="emby-checkbox-label"><input id="AtsSeasonThemeDownloadsEnabled" type="checkbox" is="emby-checkbox" /><span>Download season themes</span></label><div class="fieldDescription">Creates separate OP/ED output for Season items. Season Finder mappings remain saved when disabled.</div></div>
                                 </div>
                             </div>
 
@@ -684,7 +708,7 @@
                     </button>
                 </div>
                 <div class="ats-download-content">
-                    <p id="AnimeThemesDownloadDialogDescription" class="ats-download-description">Choose where this media should be saved. Existing files for unselected outputs will not be deleted.</p>
+                    <p id="AnimeThemesDownloadDialogDescription" class="ats-download-description">Outputs not already saved are selected automatically. Select an existing output to download and replace it. Existing files for unselected outputs will not be deleted.</p>
                     <div class="ats-download-options" role="group" aria-label="Download outputs">
                         <div class="ats-download-option">
                             <i class="md-icon ats-download-option-icon" aria-hidden="true">&#xE02C;</i>

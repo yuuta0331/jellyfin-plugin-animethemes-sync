@@ -24,8 +24,11 @@ public sealed class PluginConfigurationMigrationTests
         Assert.True(config.Series.Audio.UseAsTheme);
         Assert.True(config.Series.Video.UseAsTheme);
         Assert.Equal(ExtrasFileSuffix.Other, config.ExtrasFileSuffix);
-        Assert.True(config.SegmentedDownloadEnabled);
-        Assert.Equal(4, config.SegmentedDownloadSegments);
+        Assert.False(config.SegmentedDownloadEnabled);
+        Assert.Equal(2, config.SegmentedDownloadSegments);
+        Assert.Equal(25, config.MinimumSegmentedDownloadSizeMiB);
+        Assert.Equal(2, config.MaximumConcurrentRangeRequests);
+        Assert.Equal(string.Empty, config.DownloadStagingDirectory);
         Assert.Equal(SeasonTagTarget.Series, config.SeasonTagTarget);
         Assert.False(config.SeasonCollectionsEnabled);
         Assert.True(config.SeasonOneCollectionUseSeries);
@@ -61,6 +64,17 @@ public sealed class PluginConfigurationMigrationTests
 
         Assert.Equal(expected, config.SeasonMetadataCacheTtlDays);
         Assert.Equal(expected, config.ProviderResponseCacheTtlDays);
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(5, 5)]
+    [InlineData(20, 10)]
+    public void MaxConcurrentDownloads_IsClamped(int value, int expected)
+    {
+        var config = new PluginConfiguration { MaxConcurrentDownloads = value };
+
+        Assert.Equal(expected, config.MaxConcurrentDownloads);
     }
 
     [Theory]
@@ -125,6 +139,28 @@ public sealed class PluginConfigurationMigrationTests
         };
 
         Assert.Equal(expected, config.SegmentedDownloadSegments);
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(25, 25)]
+    [InlineData(2048, 1024)]
+    public void MinimumSegmentedDownloadSizeMiB_IsClamped(int value, int expected)
+    {
+        var config = new PluginConfiguration { MinimumSegmentedDownloadSizeMiB = value };
+
+        Assert.Equal(expected, config.MinimumSegmentedDownloadSizeMiB);
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(4, 4)]
+    [InlineData(20, 16)]
+    public void MaximumConcurrentRangeRequests_IsClamped(int value, int expected)
+    {
+        var config = new PluginConfiguration { MaximumConcurrentRangeRequests = value };
+
+        Assert.Equal(expected, config.MaximumConcurrentRangeRequests);
     }
 
     [Fact]
@@ -216,7 +252,7 @@ public sealed class PluginConfigurationMigrationTests
         var changed = config.Normalize();
 
         Assert.True(changed);
-        Assert.Equal(9, config.ConfigurationVersion);
+        Assert.Equal(11, config.ConfigurationVersion);
         Assert.Equal(4, config.Series.Audio.MaxThemes);
         Assert.False(config.Series.Video.UseAsTheme);
         Assert.Equal(ExtrasFileSuffix.Other, config.ExtrasFileSuffix);
@@ -234,10 +270,10 @@ public sealed class PluginConfigurationMigrationTests
         var changed = config.Normalize();
 
         Assert.True(changed);
-        Assert.Equal(9, config.ConfigurationVersion);
+        Assert.Equal(11, config.ConfigurationVersion);
         Assert.Equal(3, config.Series.Audio.MaxThemes);
-        Assert.True(config.SegmentedDownloadEnabled);
-        Assert.Equal(4, config.SegmentedDownloadSegments);
+        Assert.False(config.SegmentedDownloadEnabled);
+        Assert.Equal(2, config.SegmentedDownloadSegments);
     }
 
     [Fact]
@@ -249,9 +285,30 @@ public sealed class PluginConfigurationMigrationTests
         };
 
         Assert.True(config.Normalize());
-        Assert.Equal(9, config.ConfigurationVersion);
+        Assert.Equal(11, config.ConfigurationVersion);
         Assert.Equal(30, config.SeasonMetadataCacheTtlDays);
         Assert.Equal(30, config.ProviderResponseCacheTtlDays);
+    }
+
+    [Fact]
+    public void Normalize_V9Config_PreservesExistingTransferChoicesAndAddsNewDefaults()
+    {
+        var config = new PluginConfiguration
+        {
+            ConfigurationVersion = 9,
+            MaxConcurrentDownloads = 5,
+            SegmentedDownloadEnabled = true,
+            SegmentedDownloadSegments = 7,
+        };
+
+        Assert.True(config.Normalize());
+        Assert.Equal(11, config.ConfigurationVersion);
+        Assert.Equal(5, config.MaxConcurrentDownloads);
+        Assert.True(config.SegmentedDownloadEnabled);
+        Assert.Equal(7, config.SegmentedDownloadSegments);
+        Assert.Equal(25, config.MinimumSegmentedDownloadSizeMiB);
+        Assert.Equal(2, config.MaximumConcurrentRangeRequests);
+        Assert.Equal(string.Empty, config.DownloadStagingDirectory);
     }
 
     [Fact]
@@ -269,7 +326,7 @@ public sealed class PluginConfigurationMigrationTests
         serializer.Serialize(writer, config);
         var xml = writer.ToString();
 
-        Assert.Contains("<ConfigurationVersion>9</ConfigurationVersion>", xml);
+        Assert.Contains("<ConfigurationVersion>11</ConfigurationVersion>", xml);
         Assert.Contains("<Series>", xml);
         Assert.Contains("<Movie>", xml);
         Assert.DoesNotContain("SeriesAudioMaxThemes", xml);

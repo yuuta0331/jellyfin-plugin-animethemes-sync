@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
@@ -43,6 +44,7 @@ public class ThemeDownloader : IScheduledTask
     private static readonly SemaphoreSlim SeasonMetadataSyncGate = new(1, 1);
     private static readonly SemaphoreSlim SeasonMetadataOperationGate = new(1, 1);
     private static readonly SemaphoreSlim SeasonCollectionFinalizeGate = new(1, 1);
+    private static readonly AnimeThemesMediaHttpClient MediaHttpClient = new();
     private static readonly object LibraryMonitorSync = new();
     private static readonly Dictionary<Guid, BaseItem> PendingLibraryChanges = new();
     private static Timer? _libraryChangeTimer;
@@ -51,6 +53,7 @@ public class ThemeDownloader : IScheduledTask
     private static bool _pendingLibraryRemoval;
     private static int _browserCacheRebuildRunning;
     private readonly AdjustableConcurrencyLimiter _downloadLimiter = new();
+    private int _scheduledDeferredDownloads;
 
     private readonly ILibraryManager _libraryManager;
     private readonly IFileSystem _fileSystem;
@@ -61,6 +64,7 @@ public class ThemeDownloader : IScheduledTask
     private readonly AnimeThemesService _animeThemesService;
     private readonly AniListService _aniListService;
     private readonly AnimeThemesDataStore _dataStore;
+    private readonly IAnimeThemesTempPathProvider _tempPathProvider;
     private readonly ISeasonFinderDataStore _seasonFinderStore;
     private readonly ICollectionManager _collectionManager;
     private readonly IProviderManager _providerManager;
@@ -97,6 +101,7 @@ public class ThemeDownloader : IScheduledTask
         _mediaEncoder = mediaEncoder;
         _collectionManager = collectionManager;
         _providerManager = providerManager;
+        _tempPathProvider = new EmbyAnimeThemesTempPathProvider(applicationPaths);
         var pathProvider = new EmbyAnimeThemesDataPathProvider(applicationPaths);
         var serverIdentity = new EmbyAnimeThemesServerIdentityProvider();
         _dataStore = new AnimeThemesDataStore(
@@ -155,11 +160,42 @@ public class ThemeDownloader : IScheduledTask
         var items = GetEnabledLibraryItems();
         _logger.LogInformation("Found {0} items to process.", items.Count);
 
+        _ = Interlocked.Exchange(ref _scheduledDeferredDownloads, 0);
         var result = config.ThemeDownloadingEnabled
-            ? await ProcessItems(items, config, config.ForceRedownload, progress, cancellationToken).ConfigureAwait(false)
+            ? await ProcessItems(items, config, config.ForceRedownload, progress, cancellationToken, MediaDownloadMode.Scheduled).ConfigureAwait(false)
             : new ThemeDownloadExecutionResult(0, 0, 0, 0, 0, 0);
         await ExecuteSeasonMetadataMaintenanceAsync(progress, cancellationToken).ConfigureAwait(false);
-        _logger.LogInformation("Anime Themes Download Task Completed. Downloaded {0} files.", result.DownloadsCompleted);
+        var downloadFailures = Math.Max(0, result.DownloadsPlanned - result.DownloadsCompleted);
+        var deferredDownloads = Volatile.Read(ref _scheduledDeferredDownloads);
+        _logger.LogInformation(
+            "Anime Themes Download Task totals: Planned={0}, Succeeded={1}, Failed={2}, ExtrasFailed={3}, Deferred={4}.",
+            result.DownloadsPlanned + result.ExtrasPlanned + deferredDownloads,
+            result.DownloadsCompleted + result.ExtrasCompleted,
+            downloadFailures + result.ExtraFailures,
+            result.ExtraFailures,
+            deferredDownloads);
+        if (downloadFailures > 0 || result.ExtraFailures > 0)
+        {
+            _logger.LogWarning(
+                "Anime Themes Download Task completed with failures. Media: {0}/{1} downloaded ({2} failed). Extras: {3}/{4} completed ({5} failed). Deferred: {6}.",
+                result.DownloadsCompleted,
+                result.DownloadsPlanned,
+                downloadFailures,
+                result.ExtrasCompleted,
+                result.ExtrasPlanned,
+                result.ExtraFailures,
+                deferredDownloads);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Anime Themes Download Task completed. Media: {0}/{1}. Extras: {2}/{3}. Deferred: {4}.",
+                result.DownloadsCompleted,
+                result.DownloadsPlanned,
+                result.ExtrasCompleted,
+                result.ExtrasPlanned,
+                deferredDownloads);
+        }
     }
 
     /// <summary>
@@ -1541,18 +1577,7 @@ public class ThemeDownloader : IScheduledTask
         CancellationToken cancellationToken)
     {
         var config = Plugin.Instance?.Configuration ?? throw new InvalidOperationException("AnimeThemes Sync configuration is unavailable.");
-        if (!config.ThemeDownloadingEnabled)
-        {
-            throw new InvalidOperationException("Theme downloading is disabled in plugin configuration.");
-        }
-
-        if (!config.AllowAdd)
-        {
-            throw new InvalidOperationException("Adding theme files is disabled in plugin configuration.");
-        }
-
         var item = GetSupportedItem(itemId);
-        EnsureSeasonThemeDownloadsAllowed(item, config);
         _logger.LogInformation("Starting Anime Themes theme-row download for {0} ({1}, RowId={2})...", item.Name, itemId, rowId);
         progress?.Report(5);
         var selection = await BuildSingleThemeSelectionAsync(item, rowId, cancellationToken).ConfigureAwait(false);
@@ -1585,12 +1610,12 @@ public class ThemeDownloader : IScheduledTask
             fileNamePrefix: fileNamePrefix,
             outputTarget: outputTarget);
 
-        MigrateExtraFiles(plan.ExtraFiles, forceRedownload || config.ForceRedownload);
+        MigrateExtraFiles(plan.ExtraFiles, forceRedownload);
         var pendingMedia = plan.MediaFiles
-            .Where(file => forceRedownload || config.ForceRedownload || !_fileSystem.FileExists(file.Path))
+            .Where(file => forceRedownload || !_fileSystem.FileExists(file.Path))
             .ToList();
         var pendingExtras = plan.ExtraFiles
-            .Where(extra => forceRedownload || config.ForceRedownload || !_fileSystem.FileExists(extra.TargetPath))
+            .Where(extra => forceRedownload || !_fileSystem.FileExists(extra.TargetPath))
             .ToList();
         var totalSteps = Math.Max(1, pendingMedia.Count + pendingExtras.Count);
         var finishedSteps = 0;
@@ -1629,7 +1654,7 @@ public class ThemeDownloader : IScheduledTask
                         extra.SourcePath,
                         extra.TargetPath,
                         config.ExtrasLinkMode,
-                        forceRedownload || config.ForceRedownload);
+                        forceRedownload);
                 }
                 else if (!string.IsNullOrWhiteSpace(extra.DownloadUrl))
                 {
@@ -2029,7 +2054,8 @@ public class ThemeDownloader : IScheduledTask
         PluginConfiguration config,
         bool forceRedownload,
         IProgress<double>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        MediaDownloadMode downloadMode = MediaDownloadMode.Interactive)
     {
         // ── Phase 1: Resolve all items sequentially (API calls are rate-limited) ──
         _logger.LogInformation("=== Phase 1: Resolving themes for {0} items ===", items.Count);
@@ -2063,6 +2089,11 @@ public class ThemeDownloader : IScheduledTask
                         var volume = file.IsVideo ? videoConfig.Volume : audioConfig.Volume;
                         if (outputTarget != null && (forceRedownload || !_fileSystem.FileExists(file.Path)))
                         {
+                            if (downloadMode == MediaDownloadMode.Scheduled && ShouldDeferScheduledDownload(file.Url, file.Path))
+                            {
+                                continue;
+                            }
+
                             allDownloads.Add((file, volume, itemName, outputTarget));
                         }
                     }
@@ -2072,6 +2103,13 @@ public class ThemeDownloader : IScheduledTask
                         var outputTarget = extra.OutputTarget ?? ResolveThemeOutputTarget(item);
                         if (outputTarget != null && (forceRedownload || config.ForceRedownload || !_fileSystem.FileExists(extra.TargetPath)))
                         {
+                            if (downloadMode == MediaDownloadMode.Scheduled &&
+                                !string.IsNullOrWhiteSpace(extra.DownloadUrl) &&
+                                ShouldDeferScheduledDownload(extra.DownloadUrl, extra.TargetPath))
+                            {
+                                continue;
+                            }
+
                             allExtras.Add((extra, itemName, outputTarget, videoConfig.Volume));
                         }
                     }
@@ -2126,45 +2164,34 @@ public class ThemeDownloader : IScheduledTask
                             _ = Directory.CreateDirectory(dir);
                         }
 
-                        const int MaxRetries = 3;
-                        for (var attempt = 1; attempt <= MaxRetries; attempt++)
+                        _logger.LogDebug("Downloading [{0}] {1}...", dl.ItemName, Path.GetFileName(dl.File.Path));
+                        var transferProgress = progress == null
+                            ? null
+                            : new InlineProgress(fraction =>
+                            {
+                                lock (downloadProgressLock)
+                                {
+                                    downloadFractions[currentDownloadIndex] = Math.Max(downloadFractions[currentDownloadIndex], fraction);
+                                    progress.Report(40 + (downloadFractions.Sum() / allDownloads.Count * 45));
+                                }
+                            });
+                        await DownloadFile(dl.File.Url, dl.File.Path, dl.Volume, dl.File.IsVideo, dl.File.RequiresTranscoding, cancellationToken, transferProgress, downloadMode).ConfigureAwait(false);
+                        _dataStore.UpsertThemeFile(dl.OutputTarget, dl.File.ThemeKey, dl.File.IsVideo ? "video" : "audio", dl.File.Path, "Scheduled");
+                        _ = Interlocked.Increment(ref completedDownloads);
+                        _logger.LogInformation("Downloaded [{0}] {1}", dl.ItemName, Path.GetFileName(dl.File.Path));
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (downloadMode == MediaDownloadMode.Scheduled)
                         {
-                            try
-                            {
-                                _logger.LogDebug("Downloading [{0}] {1}...", dl.ItemName, Path.GetFileName(dl.File.Path));
-                                var transferProgress = progress == null
-                                    ? null
-                                    : new InlineProgress(fraction =>
-                                    {
-                                        lock (downloadProgressLock)
-                                        {
-                                            downloadFractions[currentDownloadIndex] = Math.Max(downloadFractions[currentDownloadIndex], fraction);
-                                            progress.Report(40 + (downloadFractions.Sum() / allDownloads.Count * 45));
-                                        }
-                                    });
-                                await DownloadFile(dl.File.Url, dl.File.Path, dl.Volume, dl.File.IsVideo, dl.File.RequiresTranscoding, cancellationToken, transferProgress).ConfigureAwait(false);
-                                _dataStore.UpsertThemeFile(dl.OutputTarget, dl.File.ThemeKey, dl.File.IsVideo ? "video" : "audio", dl.File.Path, "Scheduled");
-                                _ = Interlocked.Increment(ref completedDownloads);
-                                _logger.LogInformation("Downloaded [{0}] {1}", dl.ItemName, Path.GetFileName(dl.File.Path));
-                                break;
-                            }
-                            catch (OperationCanceledException)
-                            {
-                                throw;
-                            }
-                            catch (Exception ex)
-                            {
-                                if (attempt < MaxRetries)
-                                {
-                                    _logger.LogWarning(ex, "Download attempt {0}/{1} failed for {2}. Retrying...", attempt, MaxRetries, dl.File.Url);
-                                    await Task.Delay(TimeSpan.FromSeconds(attempt * 2), cancellationToken).ConfigureAwait(false);
-                                }
-                                else
-                                {
-                                    _logger.LogError(ex, "Download failed after {0} attempts for {1}. Skipping file.", MaxRetries, dl.File.Url);
-                                }
-                            }
+                            RecordScheduledDownloadFailure(dl.File.Url, dl.File.Path, ex);
                         }
+
+                        _logger.LogError(ex, "Download failed after transport retries for {0}. Skipping file.", dl.File.Url);
                     }
                     finally
                     {
@@ -2203,7 +2230,7 @@ public class ThemeDownloader : IScheduledTask
                 else if (!string.IsNullOrWhiteSpace(extra.Extra.DownloadUrl))
                 {
                     var transferProgress = CreateStepProgress(progress, 85, 10, extraIndex, Math.Max(1, allExtras.Count));
-                    await DownloadFile(extra.Extra.DownloadUrl, extra.Extra.TargetPath, extra.VideoVolume, isVideo: true, requiresTranscoding: extra.Extra.RequiresTranscoding, cancellationToken, transferProgress).ConfigureAwait(false);
+                    await DownloadFile(extra.Extra.DownloadUrl, extra.Extra.TargetPath, extra.VideoVolume, isVideo: true, requiresTranscoding: extra.Extra.RequiresTranscoding, cancellationToken, transferProgress, downloadMode).ConfigureAwait(false);
                     result = new ThemeExtraFileResult("downloaded");
                 }
                 else
@@ -2231,6 +2258,11 @@ public class ThemeDownloader : IScheduledTask
             catch (Exception ex)
             {
                 failedExtras++;
+                if (downloadMode == MediaDownloadMode.Scheduled && !string.IsNullOrWhiteSpace(extra.Extra.DownloadUrl))
+                {
+                    RecordScheduledDownloadFailure(extra.Extra.DownloadUrl, extra.Extra.TargetPath, ex);
+                }
+
                 _logger.LogWarning(ex, "Failed to create extras file: {0}", extra.Extra.TargetPath);
             }
 
@@ -2340,7 +2372,7 @@ public class ThemeDownloader : IScheduledTask
             }
 
             var transferProgress = CreateStepProgress(progress, 0, 100, completedSteps, totalSteps);
-            await DownloadPlannedFileWithRetryAsync(
+            await DownloadPlannedFileAsync(
                 file,
                 file.IsVideo ? videoVolume : audioVolume,
                 transferProgress,
@@ -2394,30 +2426,13 @@ public class ThemeDownloader : IScheduledTask
         return new ThemeDownloadExecutionResult(1, mediaFiles.Count, mediaFiles.Count, extraFiles.Count, extraFiles.Count, 0);
     }
 
-    private async Task DownloadPlannedFileWithRetryAsync(
+    private async Task DownloadPlannedFileAsync(
         ThemeFilePlan file,
         int volume,
         IProgress<double>? progress,
         CancellationToken cancellationToken)
     {
-        const int MaxAttempts = 3;
-        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
-        {
-            try
-            {
-                await DownloadFile(file.Url, file.Path, volume, file.IsVideo, file.RequiresTranscoding, cancellationToken, progress).ConfigureAwait(false);
-                return;
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex) when (attempt < MaxAttempts)
-            {
-                _logger.LogWarning(ex, "Download attempt {0}/{1} failed for {2}. Retrying...", attempt, MaxAttempts, file.Url);
-                await Task.Delay(TimeSpan.FromSeconds(attempt * 2), cancellationToken).ConfigureAwait(false);
-            }
-        }
+        await DownloadFile(file.Url, file.Path, volume, file.IsVideo, file.RequiresTranscoding, cancellationToken, progress).ConfigureAwait(false);
     }
 
     private void FinalizeThemeDownloadBatch(BaseItem item, ThemeOutputPlan plan, PluginConfiguration config)
@@ -4643,75 +4658,129 @@ public class ThemeDownloader : IScheduledTask
         bool isVideo,
         bool requiresTranscoding,
         CancellationToken cancellationToken,
-        IProgress<double>? transferProgress = null)
+        IProgress<double>? transferProgress = null,
+        MediaDownloadMode downloadMode = MediaDownloadMode.Interactive)
     {
         var config = Plugin.Instance?.Configuration;
         var timeoutSeconds = config?.DownloadTimeoutSeconds > 0 ? config.DownloadTimeoutSeconds : 600;
+        var client = MediaHttpClient.Client;
 
-        var client = _httpClientFactory.CreateClient(Constants.AnimeThemesHttpClientName);
-        using var transferCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        transferCancellation.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
-
-        var directory = Path.GetDirectoryName(path);
-        if (!string.IsNullOrWhiteSpace(directory) && !_fileSystem.DirectoryExists(directory))
+        using var workspace = MediaDownloadStagingService.CreateWorkspace(
+            config?.DownloadStagingDirectory,
+            _tempPathProvider.GetTempDirectory());
+        if (!string.IsNullOrWhiteSpace(workspace.Resolution.Warning))
         {
-            _ = Directory.CreateDirectory(directory);
+            _logger.LogWarning("{0}", workspace.Resolution.Warning);
         }
 
-        var tempPath = path + ".part";
+        var extension = Path.GetExtension(path);
+        var downloadedPath = Path.Combine(workspace.WorkingDirectory, "download" + extension);
+        var downloadProgress = transferProgress == null
+            ? null
+            : new InlineProgress(fraction => transferProgress.Report(fraction * 0.9));
+        using (await _downloadLimiter.AcquireAsync(config?.MaxConcurrentDownloads ?? 1, cancellationToken).ConfigureAwait(false))
+        {
+            await SegmentedDownloadService.DownloadAsync(
+                client,
+                url,
+                downloadedPath,
+                config?.SegmentedDownloadEnabled == true,
+                config?.SegmentedDownloadSegments ?? 2,
+                (long)(config?.MinimumSegmentedDownloadSizeMiB ?? 25) * 1024 * 1024,
+                config?.MaximumConcurrentRangeRequests ?? 2,
+                downloadMode,
+                timeoutSeconds,
+                downloadProgress,
+                cancellationToken).ConfigureAwait(false);
+        }
 
-        try
-        {
-            using (await _downloadLimiter.AcquireAsync(config?.MaxConcurrentDownloads ?? 1, cancellationToken).ConfigureAwait(false))
-            {
-                await SegmentedDownloadService.DownloadAsync(
-                    client,
-                    url,
-                    tempPath,
-                    config?.SegmentedDownloadEnabled == true,
-                    config?.SegmentedDownloadSegments ?? 4,
-                    transferProgress,
-                    transferCancellation.Token).ConfigureAwait(false);
-            }
-        }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && transferCancellation.IsCancellationRequested)
-        {
-            LocalMediaPathHelper.CleanupTempFile(tempPath);
-            throw new TimeoutException($"Download did not complete within {timeoutSeconds} seconds.", ex);
-        }
-        catch (Exception)
-        {
-            LocalMediaPathHelper.CleanupTempFile(tempPath);
-            throw;
-        }
         var needsConversion = requiresTranscoding;
         var needsVolume = volume < 100;
-
+        var completedPath = downloadedPath;
         if (needsConversion || needsVolume)
         {
-            // Use ffmpeg: convert to target format and/or adjust volume
-            try
-            {
-                await FfmpegProcess(tempPath, path, volume, isVideo, cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                LocalMediaPathHelper.CleanupTempFile(tempPath);
-            }
+            completedPath = Path.Combine(workspace.WorkingDirectory, "converted" + extension);
+            await FfmpegProcess(downloadedPath, completedPath, volume, isVideo, cancellationToken).ConfigureAwait(false);
+            transferProgress?.Report(0.9);
         }
-        else
+
+        _logger.LogDebug("Publishing staged media from {0} to {1}.", completedPath, path);
+        var publishProgress = transferProgress == null
+            ? null
+            : new InlineProgress(fraction => transferProgress.Report(0.9 + (fraction * 0.1)));
+        await MediaDownloadStagingService.PublishAsync(
+            completedPath,
+            path,
+            timeoutSeconds,
+            publishProgress,
+            (attempt, exception, delay) => _logger.LogWarning(
+                exception,
+                "Publishing media to {0} failed on attempt {1}; retrying in {2} seconds.",
+                path,
+                attempt,
+                delay.TotalSeconds),
+            cancellationToken).ConfigureAwait(false);
+
+        _dataStore.RemoveDownloadFailure(url, path);
+    }
+
+    private bool ShouldDeferScheduledDownload(string url, string path)
+    {
+        if (!_dataStore.ShouldDeferDownload(url, path, DateTimeOffset.UtcNow, out var failure))
         {
-            // Already correct format, no volume change — just move
-            try
+            return false;
+        }
+
+        _ = Interlocked.Increment(ref _scheduledDeferredDownloads);
+        _logger.LogInformation(
+            "Deferring download until {0}: {1} ({2}, attempts={3}).",
+            failure?.NextRetryUtc,
+            url,
+            failure?.Status,
+            failure?.AttemptCount);
+        return true;
+    }
+
+    private void RecordScheduledDownloadFailure(string url, string path, Exception exception)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (exception is MediaDownloadException mediaException)
+        {
+            var statusCode = mediaException.StatusCode.HasValue ? (int)mediaException.StatusCode.Value : (int?)null;
+            if (mediaException.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
             {
-                File.Move(tempPath, path, overwrite: true);
+                _dataStore.RecordDownloadFailure(
+                    url,
+                    path,
+                    DownloadFailureStatuses.PermanentFailed,
+                    mediaException.Message,
+                    statusCode,
+                    now.AddDays(30));
             }
-            catch (IOException ex)
+            else if (mediaException.IsTransient)
             {
-                _logger.LogError(ex, "Failed to move temp file {0} to {1}", tempPath, path);
-                LocalMediaPathHelper.CleanupTempFile(tempPath);
-                throw;
+                var delay = mediaException.RetryAfter ?? TimeSpan.FromMinutes(10);
+                _dataStore.RecordDownloadFailure(
+                    url,
+                    path,
+                    DownloadFailureStatuses.TransientFailed,
+                    mediaException.Message,
+                    statusCode,
+                    now.Add(delay));
             }
+
+            return;
+        }
+
+        if (exception is IOException or HttpRequestException or TimeoutException)
+        {
+            _dataStore.RecordDownloadFailure(
+                url,
+                path,
+                DownloadFailureStatuses.TransientFailed,
+                exception.Message,
+                null,
+                now.AddMinutes(10));
         }
     }
 
@@ -4739,7 +4808,7 @@ public class ThemeDownloader : IScheduledTask
 
     /// <summary>
     /// Runs ffmpeg to convert format and/or adjust volume.
-    /// Input is the temp file (.part), output is the final path.
+    /// Input and output are files in the host-managed local staging directory.
     /// </summary>
     private async Task FfmpegProcess(string inputPath, string outputPath, int volume, bool isVideo, CancellationToken cancellationToken)
     {

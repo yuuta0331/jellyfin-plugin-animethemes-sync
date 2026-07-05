@@ -31,6 +31,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<IExternalId, AnimeThemesIdExternalId>();
         serviceCollection.AddSingleton<IExternalUrlProvider, AnimeThemesExternalUrlProvider>();
         serviceCollection.AddSingleton<IAnimeThemesDataPathProvider, JellyfinAnimeThemesDataPathProvider>();
+        serviceCollection.AddSingleton<IAnimeThemesTempPathProvider, JellyfinAnimeThemesTempPathProvider>();
         serviceCollection.AddSingleton<IAnimeThemesServerIdentityProvider, JellyfinAnimeThemesServerIdentityProvider>();
         serviceCollection.AddSingleton(provider =>
         {
@@ -51,6 +52,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
             return store;
         });
         serviceCollection.AddSingleton<ThemeDownloader>();
+        serviceCollection.AddSingleton<AnimeThemesMediaHttpClient>();
         serviceCollection.AddSingleton<SeasonMetadataRefreshTask>();
         serviceCollection.AddHostedService<BrowserCacheWarmupService>();
         serviceCollection.AddHttpClient(Constants.AniListHttpClientName, client =>

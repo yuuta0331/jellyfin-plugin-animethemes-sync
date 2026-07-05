@@ -14,7 +14,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Configuration;
 /// </summary>
 public class PluginConfiguration : BasePluginConfiguration
 {
-    public const int CurrentConfigurationVersion = 9;
+    public const int CurrentConfigurationVersion = 11;
 
     private int _maxConcurrentDownloads = 1;
     private string _tagSeasonSpring = "Spring";
@@ -32,7 +32,9 @@ public class PluginConfiguration : BasePluginConfiguration
     private string _extrasFileNameFormat = ThemeFilePlanner.DefaultExtrasFileNameFormat;
     private bool _legacyConfigurationLoaded;
 
-    private int _segmentedDownloadSegments = 4;
+    private int _segmentedDownloadSegments = 2;
+    private int _minimumSegmentedDownloadSizeMiB = 25;
+    private int _maximumConcurrentRangeRequests = 2;
 
     private int _seriesAudioMaxThemes = 1;
     private int _seriesAudioVolume = 100;
@@ -53,8 +55,11 @@ public class PluginConfiguration : BasePluginConfiguration
         ThemeDownloadingEnabled = true;
         MaxConcurrentDownloads = 1;
         DownloadTimeoutSeconds = 600;
-        SegmentedDownloadEnabled = true;
-        SegmentedDownloadSegments = 4;
+        SegmentedDownloadEnabled = false;
+        SegmentedDownloadSegments = 2;
+        MinimumSegmentedDownloadSizeMiB = 25;
+        MaximumConcurrentRangeRequests = 2;
+        DownloadStagingDirectory = string.Empty;
         AllowAdd = true;
         ForceRedownload = false;
         ExtrasEnabled = false;
@@ -93,18 +98,32 @@ public class PluginConfiguration : BasePluginConfiguration
     public int MaxConcurrentDownloads
     {
         get => _maxConcurrentDownloads;
-        set => _maxConcurrentDownloads = value < 1 ? 1 : value;
+        set => _maxConcurrentDownloads = value < 1 ? 1 : value > 10 ? 10 : value;
     }
 
     public int DownloadTimeoutSeconds { get; set; }
 
-    public bool SegmentedDownloadEnabled { get; set; } = true;
+    public bool SegmentedDownloadEnabled { get; set; }
 
     public int SegmentedDownloadSegments
     {
         get => _segmentedDownloadSegments;
         set => _segmentedDownloadSegments = value < 2 ? 2 : value > 8 ? 8 : value;
     }
+
+    public int MinimumSegmentedDownloadSizeMiB
+    {
+        get => _minimumSegmentedDownloadSizeMiB;
+        set => _minimumSegmentedDownloadSizeMiB = value < 1 ? 1 : value > 1024 ? 1024 : value;
+    }
+
+    public int MaximumConcurrentRangeRequests
+    {
+        get => _maximumConcurrentRangeRequests;
+        set => _maximumConcurrentRangeRequests = value < 1 ? 1 : value > 16 ? 16 : value;
+    }
+
+    public string DownloadStagingDirectory { get; set; } = string.Empty;
 
     public bool AllowAdd { get; set; }
 
@@ -532,6 +551,12 @@ public class PluginConfiguration : BasePluginConfiguration
         if (!Enum.IsDefined(typeof(ExtrasFileSuffix), ExtrasFileSuffix))
         {
             ExtrasFileSuffix = ExtrasFileSuffix.Other;
+            changed = true;
+        }
+
+        if (DownloadStagingDirectory == null)
+        {
+            DownloadStagingDirectory = string.Empty;
             changed = true;
         }
 

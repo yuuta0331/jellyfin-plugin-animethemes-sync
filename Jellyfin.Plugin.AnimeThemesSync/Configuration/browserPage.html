@@ -12,7 +12,7 @@
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
-                <div class="fieldDescription">UI version: 2026.07.04-c.</div>
+                <div class="fieldDescription">UI version: 2026.07.05-b.</div>
 
                 <div class="verticalSection ats-tabs" id="AnimeThemesBrowserTabs">
                     <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-tab active" id="AnimeThemesBrowserLibraryTab" data-ats-tab="library">
@@ -237,19 +237,28 @@
                     <div class="ats-settings-grid">
                         <div class="ats-settings-column">
                             <div class="ats-finder-panel">
-                                <h3>Download</h3>
+                                <h3>Automatic downloads</h3>
                                 <div class="checkboxContainer checkboxContainer-withDescription">
                                     <label class="emby-checkbox-label">
                                         <input id="AtsThemeDownloadingEnabled" type="checkbox" is="emby-checkbox" />
-                                        <span>Enable downloads</span>
+                                        <span>Enable scheduled downloads</span>
                                     </label>
-                                    <div class="fieldDescription">Downloads themes for libraries where AnimeThemesSync is enabled as a metadata fetcher.</div>
+                                    <div class="fieldDescription">Allows the Download Anime Themes scheduled task to download media. Theme downloads selected in Library Browser are handled separately.</div>
                                 </div>
+                                <div class="ats-toggle-list">
+                                    <div><label class="emby-checkbox-label"><input id="AtsAllowAdd" type="checkbox" is="emby-checkbox" /><span>Add missing files</span></label><div class="fieldDescription">Download new theme files during automatic synchronization.</div></div>
+                                    <div><label class="emby-checkbox-label"><input id="AtsForceRedownload" type="checkbox" is="emby-checkbox" /><span>Overwrite existing files</span></label><div class="fieldDescription warning-text">Re-downloads and replaces existing AnimeThemes files during automatic synchronization. Disable after applying volume or version changes.</div></div>
+                                    <div><label class="emby-checkbox-label"><input id="AtsSeasonThemeDownloadsEnabled" type="checkbox" is="emby-checkbox" /><span>Download season themes</span></label><div class="fieldDescription">Creates separate OP/ED output for Season items during automatic synchronization. Season Finder mappings remain saved when disabled.</div></div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel">
+                                <h3>Download settings</h3>
                                 <div class="ats-two-column">
                                     <div class="inputContainer">
                                         <label class="inputLabel inputLabelUnfocused" for="AtsMaxConcurrentDownloads">Concurrency</label>
                                         <input id="AtsMaxConcurrentDownloads" type="number" is="emby-input" min="1" max="10" />
-                                        <div class="fieldDescription">Number of simultaneous downloads. Recommended: 1-3.</div>
+                                        <div class="fieldDescription">Number of simultaneous downloads. Recommended: 1.</div>
                                     </div>
                                     <div class="inputContainer">
                                         <label class="inputLabel inputLabelUnfocused" for="AtsDownloadTimeoutSeconds">Timeout seconds</label>
@@ -257,7 +266,39 @@
                                         <div class="fieldDescription">Increase this if large video downloads time out. Default: 600.</div>
                                     </div>
                                 </div>
-                                <h3 class="ats-settings-subtitle">Cache policy</h3>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="AtsDownloadStagingDirectory">Local staging directory</label>
+                                    <input id="AtsDownloadStagingDirectory" type="text" is="emby-input" />
+                                    <div class="fieldDescription">Optional absolute local path. Leave blank to use Jellyfin's configured temporary directory. Downloads and conversions may require space for both input and output files. Do not use network storage such as SMB, NFS, or UNC paths.</div>
+                                </div>
+                                <div class="checkboxContainer checkboxContainer-withDescription">
+                                    <label class="emby-checkbox-label">
+                                        <input id="AtsSegmentedDownloadEnabled" type="checkbox" is="emby-checkbox" />
+                                        <span>Use segmented downloads</span>
+                                    </label>
+                                    <div class="fieldDescription">Uses validated HTTP range requests above the configured minimum size and falls back immediately to a standard transfer when unavailable.</div>
+                                </div>
+                                <div id="AtsSegmentedDownloadOptions" class="ats-conditional-options ats-two-column">
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsSegmentedDownloadSegments">Segments per file</label>
+                                        <input id="AtsSegmentedDownloadSegments" type="number" is="emby-input" min="2" max="8" />
+                                        <div class="fieldDescription">Allowed range: 2-8. Recommended: 2. Each segment uses a separate HTTP request.</div>
+                                    </div>
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsMinimumSegmentedDownloadSizeMiB">Minimum segmented size (MiB)</label>
+                                        <input id="AtsMinimumSegmentedDownloadSizeMiB" type="number" is="emby-input" min="1" max="1024" />
+                                        <div class="fieldDescription">Files below this size use one standard request. Recommended: 25 MiB.</div>
+                                    </div>
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="AtsMaximumConcurrentRangeRequests">Maximum concurrent Range requests</label>
+                                        <input id="AtsMaximumConcurrentRangeRequests" type="number" is="emby-input" min="1" max="16" />
+                                        <div class="fieldDescription">Shared across all downloads. Higher values increase CDN load. Recommended: 2.</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="ats-finder-panel">
+                                <h3>Cache policy</h3>
                                 <div class="ats-two-column">
                                     <div class="inputContainer">
                                         <label class="inputLabel inputLabelUnfocused" for="AtsSeasonMetadataCacheTtlDays">Season metadata TTL (days)</label>
@@ -269,23 +310,6 @@
                                         <input id="AtsProviderResponseCacheTtlDays" type="number" is="emby-input" min="1" max="365" />
                                         <div class="fieldDescription">Applies to AnimeThemes search, slug/external ID, and AniList relation responses. Default: 30.</div>
                                     </div>
-                                </div>
-                                <div class="checkboxContainer checkboxContainer-withDescription">
-                                    <label class="emby-checkbox-label">
-                                        <input id="AtsSegmentedDownloadEnabled" type="checkbox" is="emby-checkbox" />
-                                        <span>Use segmented downloads</span>
-                                    </label>
-                                    <div class="fieldDescription">Uses validated HTTP range requests for files larger than 2 MiB and falls back to a standard transfer when unsupported.</div>
-                                </div>
-                                <div id="AtsSegmentedDownloadOptions" class="ats-conditional-options inputContainer">
-                                    <label class="inputLabel inputLabelUnfocused" for="AtsSegmentedDownloadSegments">Segments per file</label>
-                                    <input id="AtsSegmentedDownloadSegments" type="number" is="emby-input" min="2" max="8" />
-                                    <div class="fieldDescription">Allowed range: 2-8. Default: 4. Each segment uses a separate HTTP request.</div>
-                                </div>
-                                <div class="ats-toggle-list">
-                                    <div><label class="emby-checkbox-label"><input id="AtsAllowAdd" type="checkbox" is="emby-checkbox" /><span>Add missing files</span></label><div class="fieldDescription">Download new theme files when planned files are missing.</div></div>
-                                    <div><label class="emby-checkbox-label"><input id="AtsForceRedownload" type="checkbox" is="emby-checkbox" /><span>Overwrite existing files</span></label><div class="fieldDescription warning-text">Re-downloads and replaces existing AnimeThemes files. Disable after applying volume or version changes.</div></div>
-                                    <div><label class="emby-checkbox-label"><input id="AtsSeasonThemeDownloadsEnabled" type="checkbox" is="emby-checkbox" /><span>Download season themes</span></label><div class="fieldDescription">Creates separate OP/ED output for Season items. Season Finder mappings remain saved when disabled.</div></div>
                                 </div>
                             </div>
 
@@ -701,7 +725,7 @@
                     </button>
                 </div>
                 <div class="ats-download-content">
-                    <p id="AnimeThemesDownloadDialogDescription" class="ats-download-description">Choose where this media should be saved. Existing files for unselected outputs will not be deleted.</p>
+                    <p id="AnimeThemesDownloadDialogDescription" class="ats-download-description">Outputs not already saved are selected automatically. Select an existing output to download and replace it. Existing files for unselected outputs will not be deleted.</p>
                     <div class="ats-download-options" role="group" aria-label="Download outputs">
                         <div class="ats-download-option">
                             <span class="material-icons ats-download-option-icon" aria-hidden="true">movie</span>
@@ -3636,10 +3660,13 @@
                     ThemeDownloadingEnabled: page.querySelector('#AtsThemeDownloadingEnabled'),
                     MaxConcurrentDownloads: page.querySelector('#AtsMaxConcurrentDownloads'),
                     DownloadTimeoutSeconds: page.querySelector('#AtsDownloadTimeoutSeconds'),
+                    DownloadStagingDirectory: page.querySelector('#AtsDownloadStagingDirectory'),
                     SeasonMetadataCacheTtlDays: page.querySelector('#AtsSeasonMetadataCacheTtlDays'),
                     ProviderResponseCacheTtlDays: page.querySelector('#AtsProviderResponseCacheTtlDays'),
                     SegmentedDownloadEnabled: page.querySelector('#AtsSegmentedDownloadEnabled'),
                     SegmentedDownloadSegments: page.querySelector('#AtsSegmentedDownloadSegments'),
+                    MinimumSegmentedDownloadSizeMiB: page.querySelector('#AtsMinimumSegmentedDownloadSizeMiB'),
+                    MaximumConcurrentRangeRequests: page.querySelector('#AtsMaximumConcurrentRangeRequests'),
                     SegmentedDownloadOptions: page.querySelector('#AtsSegmentedDownloadOptions'),
                     AllowAdd: page.querySelector('#AtsAllowAdd'),
                     ForceRedownload: page.querySelector('#AtsForceRedownload'),
@@ -6331,7 +6358,7 @@
 
                 function ensureSettingsConfig(config) {
                     config = config || {};
-                    config.ConfigurationVersion = 9;
+                    config.ConfigurationVersion = 11;
                     config.Series = ensureMediaConfig(getConfigValue(config, 'Series', null));
                     config.Movie = ensureMediaConfig(getConfigValue(config, 'Movie', null));
                     if (!Array.isArray(getConfigValue(config, 'SeasonThemeMappings', []))) {
@@ -6370,14 +6397,17 @@
 
                 function defaultSettingsConfig(existingConfig) {
                     return ensureSettingsConfig({
-                        ConfigurationVersion: 9,
+                        ConfigurationVersion: 11,
                         ThemeDownloadingEnabled: true,
                         MaxConcurrentDownloads: 1,
                         DownloadTimeoutSeconds: 600,
+                        DownloadStagingDirectory: '',
                         SeasonMetadataCacheTtlDays: 30,
                         ProviderResponseCacheTtlDays: 30,
-                        SegmentedDownloadEnabled: true,
-                        SegmentedDownloadSegments: 4,
+                        SegmentedDownloadEnabled: false,
+                        SegmentedDownloadSegments: 2,
+                        MinimumSegmentedDownloadSizeMiB: 25,
+                        MaximumConcurrentRangeRequests: 2,
                         AllowAdd: true,
                         ForceRedownload: false,
                         SeasonThemeDownloadsEnabled: true,
@@ -6451,14 +6481,17 @@
                 function canonicalizeSettings(config) {
                     config = ensureSettingsConfig(cloneSettings(config || {}));
                     return {
-                        ConfigurationVersion: 9,
+                        ConfigurationVersion: 11,
                         ThemeDownloadingEnabled: !!getConfigValue(config, 'ThemeDownloadingEnabled', true),
-                        MaxConcurrentDownloads: Math.max(1, parseInt(getConfigValue(config, 'MaxConcurrentDownloads', 1), 10) || 1),
+                        MaxConcurrentDownloads: Math.max(1, Math.min(10, parseInt(getConfigValue(config, 'MaxConcurrentDownloads', 1), 10) || 1)),
                         DownloadTimeoutSeconds: Math.max(1, parseInt(getConfigValue(config, 'DownloadTimeoutSeconds', 600), 10) || 600),
+                        DownloadStagingDirectory: String(getConfigValue(config, 'DownloadStagingDirectory', '') || '').trim(),
                         SeasonMetadataCacheTtlDays: Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'SeasonMetadataCacheTtlDays', 30), 10) || 30)),
                         ProviderResponseCacheTtlDays: Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'ProviderResponseCacheTtlDays', 30), 10) || 30)),
-                        SegmentedDownloadEnabled: !!getConfigValue(config, 'SegmentedDownloadEnabled', true),
-                        SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 4), 10) || 4)),
+                        SegmentedDownloadEnabled: !!getConfigValue(config, 'SegmentedDownloadEnabled', false),
+                        SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 2), 10) || 2)),
+                        MinimumSegmentedDownloadSizeMiB: Math.max(1, Math.min(1024, parseInt(getConfigValue(config, 'MinimumSegmentedDownloadSizeMiB', 25), 10) || 25)),
+                        MaximumConcurrentRangeRequests: Math.max(1, Math.min(16, parseInt(getConfigValue(config, 'MaximumConcurrentRangeRequests', 2), 10) || 2)),
                         AllowAdd: !!getConfigValue(config, 'AllowAdd', true),
                         ForceRedownload: !!getConfigValue(config, 'ForceRedownload', false),
                         SeasonThemeDownloadsEnabled: !!getConfigValue(config, 'SeasonThemeDownloadsEnabled', true),
@@ -6811,10 +6844,13 @@
                     settingsFields.ThemeDownloadingEnabled.checked = !!getConfigValue(config, 'ThemeDownloadingEnabled', true);
                     settingsFields.MaxConcurrentDownloads.value = getConfigValue(config, 'MaxConcurrentDownloads', 1);
                     settingsFields.DownloadTimeoutSeconds.value = getConfigValue(config, 'DownloadTimeoutSeconds', 600);
+                    settingsFields.DownloadStagingDirectory.value = getConfigValue(config, 'DownloadStagingDirectory', '') || '';
                     settingsFields.SeasonMetadataCacheTtlDays.value = Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'SeasonMetadataCacheTtlDays', 30), 10) || 30));
                     settingsFields.ProviderResponseCacheTtlDays.value = Math.max(1, Math.min(365, parseInt(getConfigValue(config, 'ProviderResponseCacheTtlDays', 30), 10) || 30));
-                    settingsFields.SegmentedDownloadEnabled.checked = !!getConfigValue(config, 'SegmentedDownloadEnabled', true);
-                    settingsFields.SegmentedDownloadSegments.value = Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 4), 10) || 4));
+                    settingsFields.SegmentedDownloadEnabled.checked = !!getConfigValue(config, 'SegmentedDownloadEnabled', false);
+                    settingsFields.SegmentedDownloadSegments.value = Math.max(2, Math.min(8, parseInt(getConfigValue(config, 'SegmentedDownloadSegments', 2), 10) || 2));
+                    settingsFields.MinimumSegmentedDownloadSizeMiB.value = Math.max(1, Math.min(1024, parseInt(getConfigValue(config, 'MinimumSegmentedDownloadSizeMiB', 25), 10) || 25));
+                    settingsFields.MaximumConcurrentRangeRequests.value = Math.max(1, Math.min(16, parseInt(getConfigValue(config, 'MaximumConcurrentRangeRequests', 2), 10) || 2));
                     settingsFields.AllowAdd.checked = !!getConfigValue(config, 'AllowAdd', true);
                     settingsFields.ForceRedownload.checked = !!getConfigValue(config, 'ForceRedownload', false);
                     settingsFields.SeasonThemeDownloadsEnabled.checked = !!getConfigValue(config, 'SeasonThemeDownloadsEnabled', true);
@@ -6867,14 +6903,17 @@
 
                 function readSettingsForm() {
                     return {
-                        ConfigurationVersion: 9,
+                        ConfigurationVersion: 11,
                         ThemeDownloadingEnabled: settingsFields.ThemeDownloadingEnabled.checked,
-                        MaxConcurrentDownloads: parseInt(settingsFields.MaxConcurrentDownloads.value, 10) || 1,
+                        MaxConcurrentDownloads: Math.max(1, Math.min(10, parseInt(settingsFields.MaxConcurrentDownloads.value, 10) || 1)),
                         DownloadTimeoutSeconds: parseInt(settingsFields.DownloadTimeoutSeconds.value, 10) || 600,
+                        DownloadStagingDirectory: String(settingsFields.DownloadStagingDirectory.value || '').trim(),
                         SeasonMetadataCacheTtlDays: Math.max(1, Math.min(365, parseInt(settingsFields.SeasonMetadataCacheTtlDays.value, 10) || 30)),
                         ProviderResponseCacheTtlDays: Math.max(1, Math.min(365, parseInt(settingsFields.ProviderResponseCacheTtlDays.value, 10) || 30)),
                         SegmentedDownloadEnabled: settingsFields.SegmentedDownloadEnabled.checked,
-                        SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(settingsFields.SegmentedDownloadSegments.value, 10) || 4)),
+                        SegmentedDownloadSegments: Math.max(2, Math.min(8, parseInt(settingsFields.SegmentedDownloadSegments.value, 10) || 2)),
+                        MinimumSegmentedDownloadSizeMiB: Math.max(1, Math.min(1024, parseInt(settingsFields.MinimumSegmentedDownloadSizeMiB.value, 10) || 25)),
+                        MaximumConcurrentRangeRequests: Math.max(1, Math.min(16, parseInt(settingsFields.MaximumConcurrentRangeRequests.value, 10) || 2)),
                         AllowAdd: settingsFields.AllowAdd.checked,
                         ForceRedownload: settingsFields.ForceRedownload.checked,
                         SeasonThemeDownloadsEnabled: settingsFields.SeasonThemeDownloadsEnabled.checked,
@@ -7170,24 +7209,13 @@
                     var itemId = activeGroupItemId();
                     var rowId = value(row, 'RowId', 'rowId');
                     if (!itemId || !rowId) return;
-
-                    var settingsPromise = state.settingsConfig
-                        ? Promise.resolve(ensureSettingsConfig(state.settingsConfig))
-                        : ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
-                            state.settingsConfig = ensureSettingsConfig(config || {});
-                            return state.settingsConfig;
-                        });
-
-                    settingsPromise.then(function (config) {
-                        var groupType = String(value(activeGroup(), 'Type', 'type') || value(state.currentResult, 'Type', 'type') || 'Series');
-                        var profile = groupType === 'Movie' ? config.Movie : config.Series;
-                        var audioDefault = profile.Audio.UseAsTheme && profile.Audio.MaxThemes > 0;
-                        var videoDefault = profile.Video.UseAsTheme && profile.Video.MaxThemes > 0;
-                        var extrasDefault = !!getConfigValue(config, 'ExtrasEnabled', false) && profile.Video.MaxThemes > 0;
-                        openDownloadDialog(row, itemId, rowId, videoDefault, audioDefault, extrasDefault);
-                    }).catch(function (err) {
-                        Dashboard.alert({ title: 'Settings Error', message: 'Failed to load download defaults: ' + getErrorMessage(err) });
-                    });
+                    openDownloadDialog(
+                        row,
+                        itemId,
+                        rowId,
+                        !!value(row, 'BackdropExists', 'backdropExists'),
+                        !!value(row, 'ThemeMusicExists', 'themeMusicExists'),
+                        !!value(row, 'ExtraExists', 'extraExists'));
                 }
 
                 function syncDownloadOptionStyles() {
@@ -7197,15 +7225,22 @@
                             if (option) option.classList.toggle('selected', control.checked);
                         }
                     });
+                    downloadDialogConfirm.disabled = !downloadIncludeVideo.checked && !downloadIncludeAudio.checked && !downloadIncludeExtras.checked;
                 }
 
-                function openDownloadDialog(row, itemId, rowId, includeVideo, includeAudio, includeExtras) {
+                function openDownloadDialog(row, itemId, rowId, videoExists, audioExists, extrasExists) {
                     state.lastFocus = document.activeElement;
-                    state.pendingDownload = { itemId: itemId, rowId: rowId };
+                    state.pendingDownload = {
+                        itemId: itemId,
+                        rowId: rowId,
+                        videoExists: videoExists,
+                        audioExists: audioExists,
+                        extrasExists: extrasExists
+                    };
                     downloadDialogTheme.textContent = text(value(row, 'ThemeKey', 'themeKey')) + (value(row, 'SongTitle', 'songTitle') ? ' · ' + value(row, 'SongTitle', 'songTitle') : '');
-                    downloadIncludeVideo.checked = includeVideo;
-                    downloadIncludeAudio.checked = includeAudio;
-                    downloadIncludeExtras.checked = includeExtras;
+                    downloadIncludeVideo.checked = !videoExists;
+                    downloadIncludeAudio.checked = !audioExists;
+                    downloadIncludeExtras.checked = !extrasExists;
                     downloadDialogError.hidden = true;
                     syncDownloadOptionStyles();
                     downloadDialog.classList.add('open');
@@ -7234,10 +7269,13 @@
                         downloadDialogError.hidden = false;
                         return;
                     }
+                    var force = (downloadIncludeVideo.checked && pending.videoExists) ||
+                        (downloadIncludeAudio.checked && pending.audioExists) ||
+                        (downloadIncludeExtras.checked && pending.extrasExists);
 
                     var path = 'AnimeThemesSync/Jobs/ThemeDownload?ItemId=' + encodeURIComponent(pending.itemId) +
                         '&RowId=' + encodeURIComponent(pending.rowId) +
-                        '&Force=false&IncludeAudio=' + encodeURIComponent(downloadIncludeAudio.checked) +
+                        '&Force=' + encodeURIComponent(force) + '&IncludeAudio=' + encodeURIComponent(downloadIncludeAudio.checked) +
                         '&IncludeVideo=' + encodeURIComponent(downloadIncludeVideo.checked) +
                         '&IncludeExtras=' + encodeURIComponent(downloadIncludeExtras.checked) +
                         '&DisplayTitle=' + encodeURIComponent(downloadDialogTheme.textContent || pending.rowId);

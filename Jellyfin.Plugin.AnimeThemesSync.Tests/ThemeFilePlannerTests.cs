@@ -663,14 +663,141 @@ public class ThemeFilePlannerTests
         {
             Assert.Contains("AtsSegmentedDownloadEnabled", content, StringComparison.Ordinal);
             Assert.Contains("AtsSegmentedDownloadSegments", content, StringComparison.Ordinal);
+            Assert.Contains("AtsMinimumSegmentedDownloadSizeMiB", content, StringComparison.Ordinal);
+            Assert.Contains("AtsMaximumConcurrentRangeRequests", content, StringComparison.Ordinal);
+            Assert.Contains("AtsDownloadStagingDirectory", content, StringComparison.Ordinal);
             Assert.Equal(1, content.Split("id=\"AnimeThemesDownloadManager\"", StringSplitOptions.None).Length - 1);
             Assert.DoesNotContain("server theme Efor", content, StringComparison.Ordinal);
         }
 
         Assert.Contains("SegmentedDownloadEnabled", jellyfinHtml, StringComparison.Ordinal);
         Assert.Contains("SegmentedDownloadSegments", jellyfinHtml, StringComparison.Ordinal);
+        Assert.Contains("MinimumSegmentedDownloadSizeMiB", jellyfinHtml, StringComparison.Ordinal);
+        Assert.Contains("MaximumConcurrentRangeRequests", jellyfinHtml, StringComparison.Ordinal);
+        Assert.Contains("DownloadStagingDirectory", jellyfinHtml, StringComparison.Ordinal);
         Assert.Contains("SegmentedDownloadEnabled", embyController, StringComparison.Ordinal);
         Assert.Contains("SegmentedDownloadSegments", embyController, StringComparison.Ordinal);
+        Assert.Contains("MinimumSegmentedDownloadSizeMiB", embyController, StringComparison.Ordinal);
+        Assert.Contains("MaximumConcurrentRangeRequests", embyController, StringComparison.Ordinal);
+        Assert.Contains("DownloadStagingDirectory", embyController, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BrowserThemeDownload_UsesMissingOutputsAsDefaultsAndForcesSelectedExistingOutputs()
+    {
+        var root = FindRepositoryRoot();
+        var jellyfinPage = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"));
+        var embyScript = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.js"));
+
+        foreach (var script in new[] { jellyfinPage, embyScript })
+        {
+            Assert.Contains("!!value(row, 'BackdropExists', 'backdropExists')", script, StringComparison.Ordinal);
+            Assert.Contains("!!value(row, 'ThemeMusicExists', 'themeMusicExists')", script, StringComparison.Ordinal);
+            Assert.Contains("!!value(row, 'ExtraExists', 'extraExists')", script, StringComparison.Ordinal);
+            Assert.Contains("downloadIncludeVideo.checked = !videoExists;", script, StringComparison.Ordinal);
+            Assert.Contains("downloadIncludeAudio.checked = !audioExists;", script, StringComparison.Ordinal);
+            Assert.Contains("downloadIncludeExtras.checked = !extrasExists;", script, StringComparison.Ordinal);
+            Assert.Contains("downloadDialogConfirm.disabled = !downloadIncludeVideo.checked", script, StringComparison.Ordinal);
+            Assert.Contains("downloadIncludeVideo.checked && pending.videoExists", script, StringComparison.Ordinal);
+            Assert.Contains("downloadIncludeAudio.checked && pending.audioExists", script, StringComparison.Ordinal);
+            Assert.Contains("downloadIncludeExtras.checked && pending.extrasExists", script, StringComparison.Ordinal);
+            Assert.Contains("'&Force=' + encodeURIComponent(force)", script, StringComparison.Ordinal);
+            Assert.DoesNotContain("var audioDefault = profile.Audio.UseAsTheme", script, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void BrowserSettings_SeparateAutomaticDownloadsTransferSettingsAndCachePolicy()
+    {
+        var root = FindRepositoryRoot();
+        var pages = new[]
+        {
+            File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "Configuration", "browserPage.html")),
+            File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Configuration", "browserPage.html"))
+        };
+
+        foreach (var page in pages)
+        {
+            var automatic = page.IndexOf("<h3>Automatic downloads</h3>", StringComparison.Ordinal);
+            var enable = page.IndexOf("id=\"AtsThemeDownloadingEnabled\"", automatic, StringComparison.Ordinal);
+            var allowAdd = page.IndexOf("id=\"AtsAllowAdd\"", enable, StringComparison.Ordinal);
+            var force = page.IndexOf("id=\"AtsForceRedownload\"", allowAdd, StringComparison.Ordinal);
+            var season = page.IndexOf("id=\"AtsSeasonThemeDownloadsEnabled\"", force, StringComparison.Ordinal);
+            var downloadSettings = page.IndexOf("<h3>Download settings</h3>", season, StringComparison.Ordinal);
+            var concurrency = page.IndexOf("id=\"AtsMaxConcurrentDownloads\"", downloadSettings, StringComparison.Ordinal);
+            var timeout = page.IndexOf("id=\"AtsDownloadTimeoutSeconds\"", concurrency, StringComparison.Ordinal);
+            var staging = page.IndexOf("id=\"AtsDownloadStagingDirectory\"", timeout, StringComparison.Ordinal);
+            var segmented = page.IndexOf("id=\"AtsSegmentedDownloadEnabled\"", staging, StringComparison.Ordinal);
+            var segmentCount = page.IndexOf("id=\"AtsSegmentedDownloadSegments\"", segmented, StringComparison.Ordinal);
+            var minimumSize = page.IndexOf("id=\"AtsMinimumSegmentedDownloadSizeMiB\"", segmentCount, StringComparison.Ordinal);
+            var rangeLimit = page.IndexOf("id=\"AtsMaximumConcurrentRangeRequests\"", minimumSize, StringComparison.Ordinal);
+            var cache = page.IndexOf("<h3>Cache policy</h3>", rangeLimit, StringComparison.Ordinal);
+            var seasonTtl = page.IndexOf("id=\"AtsSeasonMetadataCacheTtlDays\"", cache, StringComparison.Ordinal);
+            var providerTtl = page.IndexOf("id=\"AtsProviderResponseCacheTtlDays\"", seasonTtl, StringComparison.Ordinal);
+
+            Assert.True(automatic >= 0 && automatic < enable);
+            Assert.True(enable < allowAdd && allowAdd < force && force < season);
+            Assert.True(season < downloadSettings && downloadSettings < concurrency && concurrency < timeout);
+            Assert.True(timeout < staging && staging < segmented && segmented < segmentCount && segmentCount < minimumSize);
+            Assert.True(minimumSize < rangeLimit && rangeLimit < cache);
+            Assert.True(cache < seasonTtl && seasonTtl < providerTtl);
+            Assert.Contains("Enable scheduled downloads", page, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void ThemeRowDownloads_AreIndependentFromAutomaticDownloadFlags()
+    {
+        var root = FindRepositoryRoot();
+        var downloaders = new[]
+        {
+            File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs")),
+            File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs"))
+        };
+
+        foreach (var downloader in downloaders)
+        {
+            var start = downloader.LastIndexOf("public async Task<ThemeDownloadExecutionResult> DownloadThemeByRowIdAsync(", StringComparison.Ordinal);
+            var end = downloader.IndexOf("public async Task<ThemeLocalMediaResult>", start, StringComparison.Ordinal);
+            Assert.True(start >= 0 && end > start);
+            var method = downloader[start..end];
+
+            Assert.DoesNotContain("ThemeDownloadingEnabled", method, StringComparison.Ordinal);
+            Assert.DoesNotContain("AllowAdd", method, StringComparison.Ordinal);
+            Assert.DoesNotContain("ForceRedownload", method, StringComparison.Ordinal);
+            Assert.DoesNotContain("EnsureSeasonThemeDownloadsAllowed", method, StringComparison.Ordinal);
+            Assert.Contains("MigrateExtraFiles(plan.ExtraFiles, forceRedownload);", method, StringComparison.Ordinal);
+            Assert.Contains("forceRedownload || !_fileSystem.FileExists", method, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void HostDownloaders_UseDedicatedMediaClientAndSingleTransportRetryLayer()
+    {
+        var root = FindRepositoryRoot();
+        var jellyfinDownloader = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs"));
+        var embyDownloader = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs"));
+        var jellyfinRegistration = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "PluginServiceRegistrator.cs"));
+        var mediaClient = File.ReadAllText(Path.Combine(root, "AnimeThemesSync.Shared", "Services", "AnimeThemesMediaHttpClient.cs"));
+
+        Assert.Contains("AddSingleton<AnimeThemesMediaHttpClient>()", jellyfinRegistration, StringComparison.Ordinal);
+        Assert.Contains("AddSingleton<IAnimeThemesTempPathProvider, JellyfinAnimeThemesTempPathProvider>()", jellyfinRegistration, StringComparison.Ordinal);
+        Assert.Contains("_tempPathProvider.GetTempDirectory()", jellyfinDownloader, StringComparison.Ordinal);
+        Assert.Contains("new EmbyAnimeThemesTempPathProvider(applicationPaths)", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("MediaDownloadStagingService.CreateWorkspace", jellyfinDownloader, StringComparison.Ordinal);
+        Assert.Contains("MediaDownloadStagingService.CreateWorkspace", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("_mediaHttpClient.Client", jellyfinDownloader, StringComparison.Ordinal);
+        Assert.Contains("MediaHttpClient.Client", embyDownloader, StringComparison.Ordinal);
+        Assert.DoesNotContain("_httpClientFactory.CreateClient(Constants.AnimeThemesHttpClientName)", jellyfinDownloader, StringComparison.Ordinal);
+        Assert.DoesNotContain("_httpClientFactory.CreateClient(Constants.AnimeThemesHttpClientName)", embyDownloader, StringComparison.Ordinal);
+        Assert.DoesNotContain("DownloadPlannedFileWithRetryAsync", jellyfinDownloader, StringComparison.Ordinal);
+        Assert.DoesNotContain("DownloadPlannedFileWithRetryAsync", embyDownloader, StringComparison.Ordinal);
+        Assert.DoesNotContain("Download attempt {Attempt}/{MaxRetries} failed", jellyfinDownloader, StringComparison.Ordinal);
+        Assert.DoesNotContain("Download attempt {0}/{1} failed", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("completed with failures", jellyfinDownloader, StringComparison.Ordinal);
+        Assert.Contains("completed with failures", embyDownloader, StringComparison.Ordinal);
+        Assert.Contains("new HttpClient(handler, disposeHandler: true)", mediaClient, StringComparison.Ordinal);
+        Assert.DoesNotContain("CreateClient(", mediaClient, StringComparison.Ordinal);
     }
 
     [Fact]

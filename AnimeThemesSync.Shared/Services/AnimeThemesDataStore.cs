@@ -16,10 +16,12 @@ namespace AnimeThemesSync.Shared.Services;
 /// </summary>
 public sealed class AnimeThemesDataStore
 {
-    private const int CurrentSchemaVersion = 5;
+    private const int CurrentSchemaVersion = 6;
     private const int DefaultLimit = 80;
     private const int MaxLimit = 100;
     private const int QueryResultMemoLimit = 50;
+    private static readonly StringComparison DownloadPathComparison =
+        Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     // Emby constructs a store per API request while the scheduled task holds its own
     // instance, so every instance that points at the same cache file must share one
@@ -546,6 +548,93 @@ public sealed class AnimeThemesDataStore
         }
     }
 
+    public DownloadFailureRecord? GetDownloadFailure(string url, string destinationPath)
+    {
+        var normalizedPath = NormalizeDownloadPath(destinationPath);
+        lock (State)
+        {
+            var row = LoadDocument().DownloadFailures.FirstOrDefault(item =>
+                IsCurrentServer(item.ServerKind) &&
+                string.Equals(item.Url, url, StringComparison.Ordinal) &&
+                string.Equals(item.DestinationPath, normalizedPath, DownloadPathComparison));
+            return row == null
+                ? null
+                : new DownloadFailureRecord(
+                    row.Url,
+                    row.DestinationPath,
+                    row.Status,
+                    row.AttemptCount,
+                    row.LastError,
+                    row.LastStatusCode,
+                    ParseDate(row.NextRetryUtc),
+                    ParseDate(row.UpdatedUtc) ?? DateTimeOffset.MinValue);
+        }
+    }
+
+    public bool ShouldDeferDownload(string url, string destinationPath, DateTimeOffset utcNow, out DownloadFailureRecord? failure)
+    {
+        failure = GetDownloadFailure(url, destinationPath);
+        return failure?.NextRetryUtc is DateTimeOffset nextRetry && nextRetry > utcNow;
+    }
+
+    public void RecordDownloadFailure(
+        string url,
+        string destinationPath,
+        string status,
+        string lastError,
+        int? lastStatusCode,
+        DateTimeOffset nextRetryUtc)
+    {
+        var normalizedPath = NormalizeDownloadPath(destinationPath);
+        lock (State)
+        {
+            var document = LoadDocument();
+            var existing = document.DownloadFailures.FirstOrDefault(item =>
+                IsCurrentServer(item.ServerKind) &&
+                string.Equals(item.Url, url, StringComparison.Ordinal) &&
+                string.Equals(item.DestinationPath, normalizedPath, DownloadPathComparison));
+            var attemptCount = (existing?.AttemptCount ?? 0) + 1;
+            if (existing != null)
+            {
+                document.DownloadFailures.Remove(existing);
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            document.DownloadFailures.RemoveAll(item =>
+                ParseDate(item.UpdatedUtc) is DateTimeOffset updated && updated < now.AddDays(-180));
+            document.DownloadFailures.Add(new StoredDownloadFailure
+            {
+                ServerKind = ServerKind,
+                Url = url,
+                DestinationPath = normalizedPath,
+                Status = status,
+                AttemptCount = attemptCount,
+                LastError = lastError,
+                LastStatusCode = lastStatusCode,
+                NextRetryUtc = FormatDate(nextRetryUtc),
+                UpdatedUtc = FormatDate(now)
+            });
+            SaveDocument(document);
+        }
+    }
+
+    public void RemoveDownloadFailure(string url, string destinationPath)
+    {
+        var normalizedPath = NormalizeDownloadPath(destinationPath);
+        lock (State)
+        {
+            var document = LoadDocument();
+            var removed = document.DownloadFailures.RemoveAll(item =>
+                IsCurrentServer(item.ServerKind) &&
+                string.Equals(item.Url, url, StringComparison.Ordinal) &&
+                string.Equals(item.DestinationPath, normalizedPath, DownloadPathComparison));
+            if (removed > 0)
+            {
+                SaveDocument(document);
+            }
+        }
+    }
+
     private CacheDocument LoadDocument()
     {
         if (State.Cache != null)
@@ -572,6 +661,7 @@ public sealed class AnimeThemesDataStore
             State.Cache.LibrarySyncState ??= [];
             State.Cache.ServerCacheState ??= [];
             State.Cache.SeasonMetadataStates ??= [];
+            State.Cache.DownloadFailures ??= [];
             foreach (var seasonMetadataState in State.Cache.SeasonMetadataStates)
             {
                 seasonMetadataState.ManagedTags ??= new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -945,6 +1035,31 @@ public sealed class AnimeThemesDataStore
             : null;
     }
 
+    private static string NormalizeDownloadPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            return Path.GetFullPath(path.Trim());
+        }
+        catch (ArgumentException)
+        {
+            return path.Trim();
+        }
+        catch (NotSupportedException)
+        {
+            return path.Trim();
+        }
+        catch (PathTooLongException)
+        {
+            return path.Trim();
+        }
+    }
+
     private static string FormatDate(DateTimeOffset date)
     {
         return date.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
@@ -985,6 +1100,29 @@ public sealed class AnimeThemesDataStore
         public List<StoredServerCacheState> ServerCacheState { get; set; } = [];
 
         public List<SeasonMetadataState> SeasonMetadataStates { get; set; } = [];
+
+        public List<StoredDownloadFailure> DownloadFailures { get; set; } = [];
+    }
+
+    private sealed class StoredDownloadFailure
+    {
+        public string ServerKind { get; set; } = string.Empty;
+
+        public string Url { get; set; } = string.Empty;
+
+        public string DestinationPath { get; set; } = string.Empty;
+
+        public string Status { get; set; } = DownloadFailureStatuses.TransientFailed;
+
+        public int AttemptCount { get; set; }
+
+        public string LastError { get; set; } = string.Empty;
+
+        public int? LastStatusCode { get; set; }
+
+        public string? NextRetryUtc { get; set; }
+
+        public string UpdatedUtc { get; set; } = string.Empty;
     }
 
     private sealed class StoredExtraFile

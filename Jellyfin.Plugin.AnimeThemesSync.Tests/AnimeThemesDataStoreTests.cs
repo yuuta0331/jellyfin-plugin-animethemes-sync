@@ -314,7 +314,7 @@ public sealed class AnimeThemesDataStoreTests
             });
 
             var json = File.ReadAllText(store.DatabasePath);
-            Assert.Contains("\"SchemaVersion\":5", json, StringComparison.Ordinal);
+            Assert.Contains("\"SchemaVersion\":6", json, StringComparison.Ordinal);
             Assert.Contains("\"LogicalItemId\":\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"", json, StringComparison.Ordinal);
             Assert.Contains("\"LogicalItemId\":\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\"", json, StringComparison.Ordinal);
             Assert.Contains("\"OutputRootItemId\":\"cccccccc-cccc-cccc-cccc-cccccccccccc\"", json, StringComparison.Ordinal);
@@ -568,6 +568,78 @@ public sealed class AnimeThemesDataStoreTests
             Assert.Equal(2, page.TotalRecordCount);
             Assert.Contains(page.Items, item => item.Name == "FromRequest");
             Assert.Contains(page.Items, item => item.Name == "FromTask");
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void DownloadFailures_ArePersistedDeferredAndRemovedAfterSuccess()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var now = DateTimeOffset.UtcNow;
+            const string url = "https://v.animethemes.moe/test.webm";
+            var path = Path.Combine(directory, "test.webm");
+
+            store.RecordDownloadFailure(
+                url,
+                path,
+                DownloadFailureStatuses.TransientFailed,
+                "503",
+                503,
+                now.AddMinutes(10));
+            store.RecordDownloadFailure(
+                url,
+                path,
+                DownloadFailureStatuses.TransientFailed,
+                "503 again",
+                503,
+                now.AddMinutes(20));
+
+            Assert.True(store.ShouldDeferDownload(url, path, now, out var failure));
+            Assert.NotNull(failure);
+            Assert.Equal(2, failure.AttemptCount);
+            Assert.Equal(503, failure.LastStatusCode);
+
+            store.ClearBrowserCache();
+            Assert.True(store.ShouldDeferDownload(url, path, now, out _));
+
+            store.RemoveDownloadFailure(url, path);
+            Assert.False(store.ShouldDeferDownload(url, path, now, out _));
+            Assert.Contains("\"SchemaVersion\":6", File.ReadAllText(store.DatabasePath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void DownloadFailures_PermanentEntryBecomesEligibleAtNextRetry()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var now = DateTimeOffset.UtcNow;
+            const string url = "https://v.animethemes.moe/missing.webm";
+            var path = Path.Combine(directory, "missing.webm");
+            store.RecordDownloadFailure(
+                url,
+                path,
+                DownloadFailureStatuses.PermanentFailed,
+                "404",
+                404,
+                now.AddDays(30));
+
+            Assert.True(store.ShouldDeferDownload(url, path, now.AddDays(29), out var failure));
+            Assert.Equal(DownloadFailureStatuses.PermanentFailed, failure?.Status);
+            Assert.False(store.ShouldDeferDownload(url, path, now.AddDays(31), out _));
         }
         finally
         {

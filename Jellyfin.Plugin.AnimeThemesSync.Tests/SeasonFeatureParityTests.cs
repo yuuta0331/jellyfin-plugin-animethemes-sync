@@ -217,8 +217,8 @@ public sealed class SeasonFeatureParityTests
             Assert.Contains(marker, embyScript, StringComparison.Ordinal);
         }
 
-        Assert.Contains("CurrentConfigurationVersion = 9", jellyfinConfig, StringComparison.Ordinal);
-        Assert.Contains("CurrentConfigurationVersion = 9", embyConfig, StringComparison.Ordinal);
+        Assert.Contains("CurrentConfigurationVersion = 11", jellyfinConfig, StringComparison.Ordinal);
+        Assert.Contains("CurrentConfigurationVersion = 11", embyConfig, StringComparison.Ordinal);
         Assert.Contains("Math.Clamp(value, 1, 365)", jellyfinConfig, StringComparison.Ordinal);
         Assert.Contains("Math.Clamp(value, 1, 365)", embyConfig, StringComparison.Ordinal);
 
