@@ -524,6 +524,9 @@ public sealed class AnimeThemesDataStoreTests
                 new[] { CreateBrowserItem("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "Original", "Series", videos: 0, songs: 0, extras: 0, bytes: 0) },
                 Array.Empty<(string, string?, int)>());
 
+            // Prime the query memo so the write below must invalidate it.
+            _ = store.QueryBrowserItems(null, 0, 80, "SortName", "Ascending", null, "all", "all", "all");
+
             store.UpsertBrowserItems(new[]
             {
                 CreateBrowserItem("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "First Update", "Series", videos: 1, songs: 0, extras: 0, bytes: 1),

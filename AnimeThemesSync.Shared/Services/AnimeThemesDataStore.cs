@@ -19,6 +19,7 @@ public sealed class AnimeThemesDataStore
     private const int CurrentSchemaVersion = 5;
     private const int DefaultLimit = 80;
     private const int MaxLimit = 100;
+    private const int QueryResultMemoLimit = 50;
 
     // Emby constructs a store per API request while the scheduled task holds its own
     // instance, so every instance that points at the same cache file must share one
@@ -224,10 +225,37 @@ public sealed class AnimeThemesDataStore
             var document = LoadDocument();
             var normalizedStart = Math.Max(0, startIndex ?? 0);
             var normalizedLimit = Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit);
-            var filtered = document.BrowserItems
-                .Where(i => IsCurrentServer(i.ServerKind))
-                .Where(i => Guid.TryParse(i.ItemId, out _))
-                .Where(i => MatchesBrowserQuery(i, libraryId, searchTerm, itemType, linkFilter, savedFilter, broadcastSeason));
+
+            // Filtering and sorting walk every stored item; memoize the result per
+            // query signature so paging through the same view reuses one pass. Any
+            // document write invalidates the memo.
+            var queryKey = string.Join(
+                "\u0001",
+                ServerKind,
+                libraryId ?? string.Empty,
+                sortBy ?? string.Empty,
+                sortOrder ?? string.Empty,
+                searchTerm ?? string.Empty,
+                itemType ?? string.Empty,
+                linkFilter ?? string.Empty,
+                savedFilter ?? string.Empty,
+                broadcastSeason ?? string.Empty);
+            if (!State.QueryResultsByFilter.TryGetValue(queryKey, out var materialized))
+            {
+                materialized = SortBrowserItems(
+                    document.BrowserItems
+                        .Where(i => IsCurrentServer(i.ServerKind))
+                        .Where(i => Guid.TryParse(i.ItemId, out _))
+                        .Where(i => MatchesBrowserQuery(i, libraryId, searchTerm, itemType, linkFilter, savedFilter, broadcastSeason)),
+                    sortBy,
+                    sortOrder).ToList();
+                if (State.QueryResultsByFilter.Count >= QueryResultMemoLimit)
+                {
+                    State.QueryResultsByFilter.Clear();
+                }
+
+                State.QueryResultsByFilter[queryKey] = materialized;
+            }
 
             // The aggregation walks every stored item, so memoize it per filter until
             // the next document write invalidates the memo.
@@ -252,8 +280,6 @@ public sealed class AnimeThemesDataStore
                 State.BroadcastSeasonsByFilter[broadcastSeasonsKey] = broadcastSeasons;
             }
 
-            filtered = SortBrowserItems(filtered, sortBy, sortOrder);
-            var materialized = filtered.ToList();
             var items = materialized
                 .Skip(normalizedStart)
                 .Take(normalizedLimit)
@@ -611,6 +637,7 @@ public sealed class AnimeThemesDataStore
 
         State.Cache = document;
         State.BroadcastSeasonsByFilter.Clear();
+        State.QueryResultsByFilter.Clear();
     }
 
     /// <summary>
@@ -936,6 +963,9 @@ public sealed class AnimeThemesDataStore
 
         // Memoized QueryBrowserItems aggregations, cleared on every document write.
         public Dictionary<string, List<BroadcastSeasonValue>> BroadcastSeasonsByFilter { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        // Memoized filtered+sorted QueryBrowserItems results, cleared on every document write.
+        public Dictionary<string, List<StoredBrowserItem>> QueryResultsByFilter { get; } = new(StringComparer.Ordinal);
     }
 
     private sealed class CacheDocument
