@@ -4892,6 +4892,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             seasonCacheCancelButton.type = 'button';
             seasonCacheCancelButton.className = 'emby-button ats-button-secondary ats-icon-button-text';
             seasonCacheCancelButton.textContent = 'Cancel season refresh';
+            seasonCacheCancelButton.title = 'Cancels a refresh started from this page. Runs started by scheduled tasks are stopped from the Scheduled Tasks screen.';
             seasonCacheCancelButton.hidden = true;
             seasonCacheRefreshButton.parentNode.insertBefore(seasonCacheCancelButton, seasonCacheRefreshButton.nextSibling);
         }
