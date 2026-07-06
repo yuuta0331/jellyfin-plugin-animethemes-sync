@@ -664,6 +664,91 @@ public sealed class AnimeThemesDataStoreTests
     }
 
     [Fact]
+    public void ManagerIssueIgnore_SurvivesReprojectionWhileFailurePersists()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var now = DateTimeOffset.UtcNow;
+            const string url = "https://v.animethemes.moe/persistent-fail.webm";
+            var path = Path.Combine(directory, "persistent-fail.webm");
+            store.RecordDownloadFailure(url, path, DownloadFailureStatuses.PermanentFailed, "404", 404, now.AddDays(30));
+
+            var issueId = store.QueryManagerIssues(0, 80, null, "Download", null, null).Items.Single().Id;
+            Assert.True(store.SetManagerIssueState(issueId, ManagerIssueStates.Ignored));
+
+            // The failure still exists; re-projecting on the next read must keep Ignored.
+            var reprojected = store.QueryManagerIssues(0, 80, null, "Download", null, null).Items.Single();
+            Assert.Equal(ManagerIssueStates.Ignored, reprojected.State);
+
+            // A fresh failure event is a genuine new occurrence and reopens the issue.
+            store.RecordDownloadFailure(url, path, DownloadFailureStatuses.PermanentFailed, "404 again", 404, now.AddDays(30));
+            var reopened = store.QueryManagerIssues(0, 80, null, "Download", null, null).Items.Single();
+            Assert.NotEqual(ManagerIssueStates.Ignored, reopened.State);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void ManagerIssues_AreCappedPerServerDroppingTerminalOldestFirst()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var now = DateTimeOffset.UtcNow;
+
+            // 3 active issues we expect to survive the cap.
+            var activeIds = new List<string>();
+            for (var i = 0; i < 3; i++)
+            {
+                var issue = store.RecordManagerIssue(new ManagerIssueUpsert
+                {
+                    Category = ManagerIssueCategories.Task,
+                    Severity = ManagerIssueSeverities.Error,
+                    State = ManagerIssueStates.Open,
+                    Title = "Active " + i,
+                    Message = "active",
+                    FingerprintSeed = "active-" + i,
+                });
+                activeIds.Add(issue.Id);
+            }
+
+            // Flood well past the cap with resolved (terminal) issues.
+            for (var i = 0; i < 620; i++)
+            {
+                var issue = store.RecordManagerIssue(new ManagerIssueUpsert
+                {
+                    Category = ManagerIssueCategories.Task,
+                    Severity = ManagerIssueSeverities.Warning,
+                    State = ManagerIssueStates.Open,
+                    Title = "Terminal " + i,
+                    Message = "terminal",
+                    FingerprintSeed = "terminal-" + i,
+                });
+                store.SetManagerIssueState(issue.Id, ManagerIssueStates.Resolved);
+            }
+
+            var page = store.QueryManagerIssues(0, 100, null, null, null, null);
+            Assert.True(page.TotalRecordCount <= 500, $"expected <= 500, got {page.TotalRecordCount}");
+
+            // All active issues must survive; terminal ones absorb the eviction.
+            foreach (var id in activeIds)
+            {
+                Assert.Contains(store.QueryManagerIssues(0, 100, "Open", null, null, null).Items, i => i.Id == id);
+            }
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
     public void DownloadFailures_PermanentEntryBecomesEligibleAtNextRetry()
     {
         var directory = CreateTempDirectory();

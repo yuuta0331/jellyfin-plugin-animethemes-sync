@@ -22,6 +22,7 @@ public sealed class AnimeThemesDataStore
     private const int DefaultLimit = 80;
     private const int MaxLimit = 100;
     private const int QueryResultMemoLimit = 50;
+    private const int ManagerIssueLimit = 500;
     private static readonly char[] IssueFilterSeparators = [',', ';'];
     private static readonly StringComparison DownloadPathComparison =
         Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -878,13 +879,14 @@ public sealed class AnimeThemesDataStore
                     NextRetryUtc = ParseDate(failure.NextRetryUtc),
                 },
                 ParseDate(failure.UpdatedUtc) ?? now,
-                countOccurrence: false).Changed;
+                countOccurrence: false,
+                preserveManualState: true).Changed;
         }
 
         return changed;
     }
 
-    private (StoredManagerIssue Issue, bool Changed) UpsertManagerIssueCore(CacheDocument document, ManagerIssueUpsert issue, DateTimeOffset now, bool countOccurrence = true)
+    private (StoredManagerIssue Issue, bool Changed) UpsertManagerIssueCore(CacheDocument document, ManagerIssueUpsert issue, DateTimeOffset now, bool countOccurrence = true, bool preserveManualState = false)
     {
         var fingerprint = BuildManagerIssueFingerprint(BuildManagerIssueFingerprintSeed(issue));
         var existing = document.ManagerIssues.FirstOrDefault(i =>
@@ -908,6 +910,15 @@ public sealed class AnimeThemesDataStore
         // full-document save when re-projecting an unchanged issue (e.g. a Manager
         // tab poll that finds the same still-deferred download failure).
         var before = isNew ? null : ToManagerIssueRecord(existing);
+
+        // Re-projecting a derived issue (e.g. from a still-failing download) must not
+        // clobber a manual Ignore/Resolve the user applied; that override sticks until
+        // the underlying failure clears or the user reopens it.
+        var keepManualState = preserveManualState && !isNew &&
+            (string.Equals(existing.State, ManagerIssueStates.Ignored, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(existing.State, ManagerIssueStates.Resolved, StringComparison.OrdinalIgnoreCase));
+        var manualState = existing.State;
+        var manualResolvedAtUtc = existing.ResolvedAtUtc;
 
         existing.Category = ClampText(NormalizeIssueValue(issue.Category, ManagerIssueCategories.Task), 80);
         existing.Severity = ClampText(NormalizeIssueValue(issue.Severity, ManagerIssueSeverities.Error), 40);
@@ -933,7 +944,16 @@ public sealed class AnimeThemesDataStore
 
         existing.LastSeenUtc = FormatDate(now);
         existing.NextRetryUtc = issue.NextRetryUtc.HasValue ? FormatDate(issue.NextRetryUtc.Value) : null;
-        existing.ResolvedAtUtc = null;
+        if (keepManualState)
+        {
+            existing.State = manualState;
+            existing.ResolvedAtUtc = manualResolvedAtUtc;
+        }
+        else
+        {
+            existing.ResolvedAtUtc = null;
+        }
+
         existing.UpdatedAtUtc = FormatDate(now);
         var changed = isNew || !ToManagerIssueRecord(existing).Equals(before);
         return (existing, changed);
@@ -1101,14 +1121,37 @@ public sealed class AnimeThemesDataStore
             issues.Count(i => string.Equals(i.Category, ManagerIssueCategories.Maintenance, StringComparison.OrdinalIgnoreCase)));
     }
 
-    private static bool PruneManagerIssues(CacheDocument document, DateTimeOffset now)
+    private bool PruneManagerIssues(CacheDocument document, DateTimeOffset now)
     {
         var cutoff = now.AddDays(-30);
-        return document.ManagerIssues.RemoveAll(i =>
+        var changed = document.ManagerIssues.RemoveAll(i =>
             (string.Equals(i.State, ManagerIssueStates.Resolved, StringComparison.OrdinalIgnoreCase) ||
              string.Equals(i.State, ManagerIssueStates.Ignored, StringComparison.OrdinalIgnoreCase)) &&
             ParseDate(i.ResolvedAtUtc) is DateTimeOffset resolved &&
             resolved < cutoff) > 0;
+
+        // Bound the row count per server so a burst of transient errors cannot grow
+        // the shared cache document without limit. Drop terminal (Resolved/Ignored)
+        // issues first, oldest last-seen first; active Open/Deferred issues are only
+        // touched as a last resort.
+        var serverIssues = document.ManagerIssues.Where(i => IsCurrentServer(i.ServerKind)).ToList();
+        if (serverIssues.Count > ManagerIssueLimit)
+        {
+            var toRemove = serverIssues
+                .OrderBy(i => IsTerminalIssueState(i.State) ? 0 : 1)
+                .ThenBy(i => ParseDate(i.LastSeenUtc) ?? DateTimeOffset.MinValue)
+                .Take(serverIssues.Count - ManagerIssueLimit)
+                .ToHashSet();
+            changed |= document.ManagerIssues.RemoveAll(toRemove.Contains) > 0;
+        }
+
+        return changed;
+    }
+
+    private static bool IsTerminalIssueState(string? state)
+    {
+        return string.Equals(state, ManagerIssueStates.Resolved, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(state, ManagerIssueStates.Ignored, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsValidManagerIssueState(string state)
