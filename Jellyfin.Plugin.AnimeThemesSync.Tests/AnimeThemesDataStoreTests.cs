@@ -624,6 +624,46 @@ public sealed class AnimeThemesDataStoreTests
     }
 
     [Fact]
+    public void ManagerIssueReads_DoNotRewriteCacheWhenNothingChanged()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var store = CreateStore(directory);
+            var now = DateTimeOffset.UtcNow;
+            store.RecordDownloadFailure(
+                "https://v.animethemes.moe/steady.webm",
+                Path.Combine(directory, "steady.webm"),
+                DownloadFailureStatuses.PermanentFailed,
+                "404",
+                404,
+                now.AddDays(30));
+
+            // Prime the projection (this may legitimately write once).
+            _ = store.QueryManagerIssues(0, 80, null, null, null, null);
+            var snapshot = File.ReadAllBytes(store.DatabasePath);
+
+            // Repeated reads over unchanged state must not rewrite the document.
+            for (var i = 0; i < 3; i++)
+            {
+                _ = store.QueryManagerIssues(0, 80, null, null, null, null);
+                _ = store.GetManagerIssueSummary();
+            }
+
+            Assert.Equal(snapshot, File.ReadAllBytes(store.DatabasePath));
+
+            // A genuine state change still persists.
+            var issueId = store.QueryManagerIssues(0, 80, null, "Download", null, null).Items.Single().Id;
+            Assert.True(store.SetManagerIssueState(issueId, ManagerIssueStates.Ignored));
+            Assert.NotEqual(snapshot, File.ReadAllBytes(store.DatabasePath));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
     public void DownloadFailures_PermanentEntryBecomesEligibleAtNextRetry()
     {
         var directory = CreateTempDirectory();

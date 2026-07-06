@@ -644,6 +644,7 @@ public sealed class AnimeThemesDataStore
         }
     }
 
+    // A genuine failure event always persists; the manager issue is a side effect.
     public void RemoveDownloadFailure(string url, string destinationPath)
     {
         var normalizedPath = NormalizeDownloadPath(destinationPath);
@@ -673,8 +674,8 @@ public sealed class AnimeThemesDataStore
         lock (State)
         {
             var document = LoadDocument();
-            EnsureDownloadFailuresHaveIssues(document);
-            PruneManagerIssues(document, DateTimeOffset.UtcNow);
+            var changed = EnsureDownloadFailuresHaveIssues(document);
+            changed |= PruneManagerIssues(document, DateTimeOffset.UtcNow);
 
             var normalizedStart = Math.Max(0, startIndex ?? 0);
             var normalizedLimit = Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit);
@@ -687,7 +688,11 @@ public sealed class AnimeThemesDataStore
                 .ToList();
 
             var allCurrent = document.ManagerIssues.Where(i => IsCurrentServer(i.ServerKind)).ToList();
-            SaveDocument(document);
+            if (changed)
+            {
+                SaveDocument(document);
+            }
+
             return new ManagerIssuePage(
                 issues.Skip(normalizedStart).Take(normalizedLimit).Select(ToManagerIssueRecord).ToList(),
                 issues.Count,
@@ -702,9 +707,13 @@ public sealed class AnimeThemesDataStore
         lock (State)
         {
             var document = LoadDocument();
-            EnsureDownloadFailuresHaveIssues(document);
-            PruneManagerIssues(document, DateTimeOffset.UtcNow);
-            SaveDocument(document);
+            var changed = EnsureDownloadFailuresHaveIssues(document);
+            changed |= PruneManagerIssues(document, DateTimeOffset.UtcNow);
+            if (changed)
+            {
+                SaveDocument(document);
+            }
+
             return BuildManagerIssueSummary(document.ManagerIssues.Where(i => IsCurrentServer(i.ServerKind)).ToList());
         }
     }
@@ -714,7 +723,7 @@ public sealed class AnimeThemesDataStore
         lock (State)
         {
             var document = LoadDocument();
-            var stored = UpsertManagerIssueCore(document, issue, DateTimeOffset.UtcNow);
+            var stored = UpsertManagerIssueCore(document, issue, DateTimeOffset.UtcNow).Issue;
             SaveDocument(document);
             return ToManagerIssueRecord(stored);
         }
@@ -838,12 +847,13 @@ public sealed class AnimeThemesDataStore
         return State.Cache;
     }
 
-    private void EnsureDownloadFailuresHaveIssues(CacheDocument document)
+    private bool EnsureDownloadFailuresHaveIssues(CacheDocument document)
     {
         var now = DateTimeOffset.UtcNow;
+        var changed = false;
         foreach (var failure in document.DownloadFailures.Where(i => IsCurrentServer(i.ServerKind)))
         {
-            UpsertManagerIssueCore(
+            changed |= UpsertManagerIssueCore(
                 document,
                 new ManagerIssueUpsert
                 {
@@ -868,16 +878,19 @@ public sealed class AnimeThemesDataStore
                     NextRetryUtc = ParseDate(failure.NextRetryUtc),
                 },
                 ParseDate(failure.UpdatedUtc) ?? now,
-                countOccurrence: false);
+                countOccurrence: false).Changed;
         }
+
+        return changed;
     }
 
-    private StoredManagerIssue UpsertManagerIssueCore(CacheDocument document, ManagerIssueUpsert issue, DateTimeOffset now, bool countOccurrence = true)
+    private (StoredManagerIssue Issue, bool Changed) UpsertManagerIssueCore(CacheDocument document, ManagerIssueUpsert issue, DateTimeOffset now, bool countOccurrence = true)
     {
         var fingerprint = BuildManagerIssueFingerprint(BuildManagerIssueFingerprintSeed(issue));
         var existing = document.ManagerIssues.FirstOrDefault(i =>
             IsCurrentServer(i.ServerKind) &&
             string.Equals(i.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase));
+        var isNew = existing == null;
         if (existing == null)
         {
             existing = new StoredManagerIssue
@@ -890,6 +903,11 @@ public sealed class AnimeThemesDataStore
             };
             document.ManagerIssues.Add(existing);
         }
+
+        // Snapshot the user-visible projection so callers on read paths can skip the
+        // full-document save when re-projecting an unchanged issue (e.g. a Manager
+        // tab poll that finds the same still-deferred download failure).
+        var before = isNew ? null : ToManagerIssueRecord(existing);
 
         existing.Category = ClampText(NormalizeIssueValue(issue.Category, ManagerIssueCategories.Task), 80);
         existing.Severity = ClampText(NormalizeIssueValue(issue.Severity, ManagerIssueSeverities.Error), 40);
@@ -917,7 +935,8 @@ public sealed class AnimeThemesDataStore
         existing.NextRetryUtc = issue.NextRetryUtc.HasValue ? FormatDate(issue.NextRetryUtc.Value) : null;
         existing.ResolvedAtUtc = null;
         existing.UpdatedAtUtc = FormatDate(now);
-        return existing;
+        var changed = isNew || !ToManagerIssueRecord(existing).Equals(before);
+        return (existing, changed);
     }
 
     private bool ResolveManagerIssueCore(CacheDocument document, string fingerprint, DateTimeOffset now)
@@ -1082,14 +1101,14 @@ public sealed class AnimeThemesDataStore
             issues.Count(i => string.Equals(i.Category, ManagerIssueCategories.Maintenance, StringComparison.OrdinalIgnoreCase)));
     }
 
-    private static void PruneManagerIssues(CacheDocument document, DateTimeOffset now)
+    private static bool PruneManagerIssues(CacheDocument document, DateTimeOffset now)
     {
         var cutoff = now.AddDays(-30);
-        document.ManagerIssues.RemoveAll(i =>
+        return document.ManagerIssues.RemoveAll(i =>
             (string.Equals(i.State, ManagerIssueStates.Resolved, StringComparison.OrdinalIgnoreCase) ||
              string.Equals(i.State, ManagerIssueStates.Ignored, StringComparison.OrdinalIgnoreCase)) &&
             ParseDate(i.ResolvedAtUtc) is DateTimeOffset resolved &&
-            resolved < cutoff);
+            resolved < cutoff) > 0;
     }
 
     private static bool IsValidManagerIssueState(string state)
