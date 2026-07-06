@@ -21,6 +21,7 @@ manifest.json
 
 # Generated binaries and diagnostics
 *.log
+build_log*.txt
 *.binlog
 *.dll
 *.pdb
