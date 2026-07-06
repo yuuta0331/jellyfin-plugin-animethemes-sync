@@ -1,4 +1,4 @@
-<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260705d" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+<div is="emby-scroller" id="AnimeThemesBrowserPage" class="view flex flex-direction-column scrollFrameY flex-grow pluginConfigurationPage" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-centerfocus="true" data-controller="__plugin/animethemessyncbrowserjs20260706b" data-title="AnimeThemes Browser"><div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
         <div data-role="content">
             <div class="content-primary">
                 <h1>AnimeThemes Browser</h1>
@@ -35,101 +35,129 @@
                             <h2 class="sectionTitle">Library</h2>
                             <div id="AnimeThemesBrowserLibraryCount" class="fieldDescription"></div>
                         </div>
+                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesBrowserRefreshItems">
+                            <i class="md-icon ats-icon" aria-hidden="true">&#xE5D5;</i><span>Refresh</span>
+                        </button>
                     </div>
                     <div class="ats-library-controls">
-                        <div class="ats-browser-toolbar">
+                        <div class="ats-library-controls-top">
                             <div class="inputContainer ats-search ats-clearable">
                                 <label class="inputLabel inputLabelUnfocused" for="AnimeThemesBrowserSearch">Search Library</label>
                                 <input id="AnimeThemesBrowserSearch" type="text" is="emby-input" autocomplete="off" />
                                 <button type="button" class="ats-clear-input" data-clear-target="AnimeThemesBrowserSearch" aria-label="Clear library search">x</button>
                             </div>
-                            <div class="selectContainer">
-                                <label class="selectLabel" for="AnimeThemesBrowserLibraryTypeFilter">Type</label>
-                                <select is="emby-select" id="AnimeThemesBrowserLibraryTypeFilter" class="emby-select-withcolor emby-select">
-                                    <option value="all">All</option>
-                                    <option value="series">Series</option>
-                                    <option value="movie">Movie</option>
-                                </select>
-                            </div>
-                            <div class="selectContainer">
-                                <label class="selectLabel" for="AnimeThemesBrowserLibrarySeasonFilter">Broadcast Season</label>
-                                <select is="emby-select" id="AnimeThemesBrowserLibrarySeasonFilter" class="emby-select-withcolor emby-select">
-                                    <option value="all">All</option>
-                                </select>
-                            </div>
-                            <div class="selectContainer">
-                                <label class="selectLabel" for="AnimeThemesBrowserLibraryLinkFilter">Link</label>
-                                <select is="emby-select" id="AnimeThemesBrowserLibraryLinkFilter" class="emby-select-withcolor emby-select">
-                                    <option value="all">All</option>
-                                    <option value="linked">Linked</option>
-                                    <option value="unlinked">Unlinked</option>
-                                    <option value="external">Any external ID</option>
-                                </select>
-                            </div>
-                            <div class="selectContainer">
-                                <label class="selectLabel" for="AnimeThemesBrowserLibrarySavedFilter">Saved</label>
-                                <select is="emby-select" id="AnimeThemesBrowserLibrarySavedFilter" class="emby-select-withcolor emby-select">
-                                    <option value="all">All</option>
-                                    <option value="saved">Saved</option>
-                                    <option value="missing">Missing</option>
-                                    <option value="video">Has Video</option>
-                                    <option value="audio">Has Audio</option>
-                                    <option value="extras">Has Extras</option>
-                                </select>
-                            </div>
-                            <div class="selectContainer">
-                                <label class="selectLabel" for="AnimeThemesBrowserLibrarySort">Sort</label>
-                                <select is="emby-select" id="AnimeThemesBrowserLibrarySort" class="emby-select-withcolor emby-select">
-                                    <option value="name">Name</option>
-                                    <option value="type">Type</option>
-                                    <option value="saved">Saved files</option>
-                                    <option value="size">Total size</option>
-                                    <option value="link">Link status</option>
-                                    <option value="itemAdded">Item added</option>
-                                    <option value="latestEpisodeAdded">Latest episode added</option>
-                                </select>
-                            </div>
-                            <div class="selectContainer">
-                                <label class="selectLabel" for="AnimeThemesBrowserLibrarySortDirection">Direction</label>
-                                <select is="emby-select" id="AnimeThemesBrowserLibrarySortDirection" class="emby-select-withcolor emby-select">
-                                    <option value="asc">Ascending</option>
-                                    <option value="desc">Descending</option>
-                                </select>
-                            </div>
-                            <div class="selectContainer ats-item-select" style="display: none;">
-                                <label class="selectLabel" for="AnimeThemesBrowserItemSelect">Library Item</label>
-                                <select is="emby-select" id="AnimeThemesBrowserItemSelect" class="emby-select-withcolor emby-select"></select>
-                            </div>
-                            <div class="ats-toolbar-actions">
-                                <button is="emby-button" type="button" class="raised emby-button ats-action-button ats-icon-button-text" id="AnimeThemesBrowserRefreshItems">
-                                    <i class="md-icon ats-icon" aria-hidden="true">&#xE5D5;</i><span>Refresh</span>
-                                </button>
-                            </div>
+                            <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesMobileFilterBtn">
+                                <i class="md-icon ats-icon" aria-hidden="true">&#xE429;</i><span>Filter & Sort</span>
+                            </button>
                         </div>
-                        <div class="ats-display-controls">
-                            <div class="ats-toolbar-actions">
-                                <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-view-mode" data-view-mode="poster">
-                                    <i class="md-icon ats-icon" aria-hidden="true">&#xE8F0;</i><span>Poster</span>
-                                </button>
-                                <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-view-mode" data-view-mode="list">
-                                    <i class="md-icon ats-icon" aria-hidden="true">&#xE8EF;</i><span>List</span>
-                                </button>
-                                <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-view-mode" data-view-mode="thumb">
-                                    <i class="md-icon ats-icon" aria-hidden="true">&#xE42A;</i><span>Thumb</span>
+                        <div id="AnimeThemesFiltersBackdrop"></div>
+                        <div id="AnimeThemesLibraryFiltersPanel" class="ats-filters-panel">
+                            <div class="ats-filters-panel-header">
+                                <h3>Filter & Sort</h3>
+                                <button is="emby-button" type="button" class="emby-button ats-button-secondary" id="AnimeThemesCloseFiltersBtn">
+                                    <i class="md-icon" aria-hidden="true">&#xE5CD;</i>
                                 </button>
                             </div>
-                            <div class="selectContainer ats-size-select">
-                                <label class="selectLabel" for="AnimeThemesBrowserGridSize">Size</label>
-                                <select is="emby-select" id="AnimeThemesBrowserGridSize" class="emby-select-withcolor emby-select">
-                                    <option value="compact">Compact</option>
-                                    <option value="medium" selected>Medium</option>
-                                    <option value="large">Large</option>
-                                </select>
+                            <div class="ats-library-controls-inner">
+                                <div class="ats-browser-toolbar">
+                                    <div class="selectContainer">
+                                        <label class="selectLabel" for="AnimeThemesBrowserLibraryTypeFilter">
+                                            <i class="md-icon ats-icon-inline" aria-hidden="true">&#xE5C3;</i>Type
+                                        </label>
+                                        <select is="emby-select" id="AnimeThemesBrowserLibraryTypeFilter" class="emby-select-withcolor emby-select">
+                                            <option value="all">All</option>
+                                            <option value="series">Series</option>
+                                            <option value="movie">Movie</option>
+                                        </select>
+                                    </div>
+                                    <div class="selectContainer">
+                                        <label class="selectLabel" for="AnimeThemesBrowserLibrarySeasonFilter">
+                                            <i class="md-icon ats-icon-inline" aria-hidden="true">&#xEBCB;</i>Broadcast Season
+                                        </label>
+                                        <select is="emby-select" id="AnimeThemesBrowserLibrarySeasonFilter" class="emby-select-withcolor emby-select">
+                                            <option value="all">All</option>
+                                        </select>
+                                    </div>
+                                    <div class="selectContainer">
+                                        <label class="selectLabel" for="AnimeThemesBrowserLibraryLinkFilter">
+                                            <i class="md-icon ats-icon-inline" aria-hidden="true">&#xE157;</i>Link
+                                        </label>
+                                        <select is="emby-select" id="AnimeThemesBrowserLibraryLinkFilter" class="emby-select-withcolor emby-select">
+                                            <option value="all">All</option>
+                                            <option value="linked">Linked</option>
+                                            <option value="unlinked">Unlinked</option>
+                                            <option value="external">Any external ID</option>
+                                        </select>
+                                    </div>
+                                    <div class="selectContainer">
+                                        <label class="selectLabel" for="AnimeThemesBrowserLibrarySavedFilter">
+                                            <i class="md-icon ats-icon-inline" aria-hidden="true">&#xE161;</i>Saved
+                                        </label>
+                                        <select is="emby-select" id="AnimeThemesBrowserLibrarySavedFilter" class="emby-select-withcolor emby-select">
+                                            <option value="all">All</option>
+                                            <option value="saved">Saved</option>
+                                            <option value="missing">Missing</option>
+                                            <option value="video">Has Video</option>
+                                            <option value="audio">Has Audio</option>
+                                            <option value="extras">Has Extras</option>
+                                        </select>
+                                    </div>
+                                    <div class="selectContainer">
+                                        <label class="selectLabel" for="AnimeThemesBrowserLibrarySort">
+                                            <i class="md-icon ats-icon-inline" aria-hidden="true">&#xE164;</i>Sort
+                                        </label>
+                                        <select is="emby-select" id="AnimeThemesBrowserLibrarySort" class="emby-select-withcolor emby-select">
+                                            <option value="name">Name</option>
+                                            <option value="type">Type</option>
+                                            <option value="saved">Saved files</option>
+                                            <option value="size">Total size</option>
+                                            <option value="link">Link status</option>
+                                            <option value="itemAdded">Item added</option>
+                                            <option value="latestEpisodeAdded">Latest episode added</option>
+                                        </select>
+                                    </div>
+                                    <div class="selectContainer">
+                                        <label class="selectLabel" for="AnimeThemesBrowserLibrarySortDirection">
+                                            <i class="md-icon ats-icon-inline" aria-hidden="true">&#xE8D5;</i>Direction
+                                        </label>
+                                        <select is="emby-select" id="AnimeThemesBrowserLibrarySortDirection" class="emby-select-withcolor emby-select">
+                                            <option value="asc">Ascending</option>
+                                            <option value="desc">Descending</option>
+                                        </select>
+                                    </div>
+                                    <div class="selectContainer ats-item-select" style="display: none;">
+                                        <label class="selectLabel" for="AnimeThemesBrowserItemSelect">Library Item</label>
+                                        <select is="emby-select" id="AnimeThemesBrowserItemSelect" class="emby-select-withcolor emby-select"></select>
+                                    </div>
+                                </div>
+                                <div class="ats-display-controls">
+                                    <div class="ats-toolbar-actions">
+                                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-view-mode" data-view-mode="poster">
+                                            <i class="md-icon ats-icon" aria-hidden="true">&#xE8F0;</i><span>Poster</span>
+                                        </button>
+                                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-view-mode" data-view-mode="list">
+                                            <i class="md-icon ats-icon" aria-hidden="true">&#xE8EF;</i><span>List</span>
+                                        </button>
+                                        <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-view-mode" data-view-mode="thumb">
+                                            <i class="md-icon ats-icon" aria-hidden="true">&#xE42A;</i><span>Thumb</span>
+                                        </button>
+                                    </div>
+                                    <div class="selectContainer ats-size-select">
+                                        <label class="selectLabel" for="AnimeThemesBrowserGridSize">
+                                            <i class="md-icon ats-icon-inline" aria-hidden="true">&#xE43A;</i>Size
+                                        </label>
+                                        <select is="emby-select" id="AnimeThemesBrowserGridSize" class="emby-select-withcolor emby-select">
+                                            <option value="compact">Compact</option>
+                                            <option value="medium" selected>Medium</option>
+                                            <option value="large">Large</option>
+                                        </select>
+                                    </div>
+                                    <label class="emby-checkbox-label ats-show-details-toggle">
+                                        <input id="AnimeThemesBrowserShowDetails" type="checkbox" is="emby-checkbox" />
+                                        <span><i class="md-icon ats-icon-inline" aria-hidden="true">&#xE8F4;</i>Show details</span>
+                                    </label>
+                                </div>
                             </div>
-                            <label class="emby-checkbox-label ats-show-details-toggle">
-                                <input id="AnimeThemesBrowserShowDetails" type="checkbox" is="emby-checkbox" />
-                                <span>Show details</span>
-                            </label>
                         </div>
                     </div>
                     <div id="AnimeThemesBrowserItemGrid" class="ats-item-grid poster size-medium"></div>
@@ -224,7 +252,7 @@
                     <div class="ats-settings-grid">
                         <div class="ats-settings-column">
                             <div class="ats-finder-panel">
-                                <h3>Automatic downloads</h3>
+                                <h3 class="ats-heading-with-icon"><i class="md-icon ats-icon" aria-hidden="true">&#xE863;</i><span>Automatic downloads</span></h3>
                                 <div class="checkboxContainer checkboxContainer-withDescription">
                                     <label class="emby-checkbox-label">
                                         <input id="AtsThemeDownloadingEnabled" type="checkbox" is="emby-checkbox" />
@@ -240,7 +268,7 @@
                             </div>
 
                             <div class="ats-finder-panel">
-                                <h3>Download settings</h3>
+                                <h3 class="ats-heading-with-icon"><i class="md-icon ats-icon" aria-hidden="true">&#xE8B8;</i><span>Download settings</span></h3>
                                 <div class="ats-two-column">
                                     <div class="inputContainer">
                                         <label class="inputLabel inputLabelUnfocused" for="AtsMaxConcurrentDownloads">Concurrency</label>
@@ -285,7 +313,7 @@
                             </div>
 
                             <div class="ats-finder-panel">
-                                <h3>Cache policy</h3>
+                                <h3 class="ats-heading-with-icon"><i class="md-icon ats-icon" aria-hidden="true">&#xE1DB;</i><span>Cache policy</span></h3>
                                 <div class="ats-two-column">
                                     <div class="inputContainer">
                                         <label class="inputLabel inputLabelUnfocused" for="AtsSeasonMetadataCacheTtlDays">Season metadata TTL (days)</label>
@@ -301,7 +329,7 @@
                             </div>
 
                             <div class="ats-finder-panel">
-                                <h3>Extras</h3>
+                                <h3 class="ats-heading-with-icon"><i class="md-icon ats-icon" aria-hidden="true">&#xE02C;</i><span>Extras</span></h3>
                                 <div class="checkboxContainer checkboxContainer-withDescription">
                                     <label class="emby-checkbox-label"><input id="AtsExtrasEnabled" type="checkbox" is="emby-checkbox" /><span>Create browseable extras</span></label>
                                     <div class="fieldDescription">Creates rich display names in extras so OP/ED videos can be opened from Extras/Special Features. Disable “Use as server theme” for Video to create Extra-only output.</div>
@@ -336,7 +364,7 @@
                             </div>
 
                             <div class="ats-finder-panel">
-                                <h3>Season Tags</h3>
+                                <h3 class="ats-heading-with-icon"><i class="md-icon ats-icon" aria-hidden="true">&#xE54E;</i><span>Season Tags</span></h3>
                                 <div class="checkboxContainer checkboxContainer-withDescription">
                                     <label class="emby-checkbox-label"><input id="AtsTagsEnabled" type="checkbox" is="emby-checkbox" /><span>Add season/year tags</span></label>
                                     <div class="fieldDescription">Adds each mapped broadcast season to its parent Series, its Season item, or both.</div>
@@ -356,7 +384,7 @@
                             </div>
 
                             <div class="ats-finder-panel">
-                                <h3>Season Collections</h3>
+                                <h3 class="ats-heading-with-icon"><i class="md-icon ats-icon" aria-hidden="true">&#xE3F4;</i><span>Season Collections</span></h3>
                                 <div class="checkboxContainer checkboxContainer-withDescription">
                                     <label class="emby-checkbox-label"><input id="AtsSeasonCollectionsEnabled" type="checkbox" is="emby-checkbox" /><span>Create broadcast-season collections</span></label>
                                     <div class="fieldDescription">Creates or reuses collections such as Winter 2024 and adds each mapped Season.</div>
@@ -450,7 +478,7 @@
                             </div>
 
                             <div class="ats-finder-panel ats-conditional-options" id="AtsSeasonLabelOptions">
-                                <h3>Broadcast Season Labels</h3>
+                                <h3 class="ats-heading-with-icon"><i class="md-icon ats-icon" aria-hidden="true">&#xE893;</i><span>Broadcast Season Labels</span></h3>
                                 <div class="fieldDescription">Shared by tags, collection names, and Browser broadcast-season labels.</div>
                                 <div class="ats-four-column">
                                     <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="AtsTagSeasonSpring">Spring</label><input id="AtsTagSeasonSpring" type="text" is="emby-input" /></div>
@@ -484,7 +512,7 @@
 
                         <div class="ats-settings-column ats-settings-column-main">
                             <div class="ats-finder-panel">
-                                <h3>Profiles</h3>
+                                <h3 class="ats-heading-with-icon"><i class="md-icon ats-icon" aria-hidden="true">&#xE8B8;</i><span>Profiles</span></h3>
                                 <div class="fieldDescription">Series applies to Series and Season items. Movie applies only to Movie items.</div>
                                 <div class="ats-profile-section" data-profile-section="series">
                                     <h4>Series Profile</h4>
@@ -514,7 +542,7 @@
                     <div class="ats-finder-layout">
                         <div class="ats-finder-panel">
                             <div class="ats-panel-head">
-                                <h3>1. Seasons</h3>
+                                <h3 class="ats-heading-with-icon"><i class="md-icon ats-icon" aria-hidden="true">&#xE8DF;</i><span>1. Seasons</span></h3>
                                 <button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AnimeThemesSeasonRefresh">
                                     <i class="md-icon ats-icon" aria-hidden="true">&#xE5D5;</i><span>Refresh</span>
                                 </button>
@@ -566,7 +594,7 @@
                             <div id="AnimeThemesSeasonList" class="ats-season-list" aria-live="polite"></div>
                         </div>
                         <div class="ats-finder-panel">
-                            <h3>2. Search AnimeThemes</h3>
+                            <h3 class="ats-heading-with-icon"><i class="md-icon ats-icon" aria-hidden="true">&#xE8B6;</i><span>2. Search AnimeThemes</span></h3>
                             <div class="inputContainer ats-clearable">
                                 <label class="inputLabel inputLabelUnfocused" for="AnimeThemesFinderSearchInput">Title</label>
                                 <input id="AnimeThemesFinderSearchInput" type="text" is="emby-input" autocomplete="off" />
@@ -584,7 +612,7 @@
                             <div id="AnimeThemesFinderResults" class="ats-search-results"></div>
                         </div>
                         <div class="ats-finder-panel">
-                            <h3>3. Preview and Save</h3>
+                            <h3 class="ats-heading-with-icon"><i class="md-icon ats-icon" aria-hidden="true">&#xE8F4;</i><span>3. Preview and Save</span></h3>
                             <div id="AnimeThemesFinderPreview" class="ats-finder-preview fieldDescription">No AnimeThemes candidate selected.</div>
                         </div>
                     </div>
@@ -1223,10 +1251,29 @@
                 margin-bottom: 0;
             }
 
+            #AnimeThemesBrowserPage .ats-library-controls-inner {
+                display: flex;
+                flex-direction: column;
+                gap: 1rem;
+            }
+
             #AnimeThemesBrowserPage .ats-show-details-toggle {
+                display: inline-flex !important;
+                align-items: center !important;
                 min-height: 2.6rem;
-                align-items: center;
                 margin: 0;
+            }
+
+            #AnimeThemesBrowserPage .ats-show-details-toggle .checkboxLabel {
+                display: inline-flex !important;
+                align-items: center !important;
+                margin-left: 0.5rem !important;
+            }
+
+            #AnimeThemesBrowserPage .ats-show-details-toggle .checkboxLabel > span {
+                display: inline-flex !important;
+                align-items: center !important;
+                gap: 0.35rem;
             }
 
             #AnimeThemesBrowserPage .ats-manage-view {
@@ -3398,6 +3445,142 @@
             @keyframes atsDownloadIndeterminate {
                 from { transform: translateX(-120%); }
                 to { transform: translateX(300%); }
+            }
+
+            #AnimeThemesBrowserPage .ats-year-small {
+                font-size: 0.85em;
+                opacity: 0.6;
+                margin-left: 0.35rem;
+                font-weight: normal;
+            }
+
+            #AnimeThemesBrowserPage .ats-icon-inline {
+                font-size: 1.1rem;
+                vertical-align: middle;
+                margin-right: 0.35rem;
+                opacity: 0.8;
+            }
+
+            #AnimeThemesBrowserPage .ats-library-controls-top {
+                display: flex;
+                gap: .75rem;
+                align-items: flex-end;
+            }
+
+            #AnimeThemesBrowserPage .ats-library-controls-top .ats-search {
+                flex-grow: 1;
+                margin: 0;
+            }
+
+            #AnimeThemesBrowserPage #AnimeThemesMobileFilterBtn {
+                display: none;
+            }
+
+            #AnimeThemesBrowserPage .ats-filters-panel {
+                display: block;
+            }
+
+            #AnimeThemesBrowserPage .ats-filters-panel-header {
+                display: none;
+            }
+
+            #AnimeThemesBrowserPage #AnimeThemesFiltersBackdrop {
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 999;
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.28s ease;
+            }
+
+            #AnimeThemesBrowserPage #AnimeThemesFiltersBackdrop.active {
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            @media (max-width: 760px) {
+                #AnimeThemesBrowserPage #AnimeThemesMobileFilterBtn {
+                    display: inline-flex;
+                    margin: 0;
+                    height: 2.38em;
+                }
+
+                #AnimeThemesBrowserPage .ats-filters-panel {
+                    position: fixed;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    z-index: 1000;
+                    background: var(--ats-dialog-surface);
+                    border: 0;
+                    border-top: 1px solid var(--ats-border-strong);
+                    border-radius: var(--ats-radius) var(--ats-radius) 0 0;
+                    padding: 1.25rem;
+                    margin: 0;
+                    transform: translateY(100%);
+                    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+                    max-height: 85vh;
+                    overflow-y: auto;
+                    box-shadow: 0 -4px 16px rgba(0,0,0,0.3);
+                }
+
+                #AnimeThemesBrowserPage .ats-filters-panel.active {
+                    transform: translateY(0);
+                }
+
+                #AnimeThemesBrowserPage .ats-filters-panel-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: 1rem;
+                    border-bottom: 1px solid var(--ats-border);
+                    padding-bottom: 0.5rem;
+                }
+
+                #AnimeThemesBrowserPage .ats-filters-panel-header h3 {
+                    margin: 0;
+                    font-size: 1.2rem;
+                }
+
+                #AnimeThemesBrowserPage #AnimeThemesCloseFiltersBtn {
+                    min-width: 2.2rem !important;
+                    max-width: 2.2rem !important;
+                    width: 2.2rem !important;
+                    min-height: 2.2rem !important;
+                    max-height: 2.2rem !important;
+                    height: 2.2rem !important;
+                    border-radius: 50% !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    display: inline-flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    flex-shrink: 0 !important;
+                    box-sizing: border-box !important;
+                }
+
+                #AnimeThemesBrowserPage .ats-browser-toolbar {
+                    grid-template-columns: 1fr !important;
+                    gap: 1rem;
+                }
+
+                #AnimeThemesBrowserPage .ats-display-controls {
+                    flex-direction: column;
+                    align-items: stretch;
+                    gap: 1rem;
+                    margin-top: 1rem;
+                    border-top: 1px solid var(--ats-border);
+                    padding-top: 1rem;
+                }
+
+                #AnimeThemesBrowserPage .ats-display-controls > * {
+                    width: 100%;
+                }
+
+                #AnimeThemesBrowserPage .ats-show-details-toggle {
+                    justify-content: flex-start;
+                }
             }
         </style>
     </div>

@@ -755,7 +755,7 @@ public sealed class SeasonFinderDataStoreTests
                 connection.Open();
                 using var command = connection.CreateCommand();
                 command.CommandText = "SELECT Value FROM SchemaMetadata WHERE Key = 'SchemaVersion';";
-                Assert.Equal("4", command.ExecuteScalar());
+                Assert.Equal("5", command.ExecuteScalar());
             }
 
             var mapping = Assert.Single(reopened.GetSeasonThemeMappings());

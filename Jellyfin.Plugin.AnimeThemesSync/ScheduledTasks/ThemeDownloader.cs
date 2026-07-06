@@ -1995,7 +1995,8 @@ public sealed class ThemeDownloader : IScheduledTask
             BuildImageUrl(item, ImageType.Backdrop, "Backdrop/0"),
             BuildImageUrl(item, ImageType.Thumb, "Thumb"),
             emptyMessage,
-            rows);
+            rows,
+            resolution.Anime?.Year);
     }
 
     private List<ThemeBrowserThemeRow> BuildBrowserRowsForResolution(
@@ -4031,6 +4032,10 @@ public sealed class ThemeDownloader : IScheduledTask
             ? Constants.AnimeThemesWebUrl + "/anime/" + state.AnimeThemesSlug
             : null;
 
+        var automation = _seasonFinderStore.GetSeasonAutomationState(series.Id.ToString("D"));
+        var rule = automation.Rules.FirstOrDefault(r => r.SeasonItemId == season.Id.ToString("D"));
+        var year = rule?.AnimeYear ?? season.ProductionYear ?? series.ProductionYear;
+
         return new SeasonThemeMappingRow(
             series.Id,
             series.Name ?? "Unknown",
@@ -4048,7 +4053,8 @@ public sealed class ThemeDownloader : IScheduledTask
             animeThemesUrl,
             state.AniListId,
             state.MyAnimeListId,
-            BuildImageUrl(season, ImageType.Primary, "Primary") ?? BuildImageUrl(series, ImageType.Primary, "Primary"));
+            BuildImageUrl(season, ImageType.Primary, "Primary") ?? BuildImageUrl(series, ImageType.Primary, "Primary"),
+            year);
     }
 
     private SeasonFinderRowRecord BuildSeasonFinderRecord(Series series, Season season, Guid? libraryId)

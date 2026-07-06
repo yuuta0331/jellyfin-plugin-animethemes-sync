@@ -53,7 +53,8 @@ public sealed record ThemeBrowserThemeGroup(
     string? BackdropImageUrl,
     string? ThumbImageUrl,
     string? EmptyMessage,
-    List<ThemeBrowserThemeRow> Themes);
+    List<ThemeBrowserThemeRow> Themes,
+    int? AnimeYear = null);
 
 public sealed record ThemeBrowserThemeRow(
     string RowId,
@@ -136,7 +137,8 @@ public sealed record SeasonThemeMappingRow(
     string? AnimeThemesUrl,
     int? AniListId,
     int? MyAnimeListId,
-    string? PrimaryImageUrl);
+    string? PrimaryImageUrl,
+    int? AnimeYear = null);
 
 public sealed record ThemeFinderSearchResult(
     int AnimeThemesId,

@@ -1593,7 +1593,17 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             var titleLine = document.createElement('div');
             titleLine.className = 'ats-season-card-title';
             appendDiv(titleLine, 'ats-season-series', text(value(row, 'SeriesName', 'seriesName')));
-            appendDiv(titleLine, 'ats-season-name', text(value(row, 'SeasonName', 'seasonName')));
+            
+            var seasonNameDiv = document.createElement('div');
+            seasonNameDiv.className = 'ats-season-name';
+            var year = value(row, 'AnimeYear', 'animeYear');
+            if (year) {
+                seasonNameDiv.innerHTML = text(value(row, 'SeasonName', 'seasonName')) + ' <span class="ats-year-small">(' + year + ')</span>';
+            } else {
+                seasonNameDiv.textContent = text(value(row, 'SeasonName', 'seasonName'));
+            }
+            titleLine.appendChild(seasonNameDiv);
+            
             button.appendChild(titleLine);
             appendDiv(button, 'ats-item-meta', [
                 'Season ' + text(value(row, 'SeasonNumber', 'seasonNumber')),
@@ -2539,20 +2549,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             if (cachedSeasons.length) {
                 cachedSeasons.forEach(function (summary) {
                     var cachedPill = document.createElement('div');
-                    cachedPill.className = 'ats-season-pill';
-                    var seasonName = value(summary, 'SeasonName', 'seasonName') || ('Season ' + value(summary, 'SeasonNumber', 'seasonNumber'));
-                    var broadcastLabel = value(summary, 'BroadcastSeasonLabel', 'broadcastSeasonLabel');
-                    cachedPill.textContent = broadcastLabel ? seasonName + ' · ' + broadcastLabel : seasonName;
+                    cachedPill.className = 'ats-season-pill ats-placeholder-card ats-skeleton-shimmer-only';
+                    cachedPill.style.height = '2.25rem';
+                    cachedPill.style.width = '6rem';
                     seasonGroups.appendChild(cachedPill);
                 });
             } else {
-                for (var i = 0; i < 2; i++) {
-                    var pill = document.createElement('div');
-                    pill.className = 'ats-season-pill ats-placeholder-card ats-skeleton-shimmer-only';
-                    pill.style.height = '2.25rem';
-                    pill.style.width = '6rem';
-                    seasonGroups.appendChild(pill);
-                }
+                seasonGroups.style.display = 'none';
             }
             rowsContainer.innerHTML = '';
             for (var row = 0; row < 3; row++) {
@@ -2681,7 +2684,14 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             var item = state.currentItem || {};
             var result = state.currentResult || {};
             var group = activeGroup() || {};
-            title.textContent = text(value(group, 'Name', 'name') || value(result, 'Name', 'name'));
+            var nameText = text(value(group, 'Name', 'name') || value(result, 'Name', 'name'));
+            var groups = getGroups();
+            var year = value(group, 'AnimeYear', 'animeYear');
+            if (groups.length <= 1 && year) {
+                title.innerHTML = nameText + ' <span class="ats-year-small">(' + year + ')</span>';
+            } else {
+                title.textContent = nameText;
+            }
             var name = value(group, 'Name', 'name') || value(result, 'Name', 'name') || value(item, 'Name', 'name') || 'AT';
             posterFallback.textContent = String(name).trim().slice(0, 2).toUpperCase();
             setImage(poster, value(group, 'PrimaryImageUrl', 'primaryImageUrl') || value(item, 'PrimaryImageUrl', 'primaryImageUrl'), posterFallback);
@@ -2710,6 +2720,21 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 link.textContent = 'Open AnimeThemes';
                 meta.appendChild(link);
             }
+            var itemId = value(group, 'SeriesItemId', 'seriesItemId') || value(item, 'Id', 'id');
+            if (itemId) {
+                var isEmby = window.location.href.toLowerCase().indexOf('emby') !== -1 || (typeof window.ApiClient !== 'undefined' && window.ApiClient.appName === 'Emby');
+                var detailUrl = window.location.href.split('#')[0] + (isEmby ? '#!/item/item.html?id=' : '#!/details?id=') + itemId;
+                var isMovie = String(value(item, 'Type', 'type')).toLowerCase() === 'movie';
+                var linkLabel = isMovie ? 'Open Movie Page' : 'Open Series Page';
+
+                var serverLink = document.createElement('a');
+                serverLink.className = 'ats-hero-meta-link';
+                serverLink.target = '_blank';
+                serverLink.rel = 'noopener';
+                serverLink.href = detailUrl;
+                serverLink.textContent = linkLabel;
+                meta.appendChild(serverLink);
+            }
             syncMatchInFinderButton();
         }
 
@@ -2736,7 +2761,17 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 var type = value(group, 'Type', 'type');
                 var seasonNumber = value(group, 'SeasonNumber', 'seasonNumber');
                 var label = type === 'Series' ? 'Series' : type === 'Season' && seasonNumber ? 'Season ' + seasonNumber : text(value(group, 'Name', 'name'));
-                appendDiv(button, 'ats-season-pill-title', label);
+                
+                var pillTitle = document.createElement('div');
+                pillTitle.className = 'ats-season-pill-title';
+                var year = value(group, 'AnimeYear', 'animeYear');
+                if (year) {
+                    pillTitle.innerHTML = label + ' <span class="ats-year-small">(' + year + ')</span>';
+                } else {
+                    pillTitle.textContent = label;
+                }
+                button.appendChild(pillTitle);
+
                 appendDiv(button, 'ats-season-pill-meta', [
                     value(group, 'Status', 'status'),
                     value(group, 'AnimeName', 'animeName') || value(group, 'AnimeThemesSlug', 'animeThemesSlug')
@@ -4996,6 +5031,28 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         page.querySelector('#AnimeThemesBrowserRefreshItems').addEventListener('click', function () {
             loadItems(false);
         });
+        var filterPanel = page.querySelector('#AnimeThemesLibraryFiltersPanel');
+        var filterBackdrop = page.querySelector('#AnimeThemesFiltersBackdrop');
+        var mobileFilterBtn = page.querySelector('#AnimeThemesMobileFilterBtn');
+        var closeFiltersBtn = page.querySelector('#AnimeThemesCloseFiltersBtn');
+        if (mobileFilterBtn && filterPanel && filterBackdrop) {
+            mobileFilterBtn.addEventListener('click', function () {
+                filterPanel.classList.add('active');
+                filterBackdrop.classList.add('active');
+            });
+        }
+        if (closeFiltersBtn && filterPanel && filterBackdrop) {
+            closeFiltersBtn.addEventListener('click', function () {
+                filterPanel.classList.remove('active');
+                filterBackdrop.classList.remove('active');
+            });
+        }
+        if (filterBackdrop && filterPanel) {
+            filterBackdrop.addEventListener('click', function () {
+                filterPanel.classList.remove('active');
+                filterBackdrop.classList.remove('active');
+            });
+        }
         page.querySelector('#AtsManagerRefresh').addEventListener('click', function () {
             scheduleUiRefresh({ mappings: true });
             loadCleanupFiles();

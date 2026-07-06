@@ -17,7 +17,7 @@ namespace AnimeThemesSync.Shared.Services;
 /// </summary>
 public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
 {
-    private const int CurrentSchemaVersion = 4;
+    private const int CurrentSchemaVersion = 5;
     private const int DefaultLimit = 80;
     private const int MaxLimit = 100;
     private const int SearchCacheLimit = 200;
@@ -110,6 +110,7 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
                     OutputScope TEXT NULL,
                     SearchText TEXT NOT NULL,
                     UpdatedAtUtc TEXT NOT NULL,
+                    AnimeYear INTEGER NULL,
                     PRIMARY KEY (ServerKind, SeasonItemId)
                 );
                 CREATE INDEX IF NOT EXISTS IX_SeasonFinderRows_Status
@@ -258,18 +259,12 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
                     ON ApiFetchCache(ServerKind, ExpiresAtUtc);
                 """);
             var storedSchemaVersion = GetStoredSchemaVersion(connection, transaction);
+
+            // Ensure AnimeYear column exists unconditionally for safety (handles cases where schema version is 5 but column is missing)
+            EnsureColumn(connection, transaction, "SeasonFinderRows", "AnimeYear", "INTEGER NULL");
+
             if (storedSchemaVersion < CurrentSchemaVersion)
             {
-                // Schema history: v1 introduced the base tables, v2 added the season
-                // automation tables, v3 added ManagedSeasonCollectionAssets, and v4 added
-                // persistent season metadata and provider response caches. All of these
-                // are new tables, which the CREATE TABLE IF NOT EXISTS block above already
-                // provides for older databases. Changes to columns of existing tables must
-                // be applied here as idempotent steps gated on storedSchemaVersion, e.g.:
-                //   if (storedSchemaVersion < 5)
-                //   {
-                //       EnsureColumn(connection, transaction, "SeasonFinderRows", "NewColumn", "TEXT NULL");
-                //   }
                 UpsertMetadata(connection, transaction, "SchemaVersion", CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture));
             }
 
@@ -511,7 +506,8 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
             command.CommandText = $"""
                 SELECT SeriesItemId, SeriesName, SeriesPath, SeasonItemId, SeasonName, SeasonPath,
                        SeasonNumber, Status, Source, SameAsSeries, AnimeName, AnimeThemesId,
-                       AnimeThemesSlug, AnimeThemesUrl, AniListId, MyAnimeListId, PrimaryImageUrl
+                       AnimeThemesSlug, AnimeThemesUrl, AniListId, MyAnimeListId, PrimaryImageUrl,
+                       AnimeYear
                 FROM SeasonFinderRows
                 WHERE {whereSql}
                 ORDER BY {orderColumn} {direction}, SeriesName ASC, SeasonNumber ASC, SeasonName ASC
@@ -998,7 +994,8 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
             command.CommandText = """
                 SELECT SeriesItemId, SeriesName, SeriesPath, SeasonItemId, SeasonName, SeasonPath,
                        SeasonNumber, Status, Source, SameAsSeries, AnimeName, AnimeThemesId,
-                       AnimeThemesSlug, AnimeThemesUrl, AniListId, MyAnimeListId, PrimaryImageUrl
+                       AnimeThemesSlug, AnimeThemesUrl, AniListId, MyAnimeListId, PrimaryImageUrl,
+                       AnimeYear
                 FROM SeasonFinderRows WHERE ServerKind = $serverKind
                 ORDER BY SeriesName, SeasonNumber, SeasonName;
                 """;
@@ -1363,10 +1360,10 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
                 ServerKind, LibraryId, SeriesItemId, SeriesName, SeriesPath, SeasonItemId, SeasonName,
                 SeasonPath, SeasonNumber, Status, Source, SameAsSeries, AnimeName, AnimeThemesId,
                 AnimeThemesSlug, AnimeThemesUrl, AniListId, MyAnimeListId, PrimaryImageUrl,
-                OutputRootItemId, OutputRootPath, OutputScope, SearchText, UpdatedAtUtc)
+                OutputRootItemId, OutputRootPath, OutputScope, SearchText, UpdatedAtUtc, AnimeYear)
             VALUES ($serverKind, $libraryId, $seriesId, $seriesName, $seriesPath, $seasonId, $seasonName,
                     $seasonPath, $seasonNumber, $status, $source, $sameAsSeries, $animeName, $animeThemesId,
-                    $slug, $url, $aniListId, $malId, $image, $outputId, $outputPath, $outputScope, $search, $updated)
+                    $slug, $url, $aniListId, $malId, $image, $outputId, $outputPath, $outputScope, $search, $updated, $year)
             ON CONFLICT(ServerKind, SeasonItemId) DO UPDATE SET
                 LibraryId = excluded.LibraryId, SeriesItemId = excluded.SeriesItemId, SeriesName = excluded.SeriesName,
                 SeriesPath = excluded.SeriesPath, SeasonName = excluded.SeasonName, SeasonPath = excluded.SeasonPath,
@@ -1376,7 +1373,8 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
                 AnimeThemesUrl = excluded.AnimeThemesUrl, AniListId = excluded.AniListId,
                 MyAnimeListId = excluded.MyAnimeListId, PrimaryImageUrl = excluded.PrimaryImageUrl,
                 OutputRootItemId = excluded.OutputRootItemId, OutputRootPath = excluded.OutputRootPath,
-                OutputScope = excluded.OutputScope, SearchText = excluded.SearchText, UpdatedAtUtc = excluded.UpdatedAtUtc;
+                OutputScope = excluded.OutputScope, SearchText = excluded.SearchText, UpdatedAtUtc = excluded.UpdatedAtUtc,
+                AnimeYear = excluded.AnimeYear;
             """, ("$serverKind", ServerKind), ("$libraryId", record.LibraryId), ("$seriesId", row.SeriesItemId.ToString("D")),
             ("$seriesName", row.SeriesName), ("$seriesPath", row.SeriesPath), ("$seasonId", row.SeasonItemId.ToString("D")),
             ("$seasonName", row.SeasonName), ("$seasonPath", row.SeasonPath), ("$seasonNumber", row.SeasonNumber),
@@ -1384,7 +1382,8 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
             ("$animeName", row.AnimeName), ("$animeThemesId", row.AnimeThemesId), ("$slug", row.AnimeThemesSlug),
             ("$url", row.AnimeThemesUrl), ("$aniListId", row.AniListId), ("$malId", row.MyAnimeListId),
             ("$image", row.PrimaryImageUrl), ("$outputId", record.OutputRootItemId), ("$outputPath", record.OutputRootPath),
-            ("$outputScope", record.OutputScope), ("$search", searchText), ("$updated", FormatDate(DateTimeOffset.UtcNow)));
+            ("$outputScope", record.OutputScope), ("$search", searchText), ("$updated", FormatDate(DateTimeOffset.UtcNow)),
+            ("$year", row.AnimeYear));
     }
 
     private static SeasonThemeMappingRow ReadRow(SqliteDataReader reader)
@@ -1394,7 +1393,8 @@ public sealed class SeasonFinderDataStore : ISeasonFinderDataStore
             Guid.Parse(reader.GetString(3)), reader.GetString(4), GetNullableString(reader, 5),
             GetNullableInt32(reader, 6), reader.GetString(7), reader.GetString(8), reader.GetInt64(9) != 0,
             GetNullableString(reader, 10), GetNullableInt32(reader, 11), GetNullableString(reader, 12),
-            GetNullableString(reader, 13), GetNullableInt32(reader, 14), GetNullableInt32(reader, 15), GetNullableString(reader, 16));
+            GetNullableString(reader, 13), GetNullableInt32(reader, 14), GetNullableInt32(reader, 15), GetNullableString(reader, 16),
+            GetNullableInt32(reader, 17));
     }
 
     private (bool Ready, string Version) GetCacheState(SqliteConnection connection)

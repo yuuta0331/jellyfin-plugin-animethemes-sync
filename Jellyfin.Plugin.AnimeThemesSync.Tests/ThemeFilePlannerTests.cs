@@ -718,12 +718,12 @@ public class ThemeFilePlannerTests
 
         foreach (var page in pages)
         {
-            var automatic = page.IndexOf("<h3>Automatic downloads</h3>", StringComparison.Ordinal);
+            var automatic = page.IndexOf("Automatic downloads", StringComparison.Ordinal);
             var enable = page.IndexOf("id=\"AtsThemeDownloadingEnabled\"", automatic, StringComparison.Ordinal);
             var allowAdd = page.IndexOf("id=\"AtsAllowAdd\"", enable, StringComparison.Ordinal);
             var force = page.IndexOf("id=\"AtsForceRedownload\"", allowAdd, StringComparison.Ordinal);
             var season = page.IndexOf("id=\"AtsSeasonThemeDownloadsEnabled\"", force, StringComparison.Ordinal);
-            var downloadSettings = page.IndexOf("<h3>Download settings</h3>", season, StringComparison.Ordinal);
+            var downloadSettings = page.IndexOf("Download settings", season, StringComparison.Ordinal);
             var concurrency = page.IndexOf("id=\"AtsMaxConcurrentDownloads\"", downloadSettings, StringComparison.Ordinal);
             var timeout = page.IndexOf("id=\"AtsDownloadTimeoutSeconds\"", concurrency, StringComparison.Ordinal);
             var staging = page.IndexOf("id=\"AtsDownloadStagingDirectory\"", timeout, StringComparison.Ordinal);
@@ -731,7 +731,7 @@ public class ThemeFilePlannerTests
             var segmentCount = page.IndexOf("id=\"AtsSegmentedDownloadSegments\"", segmented, StringComparison.Ordinal);
             var minimumSize = page.IndexOf("id=\"AtsMinimumSegmentedDownloadSizeMiB\"", segmentCount, StringComparison.Ordinal);
             var rangeLimit = page.IndexOf("id=\"AtsMaximumConcurrentRangeRequests\"", minimumSize, StringComparison.Ordinal);
-            var cache = page.IndexOf("<h3>Cache policy</h3>", rangeLimit, StringComparison.Ordinal);
+            var cache = page.IndexOf("Cache policy", rangeLimit, StringComparison.Ordinal);
             var seasonTtl = page.IndexOf("id=\"AtsSeasonMetadataCacheTtlDays\"", cache, StringComparison.Ordinal);
             var providerTtl = page.IndexOf("id=\"AtsProviderResponseCacheTtlDays\"", seasonTtl, StringComparison.Ordinal);
 
