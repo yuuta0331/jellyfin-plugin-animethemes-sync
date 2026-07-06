@@ -89,6 +89,11 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             cleanupStartIndex: 0,
             cleanupTotal: 0,
             cleanupPageSize: 50,
+            issueStartIndex: 0,
+            issueTotal: 0,
+            issuePageSize: 50,
+            issueSearchTimer: null,
+            issuePollTimer: null,
             pendingCollectionDisableChoice: null,
             pendingTagDisableChoice: null,
             collectionDialogLastFocus: null,
@@ -199,6 +204,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         var cleanupDelete = page.querySelector('#AtsCleanupDelete');
         var cleanupCancel = page.querySelector('#AtsCleanupCancel');
         var cleanupPage = page.querySelector('#AtsCleanupPage');
+        var issueState = page.querySelector('#AtsIssueState');
+        var issueStateFilter = page.querySelector('#AtsIssueStateFilter');
+        var issueCategoryFilter = page.querySelector('#AtsIssueCategoryFilter');
+        var issueSearch = page.querySelector('#AtsIssueSearch');
+        var issueSummary = page.querySelector('#AtsIssueSummary');
+        var issueResults = page.querySelector('#AtsIssueResults');
+        var issuePage = page.querySelector('#AtsIssuePage');
         var summaryManualSeasonMappings = page.querySelector('#AnimeThemesSummaryManualSeasonMappings');
         var summaryAutoSeasonMappings = page.querySelector('#AnimeThemesSummaryAutoSeasonMappings');
         var summaryDirectSeasonMappings = page.querySelector('#AnimeThemesSummaryDirectSeasonMappings');
@@ -296,6 +308,116 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
 
         function cleanupSourceLabel(source) {
             return source === 'Scheduled' ? 'Scheduled synchronization' : source === 'BrowserManual' ? 'Browser download' : source === 'TrackedUnknown' ? 'Earlier plugin version' : 'Outside this plugin';
+        }
+
+        function escapeIssueHtml(text) {
+            return String(text || '').replace(/[&<>"']/g, function (ch) {
+                return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+            });
+        }
+
+        function issueField(issue, pascal, camel) {
+            return value(issue, pascal, camel);
+        }
+
+        function formatIssueDate(text) {
+            if (!text) return '-';
+            var date = new Date(text);
+            return isNaN(date.getTime()) ? text : date.toLocaleString();
+        }
+
+        function loadManagerIssues() {
+            if (!issueResults) return;
+            if (state.issuePollTimer) {
+                clearTimeout(state.issuePollTimer);
+                state.issuePollTimer = null;
+            }
+            if (issueState) issueState.textContent = 'Loading...';
+            var path = 'AnimeThemesSync/Manager/Issues?StartIndex=' + state.issueStartIndex +
+                '&Limit=' + state.issuePageSize +
+                '&State=' + encodeURIComponent(issueStateFilter ? issueStateFilter.value : 'Open,Deferred') +
+                '&Category=' + encodeURIComponent(issueCategoryFilter ? issueCategoryFilter.value : '') +
+                '&SearchTerm=' + encodeURIComponent(issueSearch ? issueSearch.value.trim() : '');
+            apiGet(path).then(function (pageData) {
+                var items = value(pageData, 'Items', 'items') || [];
+                state.issueTotal = value(pageData, 'TotalRecordCount', 'totalRecordCount') || 0;
+                renderManagerIssues(items, value(pageData, 'Summary', 'summary') || {});
+                if (issueState) issueState.textContent = state.issueTotal + ' issue' + (state.issueTotal === 1 ? '' : 's');
+            }).catch(function (err) {
+                if (issueState) issueState.textContent = 'Load failed';
+                issueResults.innerHTML = '<div class="fieldDescription">Failed to load issues: ' + escapeIssueHtml(getErrorMessage(err)) + '</div>';
+            }).then(function () {
+                scheduleIssuePolling();
+            });
+        }
+
+        function scheduleIssuePolling() {
+            if (state.activeTab !== 'manage' || !issueResults) return;
+            if (state.issuePollTimer) clearTimeout(state.issuePollTimer);
+            state.issuePollTimer = setTimeout(function () {
+                state.issuePollTimer = null;
+                loadManagerIssues();
+            }, 5000);
+        }
+
+        function stopIssuePolling() {
+            if (state.issuePollTimer) clearTimeout(state.issuePollTimer);
+            state.issuePollTimer = null;
+        }
+
+        function renderManagerIssues(items, summary) {
+            if (!issueResults) return;
+            var open = value(summary, 'Open', 'open') || 0;
+            var deferred = value(summary, 'Deferred', 'deferred') || 0;
+            var ignored = value(summary, 'Ignored', 'ignored') || 0;
+            var resolved = value(summary, 'Resolved', 'resolved') || 0;
+            if (issueSummary) issueSummary.textContent = 'Open: ' + open + ' / Deferred: ' + deferred + ' / Ignored: ' + ignored + ' / Resolved: ' + resolved;
+            if (issuePage) {
+                var end = Math.min(state.issueStartIndex + items.length, state.issueTotal);
+                issuePage.textContent = state.issueTotal ? (state.issueStartIndex + 1) + '-' + end + ' of ' + state.issueTotal + ' issues' : '0 issues';
+            }
+            var issuePrev = page.querySelector('#AtsIssuePrev');
+            var issueNext = page.querySelector('#AtsIssueNext');
+            if (issuePrev) issuePrev.disabled = state.issueStartIndex <= 0;
+            if (issueNext) issueNext.disabled = state.issueStartIndex + items.length >= state.issueTotal;
+            if (!items.length) {
+                issueResults.innerHTML = '<div class="fieldDescription">No issues match the current filters.</div>';
+                return;
+            }
+
+            issueResults.innerHTML = items.map(function (issue) {
+                var id = issueField(issue, 'Id', 'id');
+                var stateText = issueField(issue, 'State', 'state') || 'Open';
+                var category = issueField(issue, 'Category', 'category') || 'Task';
+                var severity = issueField(issue, 'Severity', 'severity') || 'Error';
+                var title = issueField(issue, 'Title', 'title') || 'Issue';
+                var message = issueField(issue, 'Message', 'message') || '';
+                var target = issueField(issue, 'TargetName', 'targetName') || issueField(issue, 'DestinationPath', 'destinationPath') || issueField(issue, 'Url', 'url') || '';
+                var action = issueField(issue, 'SuggestedAction', 'suggestedAction') || '';
+                var nextRetry = issueField(issue, 'NextRetryUtc', 'nextRetryUtc');
+                var occurrenceCount = issueField(issue, 'OccurrenceCount', 'occurrenceCount') || 0;
+                var controls = stateText === 'Ignored' || stateText === 'Resolved'
+                    ? '<button is="emby-button" type="button" class="emby-button ats-button-secondary" data-issue-action="Reopen" data-issue-id="' + escapeIssueHtml(id) + '">Reopen</button>'
+                    : '<button is="emby-button" type="button" class="emby-button ats-button-secondary" data-issue-action="Ignore" data-issue-id="' + escapeIssueHtml(id) + '">Ignore</button><button is="emby-button" type="button" class="emby-button ats-button-secondary" data-issue-action="Resolve" data-issue-id="' + escapeIssueHtml(id) + '">Resolve</button>';
+                controls += '<button is="emby-button" type="button" class="emby-button ats-danger-button" data-issue-action="Delete" data-issue-id="' + escapeIssueHtml(id) + '">Delete</button>';
+                return '<article class="ats-cleanup-card"><div><strong>' + escapeIssueHtml(title) + '</strong><div class="fieldDescription">' +
+                    escapeIssueHtml(category) + ' / ' + escapeIssueHtml(severity) + ' / ' + escapeIssueHtml(stateText) + ' / seen ' + occurrenceCount + ' time(s)</div><div>' +
+                    escapeIssueHtml(message) + '</div>' +
+                    (target ? '<div class="fieldDescription">' + escapeIssueHtml(target) + '</div>' : '') +
+                    (nextRetry ? '<div class="fieldDescription">Next retry: ' + escapeIssueHtml(formatIssueDate(nextRetry)) + '</div>' : '') +
+                    (action ? '<div class="fieldDescription">Action: ' + escapeIssueHtml(action) + '</div>' : '') +
+                    '<div class="fieldDescription">Last seen: ' + escapeIssueHtml(formatIssueDate(issueField(issue, 'LastSeenUtc', 'lastSeenUtc'))) + '</div></div><div class="ats-actions">' +
+                    controls + '</div></article>';
+            }).join('');
+        }
+
+        function setManagerIssueAction(issueId, action) {
+            var request = action === 'Delete'
+                ? apiDeleteNoContent('AnimeThemesSync/Manager/Issues/' + encodeURIComponent(issueId))
+                : apiPost('AnimeThemesSync/Manager/Issues/' + encodeURIComponent(issueId) + '/' + action);
+            request.then(loadManagerIssues).catch(function (err) {
+                Dashboard.alert({ title: 'Issue Update Error', message: getErrorMessage(err) });
+            });
         }
 
         function promoteOverviewMetric(id, label) {
@@ -891,6 +1013,8 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         function setActiveTab(tab) {
             state.activeTab = tab === 'manage' || tab === 'finder' || tab === 'settings' ? tab : 'library';
             syncLayout();
+            if (state.activeTab === 'manage') loadManagerIssues();
+            else stopIssuePolling();
         }
 
         function parsedColor(valueToParse) {
@@ -4060,7 +4184,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
                 state.downloadStatusesInitialized = true;
                 renderDownloadManager();
                 updateThemeCardDownloadStatuses();
-                if (terminalTransition) scheduleUiRefresh();
+                if (terminalTransition) {
+                    scheduleUiRefresh();
+                    if (state.activeTab === 'manage') loadManagerIssues();
+                }
                 shouldContinue = state.activeDownloads.some(function (job) { return isActiveDownloadStatus(job.status); });
             }).catch(function (err) {
                 console.error('Failed to poll downloads', err);
@@ -4872,6 +4999,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         page.querySelector('#AtsManagerRefresh').addEventListener('click', function () {
             scheduleUiRefresh({ mappings: true });
             loadCleanupFiles();
+            loadManagerIssues();
         });
         page.querySelector('#AtsCleanupScan').addEventListener('click', startCleanupScan);
         cleanupCancel.addEventListener('click', function () {
@@ -4895,6 +5023,26 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
         cleanupDelete.addEventListener('click', deleteCleanupSelection);
         page.querySelector('#AtsCleanupPrev').addEventListener('click', function () { state.cleanupStartIndex = Math.max(0, state.cleanupStartIndex - state.cleanupPageSize); loadCleanupFiles(); });
         page.querySelector('#AtsCleanupNext').addEventListener('click', function () { state.cleanupStartIndex += state.cleanupPageSize; loadCleanupFiles(); });
+        [issueStateFilter, issueCategoryFilter].forEach(function (control) {
+            if (control) control.addEventListener('change', function () { state.issueStartIndex = 0; loadManagerIssues(); });
+        });
+        if (issueSearch) {
+            issueSearch.addEventListener('input', function () {
+                if (state.issueSearchTimer) clearTimeout(state.issueSearchTimer);
+                state.issueSearchTimer = setTimeout(function () { state.issueStartIndex = 0; loadManagerIssues(); }, 250);
+            });
+        }
+        if (issueResults) {
+            issueResults.addEventListener('click', function (event) {
+                var button = event.target.closest('[data-issue-action]');
+                if (!button) return;
+                setManagerIssueAction(button.getAttribute('data-issue-id'), button.getAttribute('data-issue-action'));
+            });
+        }
+        var issuePrevButton = page.querySelector('#AtsIssuePrev');
+        var issueNextButton = page.querySelector('#AtsIssueNext');
+        if (issuePrevButton) issuePrevButton.addEventListener('click', function () { state.issueStartIndex = Math.max(0, state.issueStartIndex - state.issuePageSize); loadManagerIssues(); });
+        if (issueNextButton) issueNextButton.addEventListener('click', function () { state.issueStartIndex += state.issuePageSize; loadManagerIssues(); });
         var rebuildButton = page.querySelector('#AnimeThemesBrowserRebuildCache');
         if (rebuildButton && rebuildButton.querySelector('span')) rebuildButton.querySelector('span').textContent = 'Rebuild display cache';
         var seasonCacheRefreshButton = page.querySelector('#AtsSeasonCacheRefresh');
@@ -5122,6 +5270,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             } else {
                 loadItems();
             }
+            if (state.activeTab === 'manage') loadManagerIssues();
             startDownloadsPolling();
         });
         page.addEventListener('pagehide', function () {
@@ -5135,6 +5284,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select', 'emby-checkbox', 
             state.uiRefreshTimer = null;
             if (state.cleanupTimer) clearTimeout(state.cleanupTimer);
             state.cleanupTimer = null;
+            stopIssuePolling();
             hideDetailLoading();
             teardownThemeObserver();
         });

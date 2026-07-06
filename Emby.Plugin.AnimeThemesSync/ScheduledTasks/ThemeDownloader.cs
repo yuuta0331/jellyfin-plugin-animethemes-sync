@@ -158,44 +158,68 @@ public class ThemeDownloader : IScheduledTask
             return;
         }
 
-        var items = GetEnabledLibraryItems();
-        _logger.LogInformation("Found {0} items to process.", items.Count);
-
-        _ = Interlocked.Exchange(ref _scheduledDeferredDownloads, 0);
-        var result = config.ThemeDownloadingEnabled
-            ? await ProcessItems(items, config, config.ForceRedownload, progress, cancellationToken, MediaDownloadMode.Scheduled).ConfigureAwait(false)
-            : new ThemeDownloadExecutionResult(0, 0, 0, 0, 0, 0);
-        await ExecuteSeasonMetadataMaintenanceAsync(progress, cancellationToken).ConfigureAwait(false);
-        var downloadFailures = Math.Max(0, result.DownloadsPlanned - result.DownloadsCompleted);
-        var deferredDownloads = Volatile.Read(ref _scheduledDeferredDownloads);
-        _logger.LogInformation(
-            "Anime Themes Download Task totals: Planned={0}, Succeeded={1}, Failed={2}, ExtrasFailed={3}, Deferred={4}.",
-            result.DownloadsPlanned + result.ExtrasPlanned + deferredDownloads,
-            result.DownloadsCompleted + result.ExtrasCompleted,
-            downloadFailures + result.ExtraFailures,
-            result.ExtraFailures,
-            deferredDownloads);
-        if (downloadFailures > 0 || result.ExtraFailures > 0)
+        try
         {
-            _logger.LogWarning(
-                "Anime Themes Download Task completed with failures. Media: {0}/{1} downloaded ({2} failed). Extras: {3}/{4} completed ({5} failed). Deferred: {6}.",
-                result.DownloadsCompleted,
-                result.DownloadsPlanned,
-                downloadFailures,
-                result.ExtrasCompleted,
-                result.ExtrasPlanned,
+            var items = GetEnabledLibraryItems();
+            _logger.LogInformation("Found {0} items to process.", items.Count);
+
+            _ = Interlocked.Exchange(ref _scheduledDeferredDownloads, 0);
+            var result = config.ThemeDownloadingEnabled
+                ? await ProcessItems(items, config, config.ForceRedownload, progress, cancellationToken, MediaDownloadMode.Scheduled).ConfigureAwait(false)
+                : new ThemeDownloadExecutionResult(0, 0, 0, 0, 0, 0);
+            await ExecuteSeasonMetadataMaintenanceAsync(progress, cancellationToken).ConfigureAwait(false);
+            var downloadFailures = Math.Max(0, result.DownloadsPlanned - result.DownloadsCompleted);
+            var deferredDownloads = Volatile.Read(ref _scheduledDeferredDownloads);
+            _logger.LogInformation(
+                "Anime Themes Download Task totals: Planned={0}, Succeeded={1}, Failed={2}, ExtrasFailed={3}, Deferred={4}.",
+                result.DownloadsPlanned + result.ExtrasPlanned + deferredDownloads,
+                result.DownloadsCompleted + result.ExtrasCompleted,
+                downloadFailures + result.ExtraFailures,
                 result.ExtraFailures,
                 deferredDownloads);
+            if (downloadFailures > 0 || result.ExtraFailures > 0)
+            {
+                _logger.LogWarning(
+                    "Anime Themes Download Task completed with failures. Media: {0}/{1} downloaded ({2} failed). Extras: {3}/{4} completed ({5} failed). Deferred: {6}.",
+                    result.DownloadsCompleted,
+                    result.DownloadsPlanned,
+                    downloadFailures,
+                    result.ExtrasCompleted,
+                    result.ExtrasPlanned,
+                    result.ExtraFailures,
+                    deferredDownloads);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Anime Themes Download Task completed. Media: {0}/{1}. Extras: {2}/{3}. Deferred: {4}.",
+                    result.DownloadsCompleted,
+                    result.DownloadsPlanned,
+                    result.ExtrasCompleted,
+                    result.ExtrasPlanned,
+                    deferredDownloads);
+            }
         }
-        else
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            _logger.LogInformation(
-                "Anime Themes Download Task completed. Media: {0}/{1}. Extras: {2}/{3}. Deferred: {4}.",
-                result.DownloadsCompleted,
-                result.DownloadsPlanned,
-                result.ExtrasCompleted,
-                result.ExtrasPlanned,
-                deferredDownloads);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            RecordManagerIssue(
+                new ManagerIssueUpsert
+                {
+                    Category = ManagerIssueCategories.Task,
+                    Severity = ManagerIssueSeverities.Critical,
+                    Title = "Scheduled download task failed",
+                    Message = ex.GetBaseException().Message,
+                    TaskName = Name,
+                    Operation = "Download Anime Themes",
+                    Stage = "Execute",
+                    SuggestedAction = "Review the error, adjust settings or mappings, and run the scheduled task again.",
+                    FingerprintSeed = "scheduled-task|" + Key + "|" + ex.GetType().FullName + "|" + ex.GetBaseException().Message,
+                });
+            throw;
         }
     }
 
@@ -457,6 +481,26 @@ public class ThemeDownloader : IScheduledTask
         };
     }
 
+    public ManagerIssuePage GetManagerIssues(int? startIndex, int? limit, string? state, string? category, string? severity, string? searchTerm)
+    {
+        return _dataStore.QueryManagerIssues(startIndex, limit, state, category, severity, searchTerm);
+    }
+
+    public ManagerIssueSummary GetManagerIssueSummary()
+    {
+        return _dataStore.GetManagerIssueSummary();
+    }
+
+    public bool SetManagerIssueState(string issueId, string state)
+    {
+        return _dataStore.SetManagerIssueState(issueId, state);
+    }
+
+    public bool DeleteManagerIssue(string issueId)
+    {
+        return _dataStore.DeleteManagerIssue(issueId);
+    }
+
     public AnimeThemesMaintenanceResult ClearBrowserCache()
     {
         _dataStore.ClearBrowserCache();
@@ -491,6 +535,7 @@ public class ThemeDownloader : IScheduledTask
                 {
                     _dataStore.SetBrowserCacheRebuildError(ex.Message);
                     _seasonFinderStore.SetRebuildError(ex.Message);
+                    RecordManagerIssue(ManagerIssueCategories.Maintenance, ManagerIssueSeverities.Error, "Browser cache rebuild failed", ex.Message, "BrowserCache/Rebuild", "CacheRebuild", ex);
                     _logger.LogError(ex, "Browser cache rebuild failed.");
                 }
                 finally
@@ -518,6 +563,7 @@ public class ThemeDownloader : IScheduledTask
         {
             _dataStore.SetBrowserCacheRebuildError(ex.Message);
             _seasonFinderStore.SetRebuildError(ex.Message);
+            RecordManagerIssue(ManagerIssueCategories.Maintenance, ManagerIssueSeverities.Error, "Browser cache rebuild failed", ex.Message, "BrowserCache/Rebuild", "CacheRebuild", ex);
             throw;
         }
         finally
@@ -1151,6 +1197,19 @@ public class ThemeDownloader : IScheduledTask
             catch (Exception ex)
             {
                 failed++;
+                RecordManagerIssue(
+                    new ManagerIssueUpsert
+                    {
+                        Category = ManagerIssueCategories.Maintenance,
+                        Severity = ManagerIssueSeverities.Error,
+                        Title = "Cleanup delete failed",
+                        Message = ex.GetBaseException().Message,
+                        DestinationPath = file.Path,
+                        Operation = "Maintenance/Cleanup/Delete",
+                        Stage = "DeleteFile",
+                        SuggestedAction = "Check file permissions or locks, then run the cleanup delete again.",
+                        FingerprintSeed = "cleanup-delete|" + file.Path,
+                    });
                 _logger.LogWarning(ex, "Failed to delete cleanup candidate {0}.", file.Path);
             }
             finally
@@ -1342,26 +1401,80 @@ public class ThemeDownloader : IScheduledTask
             if (row.SeasonItemId == Guid.Empty)
             {
                 skipped++;
+                RecordManagerIssue(
+                    new ManagerIssueUpsert
+                    {
+                        Category = ManagerIssueCategories.Import,
+                        Severity = ManagerIssueSeverities.Warning,
+                        Title = "Mapping import row skipped",
+                        Message = "The imported mapping row did not include a season item id.",
+                        Operation = "SeasonMappings/Import",
+                        Stage = "Validation",
+                        SuggestedAction = "Fix the mapping file and import it again.",
+                        FingerprintSeed = "mapping-import|empty-season|" + imported + "|" + skipped,
+                    });
                 continue;
             }
 
             if (string.IsNullOrWhiteSpace(row.AnimeThemesSlug) && !row.AniListId.HasValue && !row.MyAnimeListId.HasValue)
             {
                 skipped++;
+                RecordManagerIssue(
+                    new ManagerIssueUpsert
+                    {
+                        Category = ManagerIssueCategories.Import,
+                        Severity = ManagerIssueSeverities.Warning,
+                        Title = "Mapping import row skipped",
+                        Message = "The imported mapping row did not include AnimeThemes, AniList, or MyAnimeList identifiers.",
+                        SeasonItemId = row.SeasonItemId.ToString("D"),
+                        Operation = "SeasonMappings/Import",
+                        Stage = "Validation",
+                        SuggestedAction = "Add at least one external id, or map the season in the Manager tab.",
+                        FingerprintSeed = "mapping-import|missing-external-id|" + row.SeasonItemId.ToString("D"),
+                    });
                 continue;
             }
 
             var season = _libraryManager.GetItemById(row.SeasonItemId) as Season;
             if (season == null)
             {
-                errors.Add($"Season not found: {row.SeasonItemId:D}");
+                var message = $"Season not found: {row.SeasonItemId:D}";
+                errors.Add(message);
+                RecordManagerIssue(
+                    new ManagerIssueUpsert
+                    {
+                        Category = ManagerIssueCategories.Import,
+                        Severity = ManagerIssueSeverities.Error,
+                        Title = "Mapping import failed for a season",
+                        Message = message,
+                        SeasonItemId = row.SeasonItemId.ToString("D"),
+                        Operation = "SeasonMappings/Import",
+                        Stage = "ResolveSeason",
+                        SuggestedAction = "Remove stale rows from the mapping file or export a fresh library snapshot.",
+                        FingerprintSeed = "mapping-import|season-not-found|" + row.SeasonItemId.ToString("D"),
+                    });
                 continue;
             }
 
             var series = FindSeriesForSeason(season);
             if (series == null)
             {
-                errors.Add($"Parent series not found for season: {row.SeasonItemId:D}");
+                var message = $"Parent series not found for season: {row.SeasonItemId:D}";
+                errors.Add(message);
+                RecordManagerIssue(
+                    new ManagerIssueUpsert
+                    {
+                        Category = ManagerIssueCategories.Import,
+                        Severity = ManagerIssueSeverities.Error,
+                        Title = "Mapping import failed for a season",
+                        Message = message,
+                        SeasonItemId = row.SeasonItemId.ToString("D"),
+                        TargetName = season.Name,
+                        Operation = "SeasonMappings/Import",
+                        Stage = "ResolveSeries",
+                        SuggestedAction = "Check the season's parent series and import the mapping again.",
+                        FingerprintSeed = "mapping-import|series-not-found|" + row.SeasonItemId.ToString("D"),
+                    });
                 continue;
             }
 
@@ -2262,6 +2375,23 @@ public class ThemeDownloader : IScheduledTask
                 if (downloadMode == MediaDownloadMode.Scheduled && !string.IsNullOrWhiteSpace(extra.Extra.DownloadUrl))
                 {
                     RecordScheduledDownloadFailure(extra.Extra.DownloadUrl, extra.Extra.TargetPath, ex);
+                }
+                else if (downloadMode == MediaDownloadMode.Scheduled)
+                {
+                    RecordManagerIssue(
+                        new ManagerIssueUpsert
+                        {
+                            Category = ManagerIssueCategories.Download,
+                            Severity = ManagerIssueSeverities.Warning,
+                            Title = "Extras output skipped",
+                            Message = ex.GetBaseException().Message,
+                            TargetName = extra.ItemName,
+                            DestinationPath = extra.Extra.TargetPath,
+                            Operation = "Download Anime Themes",
+                            Stage = "Extras",
+                            SuggestedAction = "Check the mapped AnimeThemes media and run synchronization again.",
+                            FingerprintSeed = "scheduled-extra-missing-source|" + extra.Extra.Key + "|" + extra.Extra.TargetPath,
+                        });
                 }
 
                 _logger.LogWarning(ex, "Failed to create extras file: {0}", extra.Extra.TargetPath);
@@ -3821,6 +3951,22 @@ public class ThemeDownloader : IScheduledTask
 
     private void AddSeasonMetadataSyncError(Series series, string? ruleKey, string stage, Exception exception)
     {
+        RecordManagerIssue(
+            new ManagerIssueUpsert
+            {
+                Category = ManagerIssueCategories.SeasonAutomation,
+                Severity = ManagerIssueSeverities.Error,
+                Title = "Season automation failed",
+                Message = exception.GetBaseException().Message,
+                TargetName = series.Name,
+                SeriesItemId = series.Id.ToString("D"),
+                RowId = ruleKey,
+                Operation = "SeasonMetadata/Sync",
+                Stage = stage,
+                SuggestedAction = "Review the season automation settings and run season metadata synchronization again.",
+                FingerprintSeed = "season-automation|" + series.Id.ToString("D") + "|" + ruleKey + "|" + stage,
+            });
+
         if (!string.IsNullOrWhiteSpace(ruleKey))
         {
             _seasonMetadataRuleErrors[ruleKey] = stage + ": " + exception.GetBaseException().Message;
@@ -3844,6 +3990,34 @@ public class ThemeDownloader : IScheduledTask
             Error = errors[0].Message,
             Errors = errors,
         };
+    }
+
+    private void RecordManagerIssue(string category, string severity, string title, string message, string operation, string stage, Exception exception)
+    {
+        RecordManagerIssue(
+            new ManagerIssueUpsert
+            {
+                Category = category,
+                Severity = severity,
+                Title = title,
+                Message = message,
+                Operation = operation,
+                Stage = stage,
+                SuggestedAction = "Review the issue details and run the operation again after fixing the cause.",
+                FingerprintSeed = category + "|" + operation + "|" + stage + "|" + exception.GetType().FullName + "|" + message,
+            });
+    }
+
+    private void RecordManagerIssue(ManagerIssueUpsert issue)
+    {
+        try
+        {
+            _dataStore.RecordManagerIssue(issue);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("Failed to record AnimeThemes Manager issue: {0}", ex.Message);
+        }
     }
 
     private List<(BaseItem Item, Guid LibraryId, string? LibraryName)> GetEnabledLibraryItemsWithLibraries()

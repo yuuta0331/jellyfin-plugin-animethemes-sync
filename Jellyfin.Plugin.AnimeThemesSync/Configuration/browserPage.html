@@ -154,6 +154,7 @@
                     <article class="ats-overview-section"><h3 class="ats-heading-with-icon"><span class="material-icons ats-icon" aria-hidden="true">link</span><span>Matching</span></h3><strong class="ats-overview-primary" id="AnimeThemesSummaryMatchRate">0%</strong><span class="fieldDescription">resolved seasons</span><div class="ats-summary-grid"><div><strong id="AnimeThemesSummaryManualSeasonMappings">0</strong><span>Manual</span></div><div><strong id="AnimeThemesSummaryAutoSeasonMappings">0</strong><span>Auto</span></div><div><strong id="AnimeThemesSummaryDirectSeasonMappings">0</strong><span>Direct</span></div><div><strong id="AnimeThemesSummarySeriesSharedSeasons">0</strong><span>Series shared</span></div><div><strong id="AnimeThemesSummaryUnmatchedSeasons">0</strong><span>Unmatched</span></div></div></article>
                     <article class="ats-overview-section"><h3 class="ats-heading-with-icon"><span class="material-icons ats-icon" aria-hidden="true">storage</span><span>System</span></h3><strong class="ats-overview-primary" id="AnimeThemesCacheState">Starting</strong><span class="fieldDescription">cache status</span><div class="ats-summary-grid"><div><strong id="AnimeThemesCacheBytes">0 B</strong><span>Cache size</span></div><div><strong id="AnimeThemesCacheItems">0</strong><span>Display rows</span></div><div><strong id="AnimeThemesCacheLastScan">-</strong><span>Last refresh</span></div></div><div class="ats-summary-grid"><div><strong id="AtsSeasonCacheFresh">0</strong><span>Season fresh</span></div><div><strong id="AtsSeasonCacheExpired">0</strong><span>Season expired</span></div><div><strong id="AtsSeasonCacheErrors">0</strong><span>Season errors</span></div><div><strong id="AtsProviderCacheFresh">0</strong><span>Provider fresh</span></div><div><strong id="AtsProviderCacheStale">0</strong><span>Provider stale</span></div></div><div id="AtsCachePolicySummary" class="fieldDescription"></div><div id="AtsCacheExpirySummary" class="fieldDescription"></div><div id="AnimeThemesCachePath" class="fieldDescription"></div></article>
                 </div></section>
+                <section class="ats-manager-section" id="AtsManagerIssues"><div class="ats-panel-head"><div><h2 class="sectionTitle">Issues</h2><div class="fieldDescription">Persistent failures and skipped work from downloads, imports, mapping, season automation, and maintenance.</div></div><div class="ats-finder-state" id="AtsIssueState">Loading...</div></div><div class="ats-cleanup-filters"><div class="selectContainer"><label class="selectLabel" for="AtsIssueStateFilter">State</label><select is="emby-select" id="AtsIssueStateFilter"><option value="Open,Deferred" selected>Open and deferred</option><option value="Open">Open</option><option value="Deferred">Deferred</option><option value="Ignored">Ignored</option><option value="Resolved">Resolved</option><option value="">All</option></select></div><div class="selectContainer"><label class="selectLabel" for="AtsIssueCategoryFilter">Category</label><select is="emby-select" id="AtsIssueCategoryFilter"><option value="">All</option><option value="Download">Download</option><option value="Mapping">Mapping</option><option value="SeasonAutomation">Season automation</option><option value="Task">Task</option><option value="Import">Import</option><option value="Maintenance">Maintenance</option></select></div><div class="inputContainer ats-clearable"><label class="inputLabel inputLabelUnfocused" for="AtsIssueSearch">Search issues</label><input id="AtsIssueSearch" type="text" is="emby-input" autocomplete="off" /><button type="button" class="ats-clear-input" data-clear-target="AtsIssueSearch" aria-label="Clear issue search">x</button></div></div><div id="AtsIssueSummary" class="fieldDescription"></div><div id="AtsIssueResults" class="ats-cleanup-results" aria-live="polite"></div><div class="ats-cleanup-pager"><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsIssuePrev"><span class="material-icons ats-icon" aria-hidden="true">navigate_before</span><span>Previous</span></button><span id="AtsIssuePage">0 issues</span><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsIssueNext"><span>Next</span><span class="material-icons ats-icon" aria-hidden="true">navigate_next</span></button></div></section>
                 <section class="ats-manager-section" id="AtsManagerTasks"><div class="ats-panel-head"><div><h2 class="sectionTitle">Tasks</h2><div class="fieldDescription">Run synchronization, review local media, or refresh plugin data.</div></div></div><div class="ats-task-grid">
                     <article class="ats-task-card ats-task-card-primary"><div><h3 class="ats-heading-with-icon"><span class="material-icons ats-icon" aria-hidden="true">manage_search</span><span>Review and clean local media</span></h3><div class="fieldDescription">Find files that no longer match the saved download settings. The scan only builds a review list; you choose what to delete.</div></div><div class="ats-actions"><button is="emby-button" type="button" class="raised emby-button ats-action-button ats-icon-button-text" id="AtsCleanupScan"><span class="material-icons ats-icon" aria-hidden="true">search</span><span>Scan local media</span></button><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsCleanupCancel" hidden><span class="material-icons ats-icon" aria-hidden="true">close</span><span>Cancel</span></button></div></article>
                     <article class="ats-task-card"><div><h3 class="ats-heading-with-icon"><span class="material-icons ats-icon" aria-hidden="true">sync</span><span>Synchronization</span></h3><div class="fieldDescription">Run the scheduled downloader now. Unsaved Settings changes are saved first.</div></div><button is="emby-button" type="button" class="emby-button ats-button-secondary ats-icon-button-text" id="AtsRunTask"><span class="material-icons ats-icon" aria-hidden="true">play_arrow</span><span>Run synchronization</span></button></article>
@@ -3514,6 +3515,11 @@
                     cleanupStartIndex: 0,
                     cleanupTotal: 0,
                     cleanupPageSize: 50,
+                    issueStartIndex: 0,
+                    issueTotal: 0,
+                    issuePageSize: 50,
+                    issueSearchTimer: null,
+                    issuePollTimer: null,
                     pendingCollectionDisableChoice: null,
                     pendingTagDisableChoice: null,
                     collectionDialogLastFocus: null,
@@ -3624,6 +3630,13 @@
                 var cleanupDelete = page.querySelector('#AtsCleanupDelete');
                 var cleanupCancel = page.querySelector('#AtsCleanupCancel');
                 var cleanupPage = page.querySelector('#AtsCleanupPage');
+                var issueState = page.querySelector('#AtsIssueState');
+                var issueStateFilter = page.querySelector('#AtsIssueStateFilter');
+                var issueCategoryFilter = page.querySelector('#AtsIssueCategoryFilter');
+                var issueSearch = page.querySelector('#AtsIssueSearch');
+                var issueSummary = page.querySelector('#AtsIssueSummary');
+                var issueResults = page.querySelector('#AtsIssueResults');
+                var issuePage = page.querySelector('#AtsIssuePage');
                 var summaryManualSeasonMappings = page.querySelector('#AnimeThemesSummaryManualSeasonMappings');
                 var summaryAutoSeasonMappings = page.querySelector('#AnimeThemesSummaryAutoSeasonMappings');
                 var summaryDirectSeasonMappings = page.querySelector('#AnimeThemesSummaryDirectSeasonMappings');
@@ -3721,6 +3734,116 @@
 
                 function cleanupSourceLabel(source) {
                     return source === 'Scheduled' ? 'Scheduled synchronization' : source === 'BrowserManual' ? 'Browser download' : source === 'TrackedUnknown' ? 'Earlier plugin version' : 'Outside this plugin';
+                }
+
+                function escapeIssueHtml(text) {
+                    return String(text || '').replace(/[&<>"']/g, function (ch) {
+                        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+                    });
+                }
+
+                function issueField(issue, pascal, camel) {
+                    return value(issue, pascal, camel);
+                }
+
+                function formatIssueDate(text) {
+                    if (!text) return '-';
+                    var date = new Date(text);
+                    return isNaN(date.getTime()) ? text : date.toLocaleString();
+                }
+
+                function loadManagerIssues() {
+                    if (!issueResults) return;
+                    if (state.issuePollTimer) {
+                        clearTimeout(state.issuePollTimer);
+                        state.issuePollTimer = null;
+                    }
+                    if (issueState) issueState.textContent = 'Loading...';
+                    var path = 'AnimeThemesSync/Manager/Issues?StartIndex=' + state.issueStartIndex +
+                        '&Limit=' + state.issuePageSize +
+                        '&State=' + encodeURIComponent(issueStateFilter ? issueStateFilter.value : 'Open,Deferred') +
+                        '&Category=' + encodeURIComponent(issueCategoryFilter ? issueCategoryFilter.value : '') +
+                        '&SearchTerm=' + encodeURIComponent(issueSearch ? issueSearch.value.trim() : '');
+                    apiGet(path).then(function (pageData) {
+                        var items = value(pageData, 'Items', 'items') || [];
+                        state.issueTotal = value(pageData, 'TotalRecordCount', 'totalRecordCount') || 0;
+                        renderManagerIssues(items, value(pageData, 'Summary', 'summary') || {});
+                        if (issueState) issueState.textContent = state.issueTotal + ' issue' + (state.issueTotal === 1 ? '' : 's');
+                    }).catch(function (err) {
+                        if (issueState) issueState.textContent = 'Load failed';
+                        issueResults.innerHTML = '<div class="fieldDescription">Failed to load issues: ' + escapeIssueHtml(getErrorMessage(err)) + '</div>';
+                    }).then(function () {
+                        scheduleIssuePolling();
+                    });
+                }
+
+                function scheduleIssuePolling() {
+                    if (state.activeTab !== 'manage' || !issueResults) return;
+                    if (state.issuePollTimer) clearTimeout(state.issuePollTimer);
+                    state.issuePollTimer = setTimeout(function () {
+                        state.issuePollTimer = null;
+                        loadManagerIssues();
+                    }, 5000);
+                }
+
+                function stopIssuePolling() {
+                    if (state.issuePollTimer) clearTimeout(state.issuePollTimer);
+                    state.issuePollTimer = null;
+                }
+
+                function renderManagerIssues(items, summary) {
+                    if (!issueResults) return;
+                    var open = value(summary, 'Open', 'open') || 0;
+                    var deferred = value(summary, 'Deferred', 'deferred') || 0;
+                    var ignored = value(summary, 'Ignored', 'ignored') || 0;
+                    var resolved = value(summary, 'Resolved', 'resolved') || 0;
+                    if (issueSummary) issueSummary.textContent = 'Open: ' + open + ' / Deferred: ' + deferred + ' / Ignored: ' + ignored + ' / Resolved: ' + resolved;
+                    if (issuePage) {
+                        var end = Math.min(state.issueStartIndex + items.length, state.issueTotal);
+                        issuePage.textContent = state.issueTotal ? (state.issueStartIndex + 1) + '-' + end + ' of ' + state.issueTotal + ' issues' : '0 issues';
+                    }
+                    var issuePrev = page.querySelector('#AtsIssuePrev');
+                    var issueNext = page.querySelector('#AtsIssueNext');
+                    if (issuePrev) issuePrev.disabled = state.issueStartIndex <= 0;
+                    if (issueNext) issueNext.disabled = state.issueStartIndex + items.length >= state.issueTotal;
+                    if (!items.length) {
+                        issueResults.innerHTML = '<div class="fieldDescription">No issues match the current filters.</div>';
+                        return;
+                    }
+
+                    issueResults.innerHTML = items.map(function (issue) {
+                        var id = issueField(issue, 'Id', 'id');
+                        var stateText = issueField(issue, 'State', 'state') || 'Open';
+                        var category = issueField(issue, 'Category', 'category') || 'Task';
+                        var severity = issueField(issue, 'Severity', 'severity') || 'Error';
+                        var title = issueField(issue, 'Title', 'title') || 'Issue';
+                        var message = issueField(issue, 'Message', 'message') || '';
+                        var target = issueField(issue, 'TargetName', 'targetName') || issueField(issue, 'DestinationPath', 'destinationPath') || issueField(issue, 'Url', 'url') || '';
+                        var action = issueField(issue, 'SuggestedAction', 'suggestedAction') || '';
+                        var nextRetry = issueField(issue, 'NextRetryUtc', 'nextRetryUtc');
+                        var occurrenceCount = issueField(issue, 'OccurrenceCount', 'occurrenceCount') || 0;
+                        var controls = stateText === 'Ignored' || stateText === 'Resolved'
+                            ? '<button is="emby-button" type="button" class="emby-button ats-button-secondary" data-issue-action="Reopen" data-issue-id="' + escapeIssueHtml(id) + '">Reopen</button>'
+                            : '<button is="emby-button" type="button" class="emby-button ats-button-secondary" data-issue-action="Ignore" data-issue-id="' + escapeIssueHtml(id) + '">Ignore</button><button is="emby-button" type="button" class="emby-button ats-button-secondary" data-issue-action="Resolve" data-issue-id="' + escapeIssueHtml(id) + '">Resolve</button>';
+                        controls += '<button is="emby-button" type="button" class="emby-button ats-danger-button" data-issue-action="Delete" data-issue-id="' + escapeIssueHtml(id) + '">Delete</button>';
+                        return '<article class="ats-cleanup-card"><div><strong>' + escapeIssueHtml(title) + '</strong><div class="fieldDescription">' +
+                            escapeIssueHtml(category) + ' / ' + escapeIssueHtml(severity) + ' / ' + escapeIssueHtml(stateText) + ' / seen ' + occurrenceCount + ' time(s)</div><div>' +
+                            escapeIssueHtml(message) + '</div>' +
+                            (target ? '<div class="fieldDescription">' + escapeIssueHtml(target) + '</div>' : '') +
+                            (nextRetry ? '<div class="fieldDescription">Next retry: ' + escapeIssueHtml(formatIssueDate(nextRetry)) + '</div>' : '') +
+                            (action ? '<div class="fieldDescription">Action: ' + escapeIssueHtml(action) + '</div>' : '') +
+                            '<div class="fieldDescription">Last seen: ' + escapeIssueHtml(formatIssueDate(issueField(issue, 'LastSeenUtc', 'lastSeenUtc'))) + '</div></div><div class="ats-actions">' +
+                            controls + '</div></article>';
+                    }).join('');
+                }
+
+                function setManagerIssueAction(issueId, action) {
+                    var request = action === 'Delete'
+                        ? apiDeleteNoContent('AnimeThemesSync/Manager/Issues/' + encodeURIComponent(issueId))
+                        : apiPost('AnimeThemesSync/Manager/Issues/' + encodeURIComponent(issueId) + '/' + action);
+                    request.then(loadManagerIssues).catch(function (err) {
+                        Dashboard.alert({ title: 'Issue Update Error', message: getErrorMessage(err) });
+                    });
                 }
 
                 function promoteOverviewMetric(id, label) {
@@ -4316,6 +4439,8 @@
                 function setActiveTab(tab) {
                     state.activeTab = tab === 'manage' || tab === 'finder' || tab === 'settings' ? tab : 'library';
                     syncLayout();
+                    if (state.activeTab === 'manage') loadManagerIssues();
+                    else stopIssuePolling();
                 }
 
                 function parsedColor(valueToParse) {
@@ -7471,12 +7596,15 @@
                                     terminalTransition = true;
                                 }
                             });
-                            state.downloadStatuses = nextStatuses;
-                            state.downloadStatusesInitialized = true;
-                            renderDownloadManager();
-                            updateThemeCardDownloadStatuses();
-                            if (terminalTransition) scheduleUiRefresh();
-                            shouldContinue = state.activeDownloads.some(function (job) { return isActiveDownloadStatus(job.status); });
+                        state.downloadStatuses = nextStatuses;
+                        state.downloadStatusesInitialized = true;
+                        renderDownloadManager();
+                        updateThemeCardDownloadStatuses();
+                        if (terminalTransition) {
+                            scheduleUiRefresh();
+                            if (state.activeTab === 'manage') loadManagerIssues();
+                        }
+                        shouldContinue = state.activeDownloads.some(function (job) { return isActiveDownloadStatus(job.status); });
                     }).catch(function (err) {
                         console.error('Failed to poll downloads', err);
                         shouldContinue = state.activeDownloads.some(function (job) { return isActiveDownloadStatus(job.status); });
@@ -8285,6 +8413,7 @@
                 page.querySelector('#AtsManagerRefresh').addEventListener('click', function () {
                     scheduleUiRefresh({ mappings: true });
                     loadCleanupFiles();
+                    loadManagerIssues();
                 });
                 page.querySelector('#AtsCleanupScan').addEventListener('click', startCleanupScan);
                 cleanupCancel.addEventListener('click', function () {
@@ -8308,6 +8437,26 @@
                 cleanupDelete.addEventListener('click', deleteCleanupSelection);
                 page.querySelector('#AtsCleanupPrev').addEventListener('click', function () { state.cleanupStartIndex = Math.max(0, state.cleanupStartIndex - state.cleanupPageSize); loadCleanupFiles(); });
                 page.querySelector('#AtsCleanupNext').addEventListener('click', function () { state.cleanupStartIndex += state.cleanupPageSize; loadCleanupFiles(); });
+                [issueStateFilter, issueCategoryFilter].forEach(function (control) {
+                    if (control) control.addEventListener('change', function () { state.issueStartIndex = 0; loadManagerIssues(); });
+                });
+                if (issueSearch) {
+                    issueSearch.addEventListener('input', function () {
+                        if (state.issueSearchTimer) clearTimeout(state.issueSearchTimer);
+                        state.issueSearchTimer = setTimeout(function () { state.issueStartIndex = 0; loadManagerIssues(); }, 250);
+                    });
+                }
+                if (issueResults) {
+                    issueResults.addEventListener('click', function (event) {
+                        var button = event.target.closest('[data-issue-action]');
+                        if (!button) return;
+                        setManagerIssueAction(button.getAttribute('data-issue-id'), button.getAttribute('data-issue-action'));
+                    });
+                }
+                var issuePrevButton = page.querySelector('#AtsIssuePrev');
+                var issueNextButton = page.querySelector('#AtsIssueNext');
+                if (issuePrevButton) issuePrevButton.addEventListener('click', function () { state.issueStartIndex = Math.max(0, state.issueStartIndex - state.issuePageSize); loadManagerIssues(); });
+                if (issueNextButton) issueNextButton.addEventListener('click', function () { state.issueStartIndex += state.issuePageSize; loadManagerIssues(); });
                 var rebuildButton = page.querySelector('#AnimeThemesBrowserRebuildCache');
                 var seasonCacheRefreshButton = page.querySelector('#AtsSeasonCacheRefresh');
                 var seasonCacheRebuildButton = page.querySelector('#AtsSeasonCacheRebuild');
@@ -8536,6 +8685,7 @@
                     } else {
                         loadItems();
                     }
+                    if (state.activeTab === 'manage') loadManagerIssues();
                     startDownloadsPolling();
                 });
                 page.addEventListener('pagehide', function () {
@@ -8549,6 +8699,7 @@
                     state.uiRefreshTimer = null;
                     if (state.cleanupTimer) clearTimeout(state.cleanupTimer);
                     state.cleanupTimer = null;
+                    stopIssuePolling();
                     hideDetailLoading();
                     teardownThemeObserver();
                 });

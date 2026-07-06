@@ -314,7 +314,7 @@ public sealed class AnimeThemesDataStoreTests
             });
 
             var json = File.ReadAllText(store.DatabasePath);
-            Assert.Contains("\"SchemaVersion\":6", json, StringComparison.Ordinal);
+            Assert.Contains("\"SchemaVersion\":7", json, StringComparison.Ordinal);
             Assert.Contains("\"LogicalItemId\":\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"", json, StringComparison.Ordinal);
             Assert.Contains("\"LogicalItemId\":\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\"", json, StringComparison.Ordinal);
             Assert.Contains("\"OutputRootItemId\":\"cccccccc-cccc-cccc-cccc-cccccccccccc\"", json, StringComparison.Ordinal);
@@ -611,7 +611,11 @@ public sealed class AnimeThemesDataStoreTests
 
             store.RemoveDownloadFailure(url, path);
             Assert.False(store.ShouldDeferDownload(url, path, now, out _));
-            Assert.Contains("\"SchemaVersion\":6", File.ReadAllText(store.DatabasePath), StringComparison.Ordinal);
+            Assert.Contains("\"SchemaVersion\":7", File.ReadAllText(store.DatabasePath), StringComparison.Ordinal);
+            var issuePage = store.QueryManagerIssues(0, 80, "Resolved", "Download", null, null);
+            var issue = Assert.Single(issuePage.Items);
+            Assert.Equal(ManagerIssueStates.Resolved, issue.State);
+            Assert.Equal(ManagerIssueCategories.Download, issue.Category);
         }
         finally
         {

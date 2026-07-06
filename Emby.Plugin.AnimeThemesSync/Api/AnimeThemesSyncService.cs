@@ -106,6 +106,51 @@ public class GetAnimeThemesStorage : IReturn<AnimeThemesStorageStatus>
 {
 }
 
+[Route("/AnimeThemesSync/Manager/Issues", "GET", Summary = "Gets persisted AnimeThemes Sync issues.")]
+public class GetAnimeThemesManagerIssues : IReturn<ManagerIssuePage>
+{
+    public int? StartIndex { get; set; }
+
+    public int? Limit { get; set; }
+
+    public string? State { get; set; }
+
+    public string? Category { get; set; }
+
+    public string? Severity { get; set; }
+
+    public string? SearchTerm { get; set; }
+}
+
+[Route("/AnimeThemesSync/Manager/Issues/Summary", "GET", Summary = "Gets AnimeThemes Sync issue counts.")]
+public class GetAnimeThemesManagerIssueSummary : IReturn<ManagerIssueSummary>
+{
+}
+
+[Route("/AnimeThemesSync/Manager/Issues/{IssueId}/Ignore", "POST", Summary = "Ignores a persisted AnimeThemes Sync issue.")]
+public class IgnoreAnimeThemesManagerIssue : IReturnVoid
+{
+    public string IssueId { get; set; } = string.Empty;
+}
+
+[Route("/AnimeThemesSync/Manager/Issues/{IssueId}/Reopen", "POST", Summary = "Reopens a persisted AnimeThemes Sync issue.")]
+public class ReopenAnimeThemesManagerIssue : IReturnVoid
+{
+    public string IssueId { get; set; } = string.Empty;
+}
+
+[Route("/AnimeThemesSync/Manager/Issues/{IssueId}/Resolve", "POST", Summary = "Resolves a persisted AnimeThemes Sync issue.")]
+public class ResolveAnimeThemesManagerIssue : IReturnVoid
+{
+    public string IssueId { get; set; } = string.Empty;
+}
+
+[Route("/AnimeThemesSync/Manager/Issues/{IssueId}", "DELETE", Summary = "Deletes a persisted AnimeThemes Sync issue.")]
+public class DeleteAnimeThemesManagerIssue : IReturnVoid
+{
+    public string IssueId { get; set; } = string.Empty;
+}
+
 [Route("/AnimeThemesSync/BrowserCache/Rebuild", "POST", Summary = "Starts a Browser cache rebuild.")]
 public class RebuildAnimeThemesBrowserCache : IReturn<AnimeThemesMaintenanceResult>
 {
@@ -440,6 +485,56 @@ public class AnimeThemesSyncService : IService, IRequiresRequest
     public object Get(GetAnimeThemesStorage request)
     {
         return _themeDownloader.GetStorageStatus();
+    }
+
+    public object Get(GetAnimeThemesManagerIssues request)
+    {
+        return _themeDownloader.GetManagerIssues(request.StartIndex, request.Limit, request.State, request.Category, request.Severity, request.SearchTerm);
+    }
+
+    public object Get(GetAnimeThemesManagerIssueSummary request)
+    {
+        return _themeDownloader.GetManagerIssueSummary();
+    }
+
+    public void Post(IgnoreAnimeThemesManagerIssue request)
+    {
+        if (!_themeDownloader.SetManagerIssueState(request.IssueId, ManagerIssueStates.Ignored))
+        {
+            throw new ArgumentException("The requested Manager issue was not found.", nameof(request));
+        }
+
+        Request.Response.StatusCode = 204;
+    }
+
+    public void Post(ReopenAnimeThemesManagerIssue request)
+    {
+        if (!_themeDownloader.SetManagerIssueState(request.IssueId, ManagerIssueStates.Open))
+        {
+            throw new ArgumentException("The requested Manager issue was not found.", nameof(request));
+        }
+
+        Request.Response.StatusCode = 204;
+    }
+
+    public void Post(ResolveAnimeThemesManagerIssue request)
+    {
+        if (!_themeDownloader.SetManagerIssueState(request.IssueId, ManagerIssueStates.Resolved))
+        {
+            throw new ArgumentException("The requested Manager issue was not found.", nameof(request));
+        }
+
+        Request.Response.StatusCode = 204;
+    }
+
+    public void Delete(DeleteAnimeThemesManagerIssue request)
+    {
+        if (!_themeDownloader.DeleteManagerIssue(request.IssueId))
+        {
+            throw new ArgumentException("The requested Manager issue was not found.", nameof(request));
+        }
+
+        Request.Response.StatusCode = 204;
     }
 
     public object Post(RebuildAnimeThemesBrowserCache request)

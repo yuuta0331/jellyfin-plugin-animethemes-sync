@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using AnimeThemesSync.Shared.Interfaces;
 using AnimeThemesSync.Shared.Models;
@@ -16,10 +18,11 @@ namespace AnimeThemesSync.Shared.Services;
 /// </summary>
 public sealed class AnimeThemesDataStore
 {
-    private const int CurrentSchemaVersion = 6;
+    private const int CurrentSchemaVersion = 7;
     private const int DefaultLimit = 80;
     private const int MaxLimit = 100;
     private const int QueryResultMemoLimit = 50;
+    private static readonly char[] IssueFilterSeparators = [',', ';'];
     private static readonly StringComparison DownloadPathComparison =
         Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
@@ -614,6 +617,29 @@ public sealed class AnimeThemesDataStore
                 NextRetryUtc = FormatDate(nextRetryUtc),
                 UpdatedUtc = FormatDate(now)
             });
+            UpsertManagerIssueCore(
+                document,
+                new ManagerIssueUpsert
+                {
+                    Category = ManagerIssueCategories.Download,
+                    Severity = string.Equals(status, DownloadFailureStatuses.PermanentFailed, StringComparison.OrdinalIgnoreCase)
+                        ? ManagerIssueSeverities.Error
+                        : ManagerIssueSeverities.Warning,
+                    State = nextRetryUtc > now ? ManagerIssueStates.Deferred : ManagerIssueStates.Open,
+                    Title = string.Equals(status, DownloadFailureStatuses.PermanentFailed, StringComparison.OrdinalIgnoreCase)
+                        ? "Download failed permanently"
+                        : "Download deferred after a transient failure",
+                    Message = lastError,
+                    Operation = "Download",
+                    Url = url,
+                    DestinationPath = normalizedPath,
+                    HttpStatusCode = lastStatusCode,
+                    Stage = "MediaTransfer",
+                    SuggestedAction = "Review the URL or run synchronization again after the retry time.",
+                    FingerprintSeed = "download|" + url + "|" + normalizedPath,
+                    NextRetryUtc = nextRetryUtc,
+                },
+                now);
             SaveDocument(document);
         }
     }
@@ -630,8 +656,111 @@ public sealed class AnimeThemesDataStore
                 string.Equals(item.DestinationPath, normalizedPath, DownloadPathComparison));
             if (removed > 0)
             {
+                ResolveManagerIssueCore(document, BuildManagerIssueFingerprint("download|" + url + "|" + normalizedPath), DateTimeOffset.UtcNow);
                 SaveDocument(document);
             }
+        }
+    }
+
+    public ManagerIssuePage QueryManagerIssues(
+        int? startIndex,
+        int? limit,
+        string? state,
+        string? category,
+        string? severity,
+        string? searchTerm)
+    {
+        lock (State)
+        {
+            var document = LoadDocument();
+            EnsureDownloadFailuresHaveIssues(document);
+            PruneManagerIssues(document, DateTimeOffset.UtcNow);
+
+            var normalizedStart = Math.Max(0, startIndex ?? 0);
+            var normalizedLimit = Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit);
+            var issues = document.ManagerIssues
+                .Where(i => IsCurrentServer(i.ServerKind))
+                .Where(i => MatchesIssueFilter(i, state, category, severity, searchTerm))
+                .OrderBy(i => GetIssueStateOrder(i.State))
+                .ThenByDescending(i => ParseDate(i.LastSeenUtc) ?? DateTimeOffset.MinValue)
+                .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var allCurrent = document.ManagerIssues.Where(i => IsCurrentServer(i.ServerKind)).ToList();
+            SaveDocument(document);
+            return new ManagerIssuePage(
+                issues.Skip(normalizedStart).Take(normalizedLimit).Select(ToManagerIssueRecord).ToList(),
+                issues.Count,
+                normalizedStart,
+                normalizedLimit,
+                BuildManagerIssueSummary(allCurrent));
+        }
+    }
+
+    public ManagerIssueSummary GetManagerIssueSummary()
+    {
+        lock (State)
+        {
+            var document = LoadDocument();
+            EnsureDownloadFailuresHaveIssues(document);
+            PruneManagerIssues(document, DateTimeOffset.UtcNow);
+            SaveDocument(document);
+            return BuildManagerIssueSummary(document.ManagerIssues.Where(i => IsCurrentServer(i.ServerKind)).ToList());
+        }
+    }
+
+    public ManagerIssueRecord RecordManagerIssue(ManagerIssueUpsert issue)
+    {
+        lock (State)
+        {
+            var document = LoadDocument();
+            var stored = UpsertManagerIssueCore(document, issue, DateTimeOffset.UtcNow);
+            SaveDocument(document);
+            return ToManagerIssueRecord(stored);
+        }
+    }
+
+    public bool SetManagerIssueState(string issueId, string state)
+    {
+        if (!IsValidManagerIssueState(state))
+        {
+            return false;
+        }
+
+        lock (State)
+        {
+            var document = LoadDocument();
+            var issue = document.ManagerIssues.FirstOrDefault(i => IsCurrentServer(i.ServerKind) && string.Equals(i.Id, issueId, StringComparison.OrdinalIgnoreCase));
+            if (issue == null)
+            {
+                return false;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            issue.State = state;
+            issue.ResolvedAtUtc = string.Equals(state, ManagerIssueStates.Resolved, StringComparison.OrdinalIgnoreCase) ||
+                                  string.Equals(state, ManagerIssueStates.Ignored, StringComparison.OrdinalIgnoreCase)
+                ? FormatDate(now)
+                : null;
+            issue.UpdatedAtUtc = FormatDate(now);
+            SaveDocument(document);
+            return true;
+        }
+    }
+
+    public bool DeleteManagerIssue(string issueId)
+    {
+        lock (State)
+        {
+            var document = LoadDocument();
+            var removed = document.ManagerIssues.RemoveAll(i => IsCurrentServer(i.ServerKind) && string.Equals(i.Id, issueId, StringComparison.OrdinalIgnoreCase));
+            if (removed == 0)
+            {
+                return false;
+            }
+
+            SaveDocument(document);
+            return true;
         }
     }
 
@@ -662,6 +791,7 @@ public sealed class AnimeThemesDataStore
             State.Cache.ServerCacheState ??= [];
             State.Cache.SeasonMetadataStates ??= [];
             State.Cache.DownloadFailures ??= [];
+            State.Cache.ManagerIssues ??= [];
             foreach (var seasonMetadataState in State.Cache.SeasonMetadataStates)
             {
                 seasonMetadataState.ManagedTags ??= new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -706,6 +836,289 @@ public sealed class AnimeThemesDataStore
         State.Cache = new CacheDocument();
         SaveDocument(State.Cache);
         return State.Cache;
+    }
+
+    private void EnsureDownloadFailuresHaveIssues(CacheDocument document)
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var failure in document.DownloadFailures.Where(i => IsCurrentServer(i.ServerKind)))
+        {
+            UpsertManagerIssueCore(
+                document,
+                new ManagerIssueUpsert
+                {
+                    Category = ManagerIssueCategories.Download,
+                    Severity = string.Equals(failure.Status, DownloadFailureStatuses.PermanentFailed, StringComparison.OrdinalIgnoreCase)
+                        ? ManagerIssueSeverities.Error
+                        : ManagerIssueSeverities.Warning,
+                    State = ParseDate(failure.NextRetryUtc) is DateTimeOffset nextRetry && nextRetry > now
+                        ? ManagerIssueStates.Deferred
+                        : ManagerIssueStates.Open,
+                    Title = string.Equals(failure.Status, DownloadFailureStatuses.PermanentFailed, StringComparison.OrdinalIgnoreCase)
+                        ? "Download failed permanently"
+                        : "Download deferred after a transient failure",
+                    Message = failure.LastError,
+                    Operation = "Download",
+                    Url = failure.Url,
+                    DestinationPath = failure.DestinationPath,
+                    HttpStatusCode = failure.LastStatusCode,
+                    Stage = "MediaTransfer",
+                    SuggestedAction = "Review the URL or run synchronization again after the retry time.",
+                    FingerprintSeed = "download|" + failure.Url + "|" + failure.DestinationPath,
+                    NextRetryUtc = ParseDate(failure.NextRetryUtc),
+                },
+                ParseDate(failure.UpdatedUtc) ?? now,
+                countOccurrence: false);
+        }
+    }
+
+    private StoredManagerIssue UpsertManagerIssueCore(CacheDocument document, ManagerIssueUpsert issue, DateTimeOffset now, bool countOccurrence = true)
+    {
+        var fingerprint = BuildManagerIssueFingerprint(BuildManagerIssueFingerprintSeed(issue));
+        var existing = document.ManagerIssues.FirstOrDefault(i =>
+            IsCurrentServer(i.ServerKind) &&
+            string.Equals(i.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase));
+        if (existing == null)
+        {
+            existing = new StoredManagerIssue
+            {
+                ServerKind = ServerKind,
+                Id = fingerprint,
+                Fingerprint = fingerprint,
+                FirstSeenUtc = FormatDate(now),
+                OccurrenceCount = countOccurrence ? 0 : 1,
+            };
+            document.ManagerIssues.Add(existing);
+        }
+
+        existing.Category = ClampText(NormalizeIssueValue(issue.Category, ManagerIssueCategories.Task), 80);
+        existing.Severity = ClampText(NormalizeIssueValue(issue.Severity, ManagerIssueSeverities.Error), 40);
+        existing.State = ClampText(NormalizeIssueValue(issue.State, ManagerIssueStates.Open), 40);
+        existing.Title = ClampText(issue.Title, 200);
+        existing.Message = ClampText(issue.Message, 2048);
+        existing.TargetName = ClampNullableText(issue.TargetName, 300);
+        existing.ItemId = ClampNullableText(issue.ItemId, 80);
+        existing.SeriesItemId = ClampNullableText(issue.SeriesItemId, 80);
+        existing.SeasonItemId = ClampNullableText(issue.SeasonItemId, 80);
+        existing.RowId = ClampNullableText(issue.RowId, 160);
+        existing.TaskName = ClampNullableText(issue.TaskName, 160);
+        existing.Operation = ClampNullableText(issue.Operation, 160);
+        existing.Url = ClampNullableText(issue.Url, 2048);
+        existing.DestinationPath = ClampNullableText(issue.DestinationPath, 1024);
+        existing.HttpStatusCode = issue.HttpStatusCode;
+        existing.Stage = ClampNullableText(issue.Stage, 160);
+        existing.SuggestedAction = ClampNullableText(issue.SuggestedAction, 500);
+        if (countOccurrence)
+        {
+            existing.OccurrenceCount++;
+        }
+
+        existing.LastSeenUtc = FormatDate(now);
+        existing.NextRetryUtc = issue.NextRetryUtc.HasValue ? FormatDate(issue.NextRetryUtc.Value) : null;
+        existing.ResolvedAtUtc = null;
+        existing.UpdatedAtUtc = FormatDate(now);
+        return existing;
+    }
+
+    private bool ResolveManagerIssueCore(CacheDocument document, string fingerprint, DateTimeOffset now)
+    {
+        var issue = document.ManagerIssues.FirstOrDefault(i =>
+            IsCurrentServer(i.ServerKind) &&
+            string.Equals(i.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase));
+        if (issue == null)
+        {
+            return false;
+        }
+
+        issue.State = ManagerIssueStates.Resolved;
+        issue.ResolvedAtUtc = FormatDate(now);
+        issue.UpdatedAtUtc = FormatDate(now);
+        return true;
+    }
+
+    private static string BuildManagerIssueFingerprintSeed(ManagerIssueUpsert issue)
+    {
+        if (!string.IsNullOrWhiteSpace(issue.FingerprintSeed))
+        {
+            return issue.FingerprintSeed.Trim();
+        }
+
+        return string.Join(
+            "|",
+            issue.Category,
+            issue.Operation,
+            issue.TaskName,
+            issue.ItemId,
+            issue.SeriesItemId,
+            issue.SeasonItemId,
+            issue.RowId,
+            issue.Url,
+            issue.DestinationPath,
+            issue.Stage,
+            issue.Message);
+    }
+
+    private static string BuildManagerIssueFingerprint(string seed)
+    {
+#if NETSTANDARD2_1
+        using var sha = SHA256.Create();
+        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(seed));
+#else
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(seed));
+#endif
+        var builder = new StringBuilder(bytes.Length * 2);
+        foreach (var b in bytes)
+        {
+            builder.Append(b.ToString("x2", CultureInfo.InvariantCulture));
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool MatchesIssueFilter(StoredManagerIssue issue, string? state, string? category, string? severity, string? searchTerm)
+    {
+        if (!MatchesOptionalFilter(issue.State, state))
+        {
+            return false;
+        }
+
+        if (!MatchesOptionalFilter(issue.Category, category))
+        {
+            return false;
+        }
+
+        if (!MatchesOptionalFilter(issue.Severity, severity))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var term = searchTerm.Trim();
+            if (!Contains(issue.Title, term) &&
+                !Contains(issue.Message, term) &&
+                !Contains(issue.TargetName, term) &&
+                !Contains(issue.Url, term) &&
+                !Contains(issue.DestinationPath, term) &&
+                !Contains(issue.TaskName, term) &&
+                !Contains(issue.Operation, term))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool MatchesOptionalFilter(string? value, string? filter)
+    {
+        if (string.IsNullOrWhiteSpace(filter) || string.Equals(filter, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return filter
+            .Split(IssueFilterSeparators, StringSplitOptions.RemoveEmptyEntries)
+            .Select(i => i.Trim())
+            .Any(i => string.Equals(value, i, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static int GetIssueStateOrder(string? state)
+    {
+        return state switch
+        {
+            ManagerIssueStates.Open => 0,
+            ManagerIssueStates.Deferred => 1,
+            ManagerIssueStates.Ignored => 2,
+            ManagerIssueStates.Resolved => 3,
+            _ => 4,
+        };
+    }
+
+    private static ManagerIssueRecord ToManagerIssueRecord(StoredManagerIssue issue)
+    {
+        return new ManagerIssueRecord(
+            issue.Id,
+            issue.Fingerprint,
+            issue.Category,
+            issue.Severity,
+            issue.State,
+            issue.Title,
+            issue.Message,
+            issue.TargetName,
+            issue.ItemId,
+            issue.SeriesItemId,
+            issue.SeasonItemId,
+            issue.RowId,
+            issue.TaskName,
+            issue.Operation,
+            issue.Url,
+            issue.DestinationPath,
+            issue.HttpStatusCode,
+            issue.Stage,
+            issue.SuggestedAction,
+            issue.OccurrenceCount,
+            issue.FirstSeenUtc,
+            issue.LastSeenUtc,
+            issue.NextRetryUtc,
+            issue.ResolvedAtUtc);
+    }
+
+    private static ManagerIssueSummary BuildManagerIssueSummary(IReadOnlyCollection<StoredManagerIssue> issues)
+    {
+        return new ManagerIssueSummary(
+            issues.Count(i => string.Equals(i.State, ManagerIssueStates.Open, StringComparison.OrdinalIgnoreCase)),
+            issues.Count(i => string.Equals(i.State, ManagerIssueStates.Deferred, StringComparison.OrdinalIgnoreCase)),
+            issues.Count(i => string.Equals(i.State, ManagerIssueStates.Ignored, StringComparison.OrdinalIgnoreCase)),
+            issues.Count(i => string.Equals(i.State, ManagerIssueStates.Resolved, StringComparison.OrdinalIgnoreCase)),
+            issues.Count(i => string.Equals(i.Severity, ManagerIssueSeverities.Error, StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(i.Severity, ManagerIssueSeverities.Critical, StringComparison.OrdinalIgnoreCase)),
+            issues.Count(i => string.Equals(i.Severity, ManagerIssueSeverities.Warning, StringComparison.OrdinalIgnoreCase)),
+            issues.Count(i => string.Equals(i.Category, ManagerIssueCategories.Download, StringComparison.OrdinalIgnoreCase)),
+            issues.Count(i => string.Equals(i.Category, ManagerIssueCategories.Mapping, StringComparison.OrdinalIgnoreCase)),
+            issues.Count(i => string.Equals(i.Category, ManagerIssueCategories.SeasonAutomation, StringComparison.OrdinalIgnoreCase)),
+            issues.Count(i => string.Equals(i.Category, ManagerIssueCategories.Task, StringComparison.OrdinalIgnoreCase)),
+            issues.Count(i => string.Equals(i.Category, ManagerIssueCategories.Import, StringComparison.OrdinalIgnoreCase)),
+            issues.Count(i => string.Equals(i.Category, ManagerIssueCategories.Maintenance, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static void PruneManagerIssues(CacheDocument document, DateTimeOffset now)
+    {
+        var cutoff = now.AddDays(-30);
+        document.ManagerIssues.RemoveAll(i =>
+            (string.Equals(i.State, ManagerIssueStates.Resolved, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(i.State, ManagerIssueStates.Ignored, StringComparison.OrdinalIgnoreCase)) &&
+            ParseDate(i.ResolvedAtUtc) is DateTimeOffset resolved &&
+            resolved < cutoff);
+    }
+
+    private static bool IsValidManagerIssueState(string state)
+    {
+        return string.Equals(state, ManagerIssueStates.Open, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(state, ManagerIssueStates.Deferred, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(state, ManagerIssueStates.Ignored, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(state, ManagerIssueStates.Resolved, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeIssueValue(string? value, string fallback)
+    {
+        return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+    }
+
+    private static string ClampText(string? value, int maxLength)
+    {
+        var text = value?.Trim() ?? string.Empty;
+        return text.Length <= maxLength ? text : text[..maxLength];
+    }
+
+    private static string? ClampNullableText(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return ClampText(value, maxLength);
     }
 
     private void SaveDocument(CacheDocument document)
@@ -1102,6 +1515,63 @@ public sealed class AnimeThemesDataStore
         public List<SeasonMetadataState> SeasonMetadataStates { get; set; } = [];
 
         public List<StoredDownloadFailure> DownloadFailures { get; set; } = [];
+
+        public List<StoredManagerIssue> ManagerIssues { get; set; } = [];
+    }
+
+    private sealed class StoredManagerIssue
+    {
+        public string ServerKind { get; set; } = string.Empty;
+
+        public string Id { get; set; } = string.Empty;
+
+        public string Fingerprint { get; set; } = string.Empty;
+
+        public string Category { get; set; } = ManagerIssueCategories.Task;
+
+        public string Severity { get; set; } = ManagerIssueSeverities.Error;
+
+        public string State { get; set; } = ManagerIssueStates.Open;
+
+        public string Title { get; set; } = string.Empty;
+
+        public string Message { get; set; } = string.Empty;
+
+        public string? TargetName { get; set; }
+
+        public string? ItemId { get; set; }
+
+        public string? SeriesItemId { get; set; }
+
+        public string? SeasonItemId { get; set; }
+
+        public string? RowId { get; set; }
+
+        public string? TaskName { get; set; }
+
+        public string? Operation { get; set; }
+
+        public string? Url { get; set; }
+
+        public string? DestinationPath { get; set; }
+
+        public int? HttpStatusCode { get; set; }
+
+        public string? Stage { get; set; }
+
+        public string? SuggestedAction { get; set; }
+
+        public int OccurrenceCount { get; set; }
+
+        public string FirstSeenUtc { get; set; } = string.Empty;
+
+        public string LastSeenUtc { get; set; } = string.Empty;
+
+        public string? NextRetryUtc { get; set; }
+
+        public string? ResolvedAtUtc { get; set; }
+
+        public string UpdatedAtUtc { get; set; } = string.Empty;
     }
 
     private sealed class StoredDownloadFailure

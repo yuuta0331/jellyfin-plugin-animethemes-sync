@@ -1408,7 +1408,9 @@ public class ThemeFilePlannerTests
         foreach (var script in scripts)
         {
             Assert.Contains("function scheduleUiRefresh(options)", script, StringComparison.Ordinal);
-            Assert.Contains("if (terminalTransition) scheduleUiRefresh();", script, StringComparison.Ordinal);
+            Assert.Contains("if (terminalTransition)", script, StringComparison.Ordinal);
+            Assert.Contains("scheduleUiRefresh();", script, StringComparison.Ordinal);
+            Assert.Contains("if (state.activeTab === 'manage') loadManagerIssues();", script, StringComparison.Ordinal);
             Assert.Contains("token !== state.browserRequestToken", script, StringComparison.Ordinal);
             Assert.Contains("loadItems(false, { silent: true, preserveCount: true })", script, StringComparison.Ordinal);
             Assert.Contains("normalizeApiError", script, StringComparison.Ordinal);

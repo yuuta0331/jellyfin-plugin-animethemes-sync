@@ -84,6 +84,58 @@ public sealed class AnimeThemesSyncController : ControllerBase
         return Ok(_themeDownloader.GetStorageStatus());
     }
 
+    [HttpGet("Manager/Issues")]
+    [ProducesResponseType(typeof(ManagerIssuePage), StatusCodes.Status200OK)]
+    public ActionResult<ManagerIssuePage> GetManagerIssues(
+        [FromQuery] int? startIndex,
+        [FromQuery] int? limit,
+        [FromQuery] string? state,
+        [FromQuery] string? category,
+        [FromQuery] string? severity,
+        [FromQuery] string? searchTerm)
+    {
+        return Ok(_themeDownloader.GetManagerIssues(startIndex, limit, state, category, severity, searchTerm));
+    }
+
+    [HttpGet("Manager/Issues/Summary")]
+    [ProducesResponseType(typeof(ManagerIssueSummary), StatusCodes.Status200OK)]
+    public ActionResult<ManagerIssueSummary> GetManagerIssueSummary()
+    {
+        return Ok(_themeDownloader.GetManagerIssueSummary());
+    }
+
+    [HttpPost("Manager/Issues/{issueId}/Ignore")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult IgnoreManagerIssue(string issueId)
+    {
+        return _themeDownloader.SetManagerIssueState(issueId, ManagerIssueStates.Ignored) ? NoContent() : NotFound();
+    }
+
+    [HttpPost("Manager/Issues/{issueId}/Reopen")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult ReopenManagerIssue(string issueId)
+    {
+        return _themeDownloader.SetManagerIssueState(issueId, ManagerIssueStates.Open) ? NoContent() : NotFound();
+    }
+
+    [HttpPost("Manager/Issues/{issueId}/Resolve")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult ResolveManagerIssue(string issueId)
+    {
+        return _themeDownloader.SetManagerIssueState(issueId, ManagerIssueStates.Resolved) ? NoContent() : NotFound();
+    }
+
+    [HttpDelete("Manager/Issues/{issueId}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult DeleteManagerIssue(string issueId)
+    {
+        return _themeDownloader.DeleteManagerIssue(issueId) ? NoContent() : NotFound();
+    }
+
     [HttpPost("BrowserCache/Rebuild")]
     [ProducesResponseType(typeof(AnimeThemesMaintenanceResult), StatusCodes.Status200OK)]
     public ActionResult<AnimeThemesMaintenanceResult> RebuildBrowserCache()
