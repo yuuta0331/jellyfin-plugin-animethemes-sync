@@ -17,34 +17,38 @@ category: "Anime"
 owner: "CassisCloud"
 artifacts:
 - "Jellyfin.Plugin.AnimeThemesSync.dll"
-changelog: >
-  Manager
-  Added an Issues panel that tracks persistent failures and skipped
-  work from downloads, imports, mapping, season automation, and
-  Manager tasks.
+changelog: |
+  ## Highlights
 
-  Season Collections
-  Automatically creates broadcast-season collections with locked
-  metadata and generated images (poster, thumb, and backdrop).
+  ### Manager
 
-  Season Finder
-  Added a season number filter.
-  Added broadcast season preview on the detail page before full matching.
+  - Added an **Issues** panel that tracks persistent failures and skipped work from downloads, imports, mapping, season automation, and Manager tasks.
 
-  Season Tags
-  Added option to apply season tags to Series, each Season, or both.
+  ### Season Collections
 
-  Library Browser
-  Added broadcast season filter dropdown.
-  Added Open Series Page link from the detail page.
-  Added anime year display on season cards and detail headers.
-  Redesigned filter controls as a mobile-friendly Filter & Sort panel.
+  - Automatically creates broadcast-season collections with locked metadata and generated **poster, thumb, and backdrop** images.
 
-  Review and clean local media
-  Added Scan local media to review and delete theme files that no longer
-  match the current download settings.
+  ### Season Finder
 
-  Performance
-  Library changes now update the cache instantly instead of rebuilding
-  the entire library.
-  Improved cache reliability for download queue and scheduled tasks.
+  - Added a **season number filter**.
+  - Added a **broadcast season preview** on the detail page before full matching.
+
+  ### Season Tags
+
+  - Added an option to apply season tags to **Series**, each **Season**, or both.
+
+  ### Library Browser
+
+  - Added a **broadcast season filter** dropdown.
+  - Added an **Open Series Page** link from the detail page.
+  - Added the anime year to season cards and detail headers.
+  - Redesigned filter controls as a mobile-friendly **Filter & Sort** panel.
+
+  ### Review and clean local media
+
+  - Added **Scan local media** to review and delete theme files that no longer match the current download settings.
+
+  ### Performance
+
+  - Library changes now update the cache instantly instead of rebuilding the entire library.
+  - Improved cache reliability for the download queue and scheduled tasks.
