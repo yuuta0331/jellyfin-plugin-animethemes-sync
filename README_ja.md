@@ -1,5 +1,9 @@
 # AnimeThemes Sync Plugin (Jellyfin / Emby)
 
+<p align="center">
+  <img src="resource/images/jellyfin-plugin-animethemes-sync.jpeg" alt="AnimeThemes Sync Logo" width="600" />
+</p>
+
 <p>
 <a href="https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync/actions/workflows/build.yaml">
 <img alt="GitHub Workflow Status" src="https://img.shields.io/github/actions/workflow/status/CassisCloud/jellyfin-plugin-animethemes-sync/build.yaml?branch=main&logo=github">
@@ -28,6 +32,22 @@
 
 [English README is here](README.md)
 
+---
+
+## スクリーンショット
+
+<p align="center">
+  <img src="resource/images/01-library-browser.png" alt="AnimeThemes Browser" width="800" />
+  <br/><sup><em>AnimeThemes Browser — ライブラリの検索・フィルタ・管理</em></sup>
+</p>
+
+<p align="center">
+  <img src="resource/images/02-library-detail.png" alt="テーマ詳細" width="800" />
+  <br/><sup><em>シーズンごとのテーマ詳細 — OP/EDのプレビュー、再生、個別ダウンロード</em></sup>
+</p>
+
+---
+
 ## 主な機能
 
 - **自動マッチング** — AniList / MyAnimeList IDを使ってシリーズ・シーズン・映画をAnimeThemesの作品へ解決。外部IDによる手動指定にも対応
@@ -37,6 +57,7 @@
 - **Season Finder** — 未一致シーズンの確認、タイトル+年でのAnimeThemes検索、候補のプレビュー、シーズンマッピングの保存をJSON編集なしで実行。マッピングのエクスポート/インポートに対応
 - **放送シーズン自動化** — シーズンタグ（表記は`{Season} {Year}`形式でローカライズ・カスタマイズ可能）と、メタデータロック・ポスター/サムネイル/背景の自動生成に対応した放送シーズンコレクション
 - **メンテナンス機能** — プラグイン作成ファイルのクリーンアップスキャナ、Browser/プロバイダキャッシュの管理、TTL設定付きの永続キャッシュ
+- **Manager Issues** — ダウンロード、インポート、マッピング、シーズン自動化、Managerタスクで永続的に失敗またはスキップされた作業を追跡し、フィルタとアクションを提供
 
 ## インストール
 
@@ -80,17 +101,22 @@
 
 ## Season Finder とマッピング
 
+<p align="center">
+  <img src="resource/images/03-season-finder.png" alt="Season Finder" width="800" />
+  <br/><sup><em>Season Finder — 未一致シーズンをAnimeThemesの作品にマッピング</em></sup>
+</p>
+
 複数期が1つのシリーズにまとまっている場合、プラグインはAniListのrelationsを辿って各シーズンをAnimeThemesの別作品へ自動割り当てします。未一致・誤一致のシーズンは `AnimeThemes Browser` → `Season Finder` で修正できます。
 
 1. `Unmatched` / `Manual` / `Auto` / `All` タブからシーズンを選択（シーズン番号や検索語で絞り込み可能）
 2. タイトルと任意の年でAnimeThemesを検索し、候補のOP/EDをプレビュー
 3. `Save mapping` または `Save & Download` を実行
 
-マッピングはプラグインのSQLiteデータベース（`animethemes-sync.db`）に保存され、MappingsコントロールからJSONでエクスポート/インポートできます。プラグイン設定内の旧 `SeasonThemeMappings` は初回に自動で取り込まれます。一覧はタブ移動後も読込件数・選択・スクロール位置を復元します。
+マッピングはプラグインのSQLiteデータベース（`animethemes-sync.db`）に保存され、MappingsコントロールからJSONでエクスポート/インポートできます。プラグイン設定内の旧 `SeasonThemeMappings` は初回に自動で取り込まれます。
 
 ## 放送シーズンのタグとコレクション
 
-- **タグ**: 放送シーズンタグ（例: `Spring 2024`）をシリーズまたはシーズンに付与します。季節の表記と `{Season} {Year}` 形式はカスタマイズ・ローカライズ可能です。タグ機能を無効化する際は、プラグインが付与したタグを削除するかどうかを選べるクリーンアップダイアログが表示されます。
+- **タグ**: 放送シーズンタグ（例: `Spring 2024`）を付与します。季節の表記と `{Season} {Year}` 形式はカスタマイズ・ローカライズ可能です。付与先は Series / 各 Season / 両方 から選択できます。タグ機能を無効化する際は、プラグインが付与したタグを削除するかどうかを選べるクリーンアップダイアログが表示されます。
 - **コレクション**: `Create broadcast-season collections` で放送シーズンごとのコレクションを作成します。管理対象はプラグインが作成したコレクションのみで、同名のため再利用しただけのコレクションには触れません。機能を無効化する際は、管理コレクションを維持するか整理するかを選択カードで選べます。
   - `Lock collection metadata`（既定: 有効）は他のメタデータプロバイダーによる名前・画像の上書きを防ぎます。ユーザー自身が設定したロックは解除されません。解除するにはオプションを無効にしてSyncを実行してください。
   - `Generate collection images`（既定: 有効）はメンバーのポスターを合成してポスター（最大4枚）、16:9サムネイル、16:9背景グリッドを生成し、メンバー変更時に再生成します。手動で差し替えた画像は検知され、以後そのスロットには触れません。オーバーレイ・キャンバスの色/不透明度は設定できます。

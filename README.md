@@ -1,5 +1,9 @@
 # AnimeThemes Sync Plugin (Jellyfin / Emby)
 
+<p align="center">
+  <img src="resource/images/jellyfin-plugin-animethemes-sync.jpeg" alt="AnimeThemes Sync Logo" width="600" />
+</p>
+
 <p>
 <a href="https://github.com/CassisCloud/jellyfin-plugin-animethemes-sync/actions/workflows/build.yaml">
 <img alt="GitHub Workflow Status" src="https://img.shields.io/github/actions/workflow/status/CassisCloud/jellyfin-plugin-animethemes-sync/build.yaml?branch=main&logo=github">
@@ -28,6 +32,22 @@ Brings [AnimeThemes.moe](https://animethemes.moe/) OP/ED themes to your anime li
 
 [日本語版 README はこちら](README_ja.md)
 
+---
+
+## Screenshots
+
+<p align="center">
+  <img src="resource/images/01-library-browser.png" alt="AnimeThemes Browser" width="800" />
+  <br/><sup><em>AnimeThemes Browser — browse, search, filter, and manage your anime library</em></sup>
+</p>
+
+<p align="center">
+  <img src="resource/images/02-library-detail.png" alt="Theme Details" width="800" />
+  <br/><sup><em>Theme details per season — preview, play, download individual OP/ED themes</em></sup>
+</p>
+
+---
+
 ## Features
 
 - **Automatic matching** — resolves series, seasons, and movies to AnimeThemes entries via AniList / MyAnimeList IDs, with manual override through external IDs
@@ -37,6 +57,7 @@ Brings [AnimeThemes.moe](https://animethemes.moe/) OP/ED themes to your anime li
 - **Season Finder** — review unmatched seasons, search AnimeThemes by title and year, preview candidates, and save per-season mappings without editing JSON; mappings can be exported/imported
 - **Broadcast-season automation** — season tags (localizable labels and `{Season} {Year}` format) and auto-created broadcast-season collections with metadata lock and generated poster/thumb/backdrop artwork
 - **Maintenance tools** — local media cleanup scanner for plugin-created files, browser/provider cache controls, and persistent caches with configurable TTLs
+- **Manager Issues** — tracks persistent failures and skipped work across downloads, imports, mapping, season automation, and Manager tasks with filtering and action controls
 
 ## Installation
 
@@ -80,17 +101,22 @@ Brings [AnimeThemes.moe](https://animethemes.moe/) OP/ED themes to your anime li
 
 ## Season Finder and Mappings
 
+<p align="center">
+  <img src="resource/images/03-season-finder.png" alt="Season Finder" width="800" />
+  <br/><sup><em>Season Finder — match unmatched seasons to AnimeThemes entries</em></sup>
+</p>
+
 When several anime seasons are grouped into one series, the plugin follows AniList relations to assign seasons to their own AnimeThemes entries automatically. For unmatched or mis-matched seasons, open `AnimeThemes Browser` → `Season Finder`:
 
 1. Pick a season from the `Unmatched`, `Manual`, `Auto`, or `All` tabs (filter by season number or search text).
 2. Search AnimeThemes by title and optional year, then preview the candidate's OP/ED rows.
 3. Choose `Save mapping` or `Save & Download`.
 
-Mappings are stored in the plugin's SQLite database (`animethemes-sync.db`) and can be exported/imported as JSON from the Mappings controls. A legacy `SeasonThemeMappings` section in the plugin configuration is imported automatically once. The list restores its loaded count, selection, and scroll position across tab switches.
+Mappings are stored in the plugin's SQLite database (`animethemes-sync.db`) and can be exported/imported as JSON from the Mappings controls. A legacy `SeasonThemeMappings` section in the plugin configuration is imported automatically once.
 
 ## Broadcast-Season Tags and Collections
 
-- **Tags**: adds broadcast-season tags (for example `Spring 2024`) to series or seasons. The season words and the `{Season} {Year}` format are customizable and localizable. Disabling tags offers a cleanup dialog that can remove plugin-added tags.
+- **Tags**: adds broadcast-season tags (for example `Spring 2024`). The season words and the `{Season} {Year}` format are customizable and localizable. A `Season tag target` setting lets you choose Series, each Season, or both. Disabling tags offers a cleanup dialog that can remove plugin-added tags.
 - **Collections**: `Create broadcast-season collections` groups items into per-season collections. Only collections created by the plugin are managed; same-named collections that were merely reused are never touched. When you disable the feature, a choice dialog lets you keep or clean up the managed collections.
   - `Lock collection metadata` (default: on) prevents other metadata providers from overwriting collection names/images. Locks you set yourself are never removed. Turn the option off and run Sync to unlock.
   - `Generate collection images` (default: on) composites member posters into a Primary poster (up to 4), a 16:9 thumb, and a 16:9 backdrop grid, and regenerates them when members change. Manually replaced images are detected and left alone. Overlay and canvas colors/opacity are configurable.
