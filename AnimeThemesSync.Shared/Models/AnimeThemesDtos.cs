@@ -107,8 +107,10 @@ public sealed class AnimeThemesSynonym
 
     // Backward-compatible reader for cached responses produced by the older API shape.
     [JsonPropertyName("type")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? LegacyType
     {
+        get => null;
         set
         {
             if (string.IsNullOrWhiteSpace(Type))
