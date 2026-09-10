@@ -25,9 +25,6 @@
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.11" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.11" />
-    <PackageReference Include="System.Text.Json" Version="9.0.11" />
   </ItemGroup>
 
   <ItemGroup>
