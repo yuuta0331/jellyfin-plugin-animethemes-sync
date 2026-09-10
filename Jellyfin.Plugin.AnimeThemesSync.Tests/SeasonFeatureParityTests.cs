@@ -231,6 +231,21 @@ public sealed class SeasonFeatureParityTests
         }
     }
 
+    [Fact]
+    public void JellyfinDownloader_RecoversMissingProviderIdsViaAniListTitleSearch()
+    {
+        var root = FindRepositoryRoot();
+        var downloader = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs"));
+
+        Assert.Contains("Searching AniList by title and year", downloader, StringComparison.Ordinal);
+        Assert.Contains("PersistResolvedProviderIdsAsync", downloader, StringComparison.Ordinal);
+        Assert.Contains("SearchAnime(item.Name, item.ProductionYear", downloader, StringComparison.Ordinal);
+        Assert.Contains("item.SetProviderId(Constants.AniListProviderId", downloader, StringComparison.Ordinal);
+        Assert.Contains("item.SetProviderId(Constants.MyAnimeListProviderId", downloader, StringComparison.Ordinal);
+        Assert.Contains("item.SetProviderId(Constants.AnimeThemesProviderId", downloader, StringComparison.Ordinal);
+        Assert.Contains("_libraryManager.UpdateItemAsync(item, parent, ItemUpdateType.MetadataEdit", downloader, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

@@ -4345,7 +4345,123 @@ public sealed class ThemeDownloader : IScheduledTask
             animeThemesSlug = providerSlug;
         }
 
+        if (aniListId == null &&
+            malId == null &&
+            string.IsNullOrWhiteSpace(animeThemesSlug) &&
+            item is Series or Movie &&
+            !string.IsNullOrWhiteSpace(item.Name))
+        {
+            _logger.LogInformation(
+                "  No saved AnimeThemes/AniList/MAL ID for {ItemName}. Searching AniList by title and year.",
+                item.Name);
+
+            (aniListId, malId) = await _aniListService
+                .SearchAnime(item.Name, item.ProductionYear, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (aniListId == null && malId == null)
+            {
+                if (logMissingIds)
+                {
+                    _logger.LogWarning(
+                        "  AniList title search could not resolve provider IDs for {ItemName}. Skipping.",
+                        item.Name);
+                }
+
+                return null;
+            }
+
+            var resolvedAnime = await ResolveAnimeByIdentityAsync(
+                animeThemesSlug,
+                aniListId,
+                malId,
+                cancellationToken,
+                item.Name,
+                logMissingIds: false).ConfigureAwait(false);
+
+            if (resolvedAnime == null)
+            {
+                if (logMissingIds)
+                {
+                    _logger.LogWarning(
+                        "  AniList title search resolved IDs for {ItemName}, but AnimeThemes has no matching entry. Skipping.",
+                        item.Name);
+                }
+
+                return null;
+            }
+
+            await PersistResolvedProviderIdsAsync(item, aniListId, malId, resolvedAnime, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation(
+                "  Resolved missing provider IDs for {ItemName} via AniList title search: AniList={AniListId}, MAL={MalId}, AnimeThemes={AnimeThemesSlug}.",
+                item.Name,
+                aniListId,
+                malId,
+                resolvedAnime.Slug);
+
+            return resolvedAnime;
+        }
+
         return await ResolveAnimeByIdentityAsync(animeThemesSlug, aniListId, malId, cancellationToken, item.Name, logMissingIds).ConfigureAwait(false);
+    }
+
+    private async Task PersistResolvedProviderIdsAsync(
+        BaseItem item,
+        int? aniListId,
+        int? malId,
+        AnimeThemesAnime anime,
+        CancellationToken cancellationToken)
+    {
+        var changed = false;
+
+        if (aniListId.HasValue)
+        {
+            var value = aniListId.Value.ToString(CultureInfo.InvariantCulture);
+            if (!item.ProviderIds.TryGetValue(Constants.AniListProviderId, out var current) ||
+                !string.Equals(current, value, StringComparison.Ordinal))
+            {
+                item.SetProviderId(Constants.AniListProviderId, value);
+                changed = true;
+            }
+        }
+
+        if (malId.HasValue)
+        {
+            var value = malId.Value.ToString(CultureInfo.InvariantCulture);
+            if (!item.ProviderIds.TryGetValue(Constants.MyAnimeListProviderId, out var current) ||
+                !string.Equals(current, value, StringComparison.Ordinal))
+            {
+                item.SetProviderId(Constants.MyAnimeListProviderId, value);
+                changed = true;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(anime.Slug) &&
+            (!item.ProviderIds.TryGetValue(Constants.AnimeThemesProviderId, out var currentSlug) ||
+             !string.Equals(currentSlug, anime.Slug, StringComparison.Ordinal)))
+        {
+            item.SetProviderId(Constants.AnimeThemesProviderId, anime.Slug);
+            changed = true;
+        }
+
+        if (anime.Id > 0)
+        {
+            var value = anime.Id.ToString(CultureInfo.InvariantCulture);
+            if (!item.ProviderIds.TryGetValue(Constants.AnimeThemesNumericProviderId, out var currentId) ||
+                !string.Equals(currentId, value, StringComparison.Ordinal))
+            {
+                item.SetProviderId(Constants.AnimeThemesNumericProviderId, value);
+                changed = true;
+            }
+        }
+
+        if (!changed)
+        {
+            return;
+        }
+
+        var parent = item.GetParent() ?? _libraryManager.RootFolder;
+        await _libraryManager.UpdateItemAsync(item, parent, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<AnimeThemesAnime?> ResolveAnimeByIdentityAsync(
