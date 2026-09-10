@@ -527,7 +527,7 @@ public class ThemeFilePlannerTests
         var embyProject = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "Emby.Plugin.AnimeThemesSync.csproj"));
         var embyStore = File.ReadAllText(Path.Combine(root, "Emby.Plugin.AnimeThemesSync", "ScheduledTasks", "EmbySeasonFinderDataStore.cs"));
 
-        Assert.Contains("Microsoft.Data.Sqlite\" Version=\"9.0.11", jellyfinProject, StringComparison.Ordinal);
+        Assert.Contains("Microsoft.Data.Sqlite\" Version=\"10.0.11", jellyfinProject, StringComparison.Ordinal);
         Assert.Contains("SQLitePCL.pretty.core\" Version=\"1.2.2\" IncludeAssets=\"compile", embyProject, StringComparison.Ordinal);
         Assert.Contains("Services\\SeasonFinderDataStore.cs", embyProject, StringComparison.Ordinal);
         Assert.DoesNotContain("Microsoft.Data.Sqlite", embyProject, StringComparison.Ordinal);
