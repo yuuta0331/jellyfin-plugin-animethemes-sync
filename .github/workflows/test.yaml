@@ -26,14 +26,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: |
-            8.0.x
-            9.0.x
-            10.0.x
+          dotnet-version: '10.0.x'
       - name: Restore
-        run: dotnet restore Jellyfin.Plugin.AnimeThemesSync.sln -nologo /p:NuGetAudit=false
-      - name: Build
-        run: dotnet build Jellyfin.Plugin.AnimeThemesSync.sln --configuration Release --no-restore -nologo /p:NuGetAudit=false
+        run: dotnet restore Jellyfin.Plugin.AnimeThemesSync.Tests/Jellyfin.Plugin.AnimeThemesSync.Tests.csproj -nologo /p:NuGetAudit=false
       - name: Test
         shell: bash
         run: |

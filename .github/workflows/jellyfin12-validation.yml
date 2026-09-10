@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - feature/jellyfin-12-support
+    paths:
+      - 'Jellyfin.Plugin.AnimeThemesSync/**'
+      - 'AnimeThemesSync.Shared/**'
+      - 'Jellyfin.Plugin.AnimeThemesSync.Tests/**'
+      - 'Directory.Build.props'
+      - 'build.yaml'
   workflow_dispatch:
 
 permissions:
