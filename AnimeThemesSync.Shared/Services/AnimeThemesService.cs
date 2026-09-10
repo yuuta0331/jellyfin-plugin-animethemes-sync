@@ -194,7 +194,7 @@ public sealed class AnimeThemesService
                   "&page%5Bsize%5D=15&page%5Bnumber%5D=1" +
                   "&include=synonyms,images,resources" +
                   "&fields%5Banime%5D=id,name,slug,year,season,media_format" +
-                  "&fields%5Bsynonym%5D=id,text,type" +
+                  "&fields%5Bsynonym%5D=id,text,synonymable_type" +
                   "&fields%5Bimage%5D=id,facet,link" +
                   "&fields%5Bresource%5D=id,site,external_id";
         if (year.HasValue)

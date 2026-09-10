@@ -45,6 +45,7 @@ public sealed class AniListService
     private const int MaxRateLimitRetries = 2;
     private const int StaleRetentionDays = 180;
     private readonly Func<int>? _providerCacheTtlDays;
+    private long _forbiddenUntilUnixSeconds;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AniListService"/> class.
@@ -206,6 +207,11 @@ public sealed class AniListService
     /// </summary>
     private async Task<List<AniListMedia>?> ExecuteSearch(string name, int? year, CancellationToken cancellationToken)
     {
+        if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() < Interlocked.Read(ref _forbiddenUntilUnixSeconds))
+        {
+            return null;
+        }
+
         var query = @"
             query ($search: String, $seasonYear: Int) {
                 Page(page: 1, perPage: 10) {
@@ -240,13 +246,25 @@ public sealed class AniListService
         {
             await _rateLimiter.WaitIfNeededAsync(cancellationToken).ConfigureAwait(false);
 
-            var response = await client.PostAsync(new Uri(Constants.AniListBaseUrl), content, cancellationToken).ConfigureAwait(false);
+            using var response = await client.PostAsync(new Uri(Constants.AniListBaseUrl), content, cancellationToken).ConfigureAwait(false);
 
             _rateLimiter.UpdateState(response.Headers);
 
+            if (response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                Interlocked.Exchange(
+                    ref _forbiddenUntilUnixSeconds,
+                    DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds());
+                var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                _logger.LogWarning(
+                    "AniList API returned 403 Forbidden; pausing AniList requests for 5 minutes. Response: {ResponseBody}",
+                    body.Length <= 500 ? body : body[..500]);
+                return null;
+            }
+
             response.EnsureSuccessStatusCode();
 
-            var responseStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             var result = await JsonSerializer.DeserializeAsync<AniListResponse>(responseStream, _jsonOptions, cancellationToken).ConfigureAwait(false);
 
             return result?.Data?.Page?.Media;

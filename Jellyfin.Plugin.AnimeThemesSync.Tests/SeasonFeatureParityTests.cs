@@ -237,9 +237,11 @@ public sealed class SeasonFeatureParityTests
         var root = FindRepositoryRoot();
         var downloader = File.ReadAllText(Path.Combine(root, "Jellyfin.Plugin.AnimeThemesSync", "ScheduledTasks", "ThemeDownloader.cs"));
 
-        Assert.Contains("Searching AniList by title and year", downloader, StringComparison.Ordinal);
+        Assert.Contains("Searching AnimeThemes by title and year", downloader, StringComparison.Ordinal);
+        Assert.Contains("ResolveAnimeByTitleAsync", downloader, StringComparison.Ordinal);
+        Assert.Contains("SearchAnimeByTitle(itemName, productionYear", downloader, StringComparison.Ordinal);
+        Assert.Contains("Trying AniList as a fallback", downloader, StringComparison.Ordinal);
         Assert.Contains("PersistResolvedProviderIdsAsync", downloader, StringComparison.Ordinal);
-        Assert.Contains("SearchAnime(item.Name, item.ProductionYear", downloader, StringComparison.Ordinal);
         Assert.Contains("item.SetProviderId(Constants.AniListProviderId", downloader, StringComparison.Ordinal);
         Assert.Contains("item.SetProviderId(Constants.MyAnimeListProviderId", downloader, StringComparison.Ordinal);
         Assert.Contains("item.SetProviderId(Constants.AnimeThemesProviderId", downloader, StringComparison.Ordinal);

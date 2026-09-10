@@ -38,6 +38,7 @@ public sealed class ThemeDownloader : IScheduledTask
 {
     private const string BroadcastSeasonProviderKey = "AnimeThemesBroadcastSeason";
     private const string UserOwnedImageFingerprint = "user-owned";
+    private const int MinimumAutomaticTitleMatchScore = 100;
     private static readonly SemaphoreSlim SeasonMetadataSyncGate = new(1, 1);
     private static readonly SemaphoreSlim SeasonMetadataOperationGate = new(1, 1);
     private static readonly SemaphoreSlim SeasonCollectionFinalizeGate = new(1, 1);
@@ -4352,7 +4353,29 @@ public sealed class ThemeDownloader : IScheduledTask
             !string.IsNullOrWhiteSpace(item.Name))
         {
             _logger.LogInformation(
-                "  No saved AnimeThemes/AniList/MAL ID for {ItemName}. Searching AniList by title and year.",
+                "  No saved AnimeThemes/AniList/MAL ID for {ItemName}. Searching AnimeThemes by title and year.",
+                item.Name);
+
+            var resolvedAnime = await ResolveAnimeByTitleAsync(
+                item.Name,
+                item.ProductionYear,
+                cancellationToken).ConfigureAwait(false);
+
+            if (resolvedAnime != null)
+            {
+                (aniListId, malId) = AnimeMatchHelper.ExtractAnimeExternalIds(resolvedAnime);
+                await PersistResolvedProviderIdsAsync(item, aniListId, malId, resolvedAnime, cancellationToken).ConfigureAwait(false);
+                _logger.LogInformation(
+                    "  Resolved missing provider IDs for {ItemName} via AnimeThemes title search: AniList={AniListId}, MAL={MalId}, AnimeThemes={AnimeThemesSlug}.",
+                    item.Name,
+                    aniListId,
+                    malId,
+                    resolvedAnime.Slug);
+                return resolvedAnime;
+            }
+
+            _logger.LogInformation(
+                "  AnimeThemes title search did not find a confident match for {ItemName}. Trying AniList as a fallback.",
                 item.Name);
 
             (aniListId, malId) = await _aniListService
@@ -4364,14 +4387,14 @@ public sealed class ThemeDownloader : IScheduledTask
                 if (logMissingIds)
                 {
                     _logger.LogWarning(
-                        "  AniList title search could not resolve provider IDs for {ItemName}. Skipping.",
+                        "  Neither AnimeThemes nor AniList title search could resolve {ItemName}. Skipping.",
                         item.Name);
                 }
 
                 return null;
             }
 
-            var resolvedAnime = await ResolveAnimeByIdentityAsync(
+            resolvedAnime = await ResolveAnimeByIdentityAsync(
                 animeThemesSlug,
                 aniListId,
                 malId,
@@ -4393,7 +4416,7 @@ public sealed class ThemeDownloader : IScheduledTask
 
             await PersistResolvedProviderIdsAsync(item, aniListId, malId, resolvedAnime, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation(
-                "  Resolved missing provider IDs for {ItemName} via AniList title search: AniList={AniListId}, MAL={MalId}, AnimeThemes={AnimeThemesSlug}.",
+                "  Resolved missing provider IDs for {ItemName} via AniList fallback: AniList={AniListId}, MAL={MalId}, AnimeThemes={AnimeThemesSlug}.",
                 item.Name,
                 aniListId,
                 malId,
@@ -4403,6 +4426,65 @@ public sealed class ThemeDownloader : IScheduledTask
         }
 
         return await ResolveAnimeByIdentityAsync(animeThemesSlug, aniListId, malId, cancellationToken, item.Name, logMissingIds).ConfigureAwait(false);
+    }
+
+    private async Task<AnimeThemesAnime?> ResolveAnimeByTitleAsync(
+        string itemName,
+        int? productionYear,
+        CancellationToken cancellationToken)
+    {
+        var candidates = await _animeThemesService
+            .SearchAnimeByTitle(itemName, productionYear, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (candidates.Count == 0 && productionYear.HasValue)
+        {
+            candidates = await _animeThemesService
+                .SearchAnimeByTitle(itemName, null, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        AnimeThemesAnime? bestCandidate = null;
+        var bestScore = int.MinValue;
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate.Slug))
+            {
+                continue;
+            }
+
+            var score = AnimeMatchHelper.ScoreSearchCandidate(candidate, itemName, productionYear);
+            if (score > bestScore)
+            {
+                bestCandidate = candidate;
+                bestScore = score;
+            }
+        }
+
+        if (bestCandidate == null || bestScore < MinimumAutomaticTitleMatchScore)
+        {
+            if (bestCandidate != null)
+            {
+                _logger.LogInformation(
+                    "  Best AnimeThemes title candidate for {ItemName} scored only {Score}; automatic threshold is {Threshold}.",
+                    itemName,
+                    bestScore,
+                    MinimumAutomaticTitleMatchScore);
+            }
+
+            return null;
+        }
+
+        _logger.LogInformation(
+            "  AnimeThemes title search matched {ItemName} to {AnimeName} ({AnimeThemesSlug}) with score {Score}.",
+            itemName,
+            bestCandidate.Name,
+            bestCandidate.Slug,
+            bestScore);
+
+        return await _animeThemesService
+            .GetAnimeBySlug(bestCandidate.Slug!, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async Task PersistResolvedProviderIdsAsync(

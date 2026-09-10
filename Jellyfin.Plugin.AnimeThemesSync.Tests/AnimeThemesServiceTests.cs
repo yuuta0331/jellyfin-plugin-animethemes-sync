@@ -155,7 +155,7 @@ namespace Jellyfin.Plugin.AnimeThemesSync.Tests
                         ""season"": ""Spring"",
                         ""media_format"": ""TV"",
                         ""synonyms"": [
-                            { ""id"": 1, ""text"": ""けいおん!!"", ""type"": ""Native"" }
+                            { ""id"": 1, ""text"": ""けいおん!!"", ""synonymable_type"": ""Native"" }
                         ],
                         ""images"": [
                             { ""id"": 2, ""facet"": ""Small Cover"", ""link"": ""https://example.test/k-on.avif"" }

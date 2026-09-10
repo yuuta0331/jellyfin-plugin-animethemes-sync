@@ -102,8 +102,21 @@ public sealed class AnimeThemesSynonym
     [JsonPropertyName("text")]
     public string? Text { get; set; }
 
-    [JsonPropertyName("type")]
+    [JsonPropertyName("synonymable_type")]
     public string? Type { get; set; }
+
+    // Backward-compatible reader for cached responses produced by the older API shape.
+    [JsonPropertyName("type")]
+    public string? LegacyType
+    {
+        set
+        {
+            if (string.IsNullOrWhiteSpace(Type))
+            {
+                Type = value;
+            }
+        }
+    }
 }
 
 public sealed class AnimeThemesImage
