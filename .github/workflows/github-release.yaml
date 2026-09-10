@@ -27,6 +27,7 @@ jobs:
           dotnet-version: |
             8.0.x
             9.0.x
+            10.0.x
 
       - name: Restore
         run: dotnet restore Jellyfin.Plugin.AnimeThemesSync.sln -nologo /p:NuGetAudit=false
@@ -80,8 +81,8 @@ jobs:
       - name: Create Jellyfin Zip Archive
         run: |
           mkdir -p dist/jellyfin
-          cp Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/Jellyfin.Plugin.AnimeThemesSync.dll dist/jellyfin/
-          cp Jellyfin.Plugin.AnimeThemesSync/bin/Release/net9.0/AnimeThemesSync.Shared.dll dist/jellyfin/ || true
+          cp Jellyfin.Plugin.AnimeThemesSync/bin/Release/net10.0/Jellyfin.Plugin.AnimeThemesSync.dll dist/jellyfin/
+          cp Jellyfin.Plugin.AnimeThemesSync/bin/Release/net10.0/AnimeThemesSync.Shared.dll dist/jellyfin/ || true
           (cd dist/jellyfin && zip -r ../../Jellyfin.Plugin.AnimeThemesSync.zip .)
 
       - name: Create Emby Zip Archive

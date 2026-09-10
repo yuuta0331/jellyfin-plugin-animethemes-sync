@@ -1,0 +1,47 @@
+name: Jellyfin 12 validation
+
+on:
+  push:
+    branches:
+      - feature/jellyfin-12-support
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jellyfin12-animethemes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore Jellyfin tests
+        run: dotnet restore Jellyfin.Plugin.AnimeThemesSync.Tests/Jellyfin.Plugin.AnimeThemesSync.Tests.csproj -nologo /p:NuGetAudit=false
+
+      - name: Test Jellyfin 12 build
+        run: dotnet test Jellyfin.Plugin.AnimeThemesSync.Tests/Jellyfin.Plugin.AnimeThemesSync.Tests.csproj -c Release --no-restore --logger "trx;LogFileName=test-results.trx" -nologo /p:NuGetAudit=false
+
+      - name: Package Jellyfin 12 test build
+        run: |
+          mkdir -p artifacts/package
+          cp Jellyfin.Plugin.AnimeThemesSync/bin/Release/net10.0/Jellyfin.Plugin.AnimeThemesSync.dll artifacts/package/
+          (cd artifacts/package && zip -r ../Jellyfin.Plugin.AnimeThemesSync-jellyfin12-test.zip .)
+
+      - name: Upload test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: animethemes-sync-jellyfin12-${{ github.sha }}
+          path: artifacts/Jellyfin.Plugin.AnimeThemesSync-jellyfin12-test.zip
+          retention-days: 3
+          if-no-files-found: error
